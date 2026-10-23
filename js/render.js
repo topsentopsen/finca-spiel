@@ -4,15 +4,18 @@
   var Dorf = g.Dorf = g.Dorf || {};
   var W = 320, H = 176, K = 16;
 
+  // v0.2: kraeftigere Pastelltoene, weiche dunkle Lila-Kontur statt Fast-Schwarz
   var P = {
-    kontur: '#2b2135', gras: '#a8de8c', gras2: '#88c56f', weg: '#efd8a6', weg2: '#d6b781',
-    pflaster: '#f3dfbb', pflaster2: '#d8bc8e', boden: '#eac497', boden2: '#cfa070',
-    fliese1: '#f8f3e8', fliese2: '#cfe8ef', wasser: '#78d0ee', wasser2: '#c4f0fa', wasser3: '#54afd6',
-    rand: '#f6ecd8', rand2: '#e2d3b6', mauerTop: '#ebd2a8', mauerFront: '#c99c6c', mauerFuge: '#d7b88a',
-    dach: '#ec9a74', dach2: '#d97f5c', putz: '#fcf3e4', putz2: '#e9dcc6', fenster: '#6fa7d6',
-    holz: '#bd7b4e', holz2: '#965a35', tuch: '#ffffff', herd: '#c6ccd6', herd2: '#8e96a3',
-    erde: '#b07a57', erde2: '#8f5f40', spross: '#6cbf55', blatt: '#9cc070', blatt2: '#79a254', blatt3: '#c4dc94', stamm: '#8a5a3b',
-    stein: '#ddd5c8', stein2: '#b8ad9e', schatten: 'rgba(43,33,53,0.22)', box: '#fff8ec'
+    kontur: '#4b3a5a', gras: '#b8eea0', gras2: '#97d883', gras3: '#d6f8be', weg: '#ffe4bb', weg2: '#f1c994',
+    pflaster: '#ffeed4', pflaster2: '#efd3ab', boden: '#f8d3a6', boden2: '#e6b483',
+    fliese1: '#fffaf0', fliese2: '#c6ecf7', wasser: '#8fe1f8', wasser2: '#e0f9ff', wasser3: '#68c4e8',
+    rand: '#fff4e3', rand2: '#eedcc0', mauerTop: '#f9e2bd', mauerFront: '#e8bd8f', mauerFuge: '#efcd9f',
+    dach: '#ffb2a2', dach2: '#f29486', putz: '#fff8ec', putz2: '#f1e3cd', fenster: '#a3d8ff',
+    holz: '#dc9e70', holz2: '#bb7d54', tuch: '#ffffff', herd: '#e2e7f3', herd2: '#adb5c8',
+    erde: '#d29e78', erde2: '#b3805b', spross: '#80d66b', blatt: '#ace38c', blatt2: '#88cc70', blatt3: '#d8f7ac', stamm: '#ab7550',
+    stein: '#f1e8f7', stein2: '#d2c5de', schatten: 'rgba(75,58,90,0.22)', box: '#fffaf3',
+    couch: '#cbb8ff', couch2: '#aa97ec', kissen: '#ffd1e0', teppich: '#ffc6d8', teppich2: '#ffe6ee',
+    topf: '#f6a383', topf2: '#d9805f', bett: '#c3e8ff', decke: '#ffd5e2', backe: '#ffadbb', augeHell: '#ffffff'
   };
 
   function erstelle(canvas, ui) {
@@ -23,7 +26,14 @@
 
   function hash(x, y) { var h = (x * 374761393 + y * 668265263) >>> 0; h = ((h ^ (h >>> 13)) * 1274126177) >>> 0; return h ^ (h >>> 16); }
   function r(c, x, y, w, h, col) { c.fillStyle = col; c.fillRect(x, y, w, h); }
-  function box(c, x, y, w, h, col) { r(c, x, y, w, h, P.kontur); r(c, x + 1, y + 1, w - 2, h - 2, col); }
+  // Rechteck mit abgerundeten Ecken (1 Pixel)
+  function rr(c, x, y, w, h, col) { c.fillStyle = col; c.fillRect(x + 1, y, w - 2, h); c.fillRect(x, y + 1, w, h - 2); }
+  function box(c, x, y, w, h, col) { rr(c, x, y, w, h, P.kontur); rr(c, x + 1, y + 1, w - 2, h - 2, col); }
+  // Weiche Box: 2 Pixel Rundung, dicke Kontur
+  function pille(c, x, y, w, h, col) {
+    c.fillStyle = P.kontur; c.fillRect(x + 2, y, w - 4, h); c.fillRect(x + 1, y + 1, w - 2, h - 2); c.fillRect(x, y + 2, w, h - 4);
+    c.fillStyle = col; c.fillRect(x + 2, y + 1, w - 4, h - 2); c.fillRect(x + 1, y + 2, w - 2, h - 4);
+  }
   function kreis(c, cx, cy, rad, col) {
     c.fillStyle = col;
     for (var dy = -rad; dy <= rad; dy++) { var w = Math.floor(Math.sqrt(rad * rad - dy * dy) + 0.3); c.fillRect(cx - w, cy + dy, 2 * w + 1, 1); }
@@ -32,32 +42,41 @@
     c.fillStyle = col;
     for (var dy = -ry; dy <= ry; dy++) { var w = Math.floor(rx * Math.sqrt(1 - (dy * dy) / (ry * ry))); c.fillRect(cx - w, cy + dy, 2 * w + 1, 1); }
   }
+  function herz(c, x, y, col) { r(c, x, y, 2, 2, col); r(c, x + 3, y, 2, 2, col); r(c, x, y + 1, 5, 2, col); r(c, x + 1, y + 3, 3, 1, col); r(c, x + 2, y + 4, 1, 1, col); }
 
   // ---------- Kacheln ----------
   function istWand(t) { var T = Dorf.Karte.T; return t === T.MAUER || t === T.WAND; }
-  function zeichneKachel(c, karte, x, y, sx, sy, zeit) {
+  function istMoebel(t) { var T = Dorf.Karte.T; return t === T.COUCH || t === T.PFLANZE || t === T.ECKBANK || t === T.ANRICHTE || t === T.BETT || t === T.SESSEL || t === T.TISCH; }
+  // Boden unter Moebeln: Kueche Fliesen, sonst Holz
+  function bodenUnter(karte, x, y) { var T = Dorf.Karte.T, k = karte.raeume.kueche; return (x >= k.x0 && x <= k.x1 && y >= k.y0 && y <= k.y1) ? T.FLIESE : T.BODEN; }
+
+  function zeichneKachel(c, karte, x, y, sx, sy, zeit, st) {
     var T = Dorf.Karte.T, t = karte.tile(x, y), hs = hash(x, y);
+    if (istMoebel(t)) t = bodenUnter(karte, x, y);
     switch (t) {
       case T.GRAS: case T.OLIVE:
         r(c, sx, sy, K, K, P.gras);
         if (hs % 3 === 0) { r(c, sx + (hs % 11) + 2, sy + ((hs >> 4) % 10) + 3, 1, 2, P.gras2); r(c, sx + (hs % 11) + 4, sy + ((hs >> 4) % 10) + 2, 1, 3, P.gras2); }
-        if (hs % 5 === 1) r(c, sx + ((hs >> 7) % 12) + 2, sy + ((hs >> 9) % 12) + 2, 2, 1, P.gras2);
+        if (hs % 5 === 1) r(c, sx + ((hs >> 7) % 12) + 2, sy + ((hs >> 9) % 12) + 2, 2, 1, P.gras3);
         break;
       case T.WEG:
         r(c, sx, sy, K, K, P.weg);
-        r(c, sx + (hs % 12) + 2, sy + ((hs >> 5) % 12) + 2, 2, 1, P.weg2);
+        rr(c, sx + (hs % 11) + 2, sy + ((hs >> 5) % 11) + 2, 3, 2, P.weg2);
         r(c, sx + ((hs >> 3) % 12) + 1, sy + ((hs >> 8) % 12) + 2, 1, 1, P.weg2);
         break;
       case T.PFLASTER: case T.BRUNNEN: case T.TAFEL:
-        r(c, sx, sy, K, K, P.pflaster);
-        r(c, sx, sy + 7, K, 1, P.pflaster2); r(c, sx, sy + 15, K, 1, P.pflaster2);
-        r(c, sx + (y % 2 ? 4 : 12), sy, 1, 7, P.pflaster2); r(c, sx + (y % 2 ? 12 : 4), sy + 8, 1, 7, P.pflaster2);
-        if (t === T.TAFEL) zeichneTafel(c, karte, x, y, sx, sy);
+        r(c, sx, sy, K, K, P.pflaster2);
+        var ver = (y % 2) ? 4 : 0;
+        rr(c, sx - ver, sy, 7, 7, P.pflaster); rr(c, sx + 8 - ver, sy, 7, 7, P.pflaster); rr(c, sx + 16 - ver, sy, 7, 7, P.pflaster);
+        rr(c, sx + 4 - ver, sy + 8, 7, 7, P.pflaster); rr(c, sx + 12 - ver, sy + 8, 7, 7, P.pflaster);
+        if (ver) rr(c, sx - 4, sy + 8, 7, 7, P.pflaster);
+        if (t === T.TAFEL) zeichneTafel(c, karte, x, y, sx, sy, st);
         break;
-      case T.BODEN:
+      case T.BODEN: case T.TEPPICH:
         r(c, sx, sy, K, K, P.boden);
         for (var i = 3; i < K; i += 4) r(c, sx, sy + i, K, 1, P.boden2);
         r(c, sx + (y % 2 ? 5 : 11), sy, 1, K, P.boden2);
+        if (t === T.TEPPICH) zeichneTeppich(c, karte, x, y, sx, sy);
         break;
       case T.FLIESE: case T.HERD:
         for (var fy = 0; fy < 2; fy++) for (var fx = 0; fx < 2; fx++) r(c, sx + fx * 8, sy + fy * 8, 8, 8, (fx + fy) % 2 ? P.fliese2 : P.fliese1);
@@ -65,32 +84,32 @@
           box(c, sx, sy + 1, K, 14, P.herd);
           r(c, sx + 1, sy + 11, 14, 3, P.herd2);
           kreis(c, sx + 5, sy + 6, 2, P.kontur); kreis(c, sx + 11, sy + 6, 2, P.kontur);
-          if (x === 6) { r(c, sx + 3, sy - 3, 10, 4, P.kontur); r(c, sx + 4, sy - 2, 8, 2, '#ef8f6b'); }
+          if (x === 5) { pille(c, sx + 2, sy - 3, 12, 6, '#ffa27f'); r(c, sx + 13, sy - 1, 3, 2, P.kontur); }
         }
         break;
       case T.WASSER:
         r(c, sx, sy, K, K, P.wasser);
         if (karte.tile(x, y - 1) !== T.WASSER) r(c, sx, sy, K, 3, P.wasser3);
         var wx = Math.floor((zeit * 6 + x * 5 + y * 3) % 16);
-        r(c, sx + wx, sy + 6 + (x + y) % 3 * 3, 4, 1, P.wasser2);
+        rr(c, sx + wx, sy + 6 + (x + y) % 3 * 3, 5, 2, P.wasser2);
         r(c, sx + ((wx + 9) % 14), sy + 12, 3, 1, P.wasser2);
         break;
       case T.RAND:
         r(c, sx, sy, K, K, P.rand);
         r(c, sx + 7, sy, 1, K, P.rand2); r(c, sx, sy + 7, K, 1, P.rand2);
-        if (karte.tile(x, y + 1) === T.WASSER) r(c, sx, sy + 15, K, 1, P.kontur);
-        if (karte.tile(x, y - 1) === T.WASSER) r(c, sx, sy, K, 1, P.kontur);
-        if (karte.tile(x + 1, y) === T.WASSER) r(c, sx + 15, sy, 1, K, P.kontur);
-        if (karte.tile(x - 1, y) === T.WASSER) r(c, sx, sy, 1, K, P.kontur);
+        if (karte.tile(x, y + 1) === T.WASSER) r(c, sx, sy + 14, K, 2, P.kontur);
+        if (karte.tile(x, y - 1) === T.WASSER) r(c, sx, sy, K, 2, P.kontur);
+        if (karte.tile(x + 1, y) === T.WASSER) r(c, sx + 14, sy, 2, K, P.kontur);
+        if (karte.tile(x - 1, y) === T.WASSER) r(c, sx, sy, 2, K, P.kontur);
         break;
       case T.BEET:
         r(c, sx, sy, K, K, P.erde);
-        for (var by = 2; by < K; by += 5) { r(c, sx, sy + by + 2, K, 1, P.erde2); r(c, sx + 2 + (by % 4), sy + by, 2, 2, P.spross); r(c, sx + 9 + (by % 3), sy + by, 2, 2, P.spross); }
+        for (var by = 2; by < K; by += 5) { r(c, sx, sy + by + 2, K, 1, P.erde2); rr(c, sx + 2 + (by % 4), sy + by - 1, 3, 3, P.spross); rr(c, sx + 9 + (by % 3), sy + by - 1, 3, 3, P.spross); }
         break;
       case T.TOR:
         r(c, sx, sy, K, K, P.weg);
         box(c, sx, sy, K, K, P.holz);
-        for (var tx = 3; tx < K; tx += 4) r(c, sx + tx, sy + 1, 1, 14, P.holz2);
+        for (var tx = 3; tx < K; tx += 4) r(c, sx + tx, sy + 2, 1, 12, P.holz2);
         break;
       case T.MAUER: case T.WAND:
         zeichneWand(c, karte, x, y, sx, sy, t);
@@ -104,63 +123,145 @@
     var topH = front ? 10 : K;
     r(c, sx, sy, K, topH, top);
     if (mauer) { r(c, sx, sy + 4, K, 1, fuge); r(c, sx + (y % 2 ? 6 : 12), sy, 1, 4, fuge); r(c, sx + (y % 2 ? 2 : 9), sy + 5, 1, Math.min(5, topH - 5), fuge); }
-    else { for (var i = 2; i < topH; i += 4) r(c, sx, sy + i, K, 1, fuge); }
+    else { for (var i = 3; i < topH; i += 4) for (var j = (i % 8 === 3 ? 0 : 4); j < K; j += 8) rr(c, sx + j, sy + i - 2, 7, 3, fuge); }
     if (front) {
       r(c, sx, sy + 10, K, 6, mauer ? P.mauerFront : P.putz);
-      r(c, sx, sy + 10, K, 1, P.kontur);
+      r(c, sx, sy + 10, K, 2, P.kontur);
       r(c, sx, sy + 15, K, 1, mauer ? P.kontur : P.putz2);
-      if (!mauer && hash(x, y) % 3 === 0) { r(c, sx + 5, sy + 11, 6, 4, P.kontur); r(c, sx + 6, sy + 12, 4, 2, P.fenster); }
+      if (!mauer && hash(x, y) % 3 === 0) { rr(c, sx + 4, sy + 11, 8, 5, P.kontur); r(c, sx + 5, sy + 12, 6, 3, P.fenster); r(c, sx + 5, sy + 12, 2, 1, '#ffffff'); }
     }
-    if (!istWand(karte.tile(x - 1, y))) r(c, sx, sy, 1, K, P.kontur);
-    if (!istWand(karte.tile(x + 1, y))) r(c, sx + 15, sy, 1, K, P.kontur);
-    if (!istWand(karte.tile(x, y - 1)) && y > 0) r(c, sx, sy, K, 1, P.kontur);
+    if (!istWand(karte.tile(x - 1, y))) r(c, sx, sy, 2, K, P.kontur);
+    if (!istWand(karte.tile(x + 1, y))) r(c, sx + 14, sy, 2, K, P.kontur);
+    if (!istWand(karte.tile(x, y - 1)) && y > 0) r(c, sx, sy, K, 2, P.kontur);
   }
-  function zeichneTafel(c, karte, x, y, sx, sy) {
+  // Portionsplaetze auf der Tafel (relativ zur ersten Tafelkachel)
+  var TELLER = [[5, 7], [21, 7], [37, 7], [11, 7], [27, 7], [43, 7]];
+  function zeichneTafel(c, karte, x, y, sx, sy, st) {
     var T = Dorf.Karte.T, links = karte.tile(x - 1, y) !== T.TAFEL, rechts = karte.tile(x + 1, y) !== T.TAFEL;
-    r(c, sx, sy + 3, K, 9, P.kontur);
-    r(c, sx + (links ? 1 : 0), sy + 4, K - (links ? 1 : 0) - (rechts ? 1 : 0), 6, P.tuch);
-    r(c, sx + (links ? 1 : 0), sy + 10, K - (links ? 1 : 0) - (rechts ? 1 : 0), 1, P.holz);
-    if (links) r(c, sx + 1, sy + 12, 2, 3, P.kontur);
-    if (rechts) r(c, sx + 13, sy + 12, 2, 3, P.kontur);
-    kreis(c, sx + 8, sy + 7, 2, P.kontur); kreis(c, sx + 8, sy + 7, 1, '#ffd36e');
+    r(c, sx, sy + 2, K, 11, P.kontur);
+    r(c, sx + (links ? 2 : 0), sy + 4, K - (links ? 2 : 0) - (rechts ? 2 : 0), 6, P.tuch);
+    r(c, sx + (links ? 2 : 0), sy + 10, K - (links ? 2 : 0) - (rechts ? 2 : 0), 1, P.holz);
+    if (links) { r(c, sx, sy + 2, 1, 1, P.pflaster2); r(c, sx + 2, sy + 13, 2, 3, P.kontur); }
+    if (rechts) { r(c, sx + 15, sy + 2, 1, 1, P.pflaster2); r(c, sx + 12, sy + 13, 2, 3, P.kontur); }
+    // Tischlaeufer in Rosa
+    r(c, sx + (links ? 2 : 0), sy + 6, K - (links ? 2 : 0) - (rechts ? 2 : 0), 2, '#ffd9e4');
+    if (rechts) { kreis(c, sx + 8, sy + 7, 3, P.kontur); kreis(c, sx + 8, sy + 7, 2, '#ffd36e'); r(c, sx + 7, sy + 5, 2, 1, '#ff9a8a'); }
+    var essen = st ? st.essen : 0, ersteX = 5;
+    for (var i = 0; i < essen && i < TELLER.length; i++) {
+      var tx = TELLER[i][0] - (x - ersteX) * K;
+      if (tx < 3 || tx > 13) continue;
+      kreis(c, sx + tx, sy + TELLER[i][1], 3, P.kontur); kreis(c, sx + tx, sy + TELLER[i][1], 2, '#ffffff');
+      rr(c, sx + tx - 2, sy + TELLER[i][1] - 2, 4, 3, '#f3c27a'); r(c, sx + tx - 1, sy + TELLER[i][1] - 2, 2, 1, '#ff7a6b');
+    }
+  }
+  function zeichneTeppich(c, karte, x, y, sx, sy) {
+    var T = Dorf.Karte.T;
+    var l = karte.tile(x - 1, y) !== T.TEPPICH, rt = karte.tile(x + 1, y) !== T.TEPPICH, o = karte.tile(x, y - 1) !== T.TEPPICH, u = karte.tile(x, y + 1) !== T.TEPPICH;
+    var x0 = sx + (l ? 2 : 0), y0 = sy + (o ? 2 : 0), x1 = sx + K - (rt ? 2 : 0), y1 = sy + K - (u ? 2 : 0);
+    r(c, x0, y0, x1 - x0, y1 - y0, P.teppich);
+    if (l) r(c, x0, y0, 1, y1 - y0, P.kontur);
+    if (rt) r(c, x1 - 1, y0, 1, y1 - y0, P.kontur);
+    if (o) r(c, x0, y0, x1 - x0, 1, P.kontur);
+    if (u) r(c, x0, y1 - 1, x1 - x0, 1, P.kontur);
+    if (l) r(c, x0 + 2, y0 + (o ? 2 : 0), 1, y1 - y0 - (o ? 2 : 0) - (u ? 2 : 0), P.teppich2);
+    if (rt) r(c, x1 - 3, y0 + (o ? 2 : 0), 1, y1 - y0 - (o ? 2 : 0) - (u ? 2 : 0), P.teppich2);
+    if (o) r(c, x0 + (l ? 2 : 0), y0 + 2, x1 - x0 - (l ? 2 : 0) - (rt ? 2 : 0), 1, P.teppich2);
+    if (u) r(c, x0 + (l ? 2 : 0), y1 - 3, x1 - x0 - (l ? 2 : 0) - (rt ? 2 : 0), 1, P.teppich2);
+    if ((x + y) % 2 === 0) herz(c, sx + 6, sy + 6, P.teppich2);
+  }
+
+  // ---------- Moebel (werden wie Figuren nach Fusslinie sortiert) ----------
+  function zeichneMoebel(c, karte, x, y, sx, sy) {
+    var T = Dorf.Karte.T, t = karte.tile(x, y), links, rechts;
+    ellipse(c, sx + 8, sy + 14, 7, 2, P.schatten);
+    switch (t) {
+      case T.COUCH:
+        links = karte.tile(x - 1, y) !== T.COUCH; rechts = karte.tile(x + 1, y) !== T.COUCH;
+        r(c, sx, sy - 2, K, 16, P.kontur);
+        r(c, sx + (links ? 2 : 0), sy, K - (links ? 2 : 0) - (rechts ? 2 : 0), 6, P.couch2);
+        r(c, sx + (links ? 2 : 0), sy + 6, K - (links ? 2 : 0) - (rechts ? 2 : 0), 6, P.couch);
+        r(c, sx + (links ? 2 : 0), sy + 6, K - (links ? 2 : 0) - (rechts ? 2 : 0), 1, P.kontur);
+        if (links) { pille(c, sx - 1, sy + 2, 6, 12, P.couch2); r(c, sx, sy - 2, 1, 1, P.boden); }
+        if (rechts) { pille(c, sx + 11, sy + 2, 6, 12, P.couch2); r(c, sx + 15, sy - 2, 1, 1, P.boden); }
+        if (!links && !rechts) pille(c, sx + 4, sy + 1, 8, 6, P.kissen);
+        else if (links) { pille(c, sx + 5, sy + 1, 8, 6, '#fff1a8'); }
+        else pille(c, sx + 3, sy + 1, 8, 6, '#bdf0dd');
+        break;
+      case T.SESSEL:
+        pille(c, sx + 1, sy - 1, 14, 15, P.couch2);
+        r(c, sx + 4, sy + 6, 8, 6, P.couch); r(c, sx + 4, sy + 6, 8, 1, P.kontur);
+        pille(c, sx + 5, sy + 1, 6, 5, P.kissen);
+        break;
+      case T.PFLANZE:
+        pille(c, sx + 4, sy + 8, 8, 7, P.topf); r(c, sx + 5, sy + 12, 6, 1, P.topf2);
+        kreis(c, sx + 8, sy + 2, 6, P.kontur); kreis(c, sx + 4, sy + 5, 4, P.kontur); kreis(c, sx + 12, sy + 5, 4, P.kontur);
+        kreis(c, sx + 8, sy + 2, 5, P.blatt2); kreis(c, sx + 4, sy + 5, 3, P.blatt); kreis(c, sx + 12, sy + 5, 3, P.blatt);
+        kreis(c, sx + 7, sy, 2, P.blatt3); r(c, sx + 10, sy + 1, 1, 1, '#ffb3c7');
+        break;
+      case T.ECKBANK:
+        pille(c, sx + 1, sy + 1, 14, 13, P.holz);
+        pille(c, sx + 3, sy + 3, 10, 8, '#bdf0dd'); r(c, sx + 5, sy + 5, 2, 2, '#ffffff');
+        break;
+      case T.TISCH:
+        kreis(c, sx + 8, sy + 6, 7, P.kontur); kreis(c, sx + 8, sy + 6, 6, P.holz); kreis(c, sx + 8, sy + 5, 5, '#f0b88a');
+        r(c, sx + 7, sy + 11, 2, 4, P.kontur);
+        kreis(c, sx + 8, sy + 5, 2, P.kontur); r(c, sx + 7, sy + 4, 1, 1, '#ff9a8a'); r(c, sx + 9, sy + 5, 1, 1, '#ffd36e');
+        break;
+      case T.ANRICHTE:
+        box(c, sx, sy, K, 15, P.holz);
+        r(c, sx + 1, sy + 1, 14, 5, '#f4efe6'); r(c, sx + 1, sy + 6, 14, 1, P.kontur);
+        r(c, sx + 7, sy + 8, 2, 2, P.kontur);
+        if (x === 3) { kreis(c, sx + 8, sy + 3, 3, P.kontur); kreis(c, sx + 8, sy + 3, 2, '#ffd36e'); r(c, sx + 9, sy + 2, 2, 2, '#ff9a8a'); }
+        else if (x === 7) { rr(c, sx + 3, sy + 1, 10, 4, P.kontur); r(c, sx + 4, sy + 2, 8, 2, P.wasser); }
+        else { rr(c, sx + 5, sy - 2, 6, 7, P.kontur); r(c, sx + 6, sy - 1, 4, 5, '#c6ecf7'); r(c, sx + 6, sy + 1, 4, 3, '#ffd36e'); }
+        break;
+      case T.BETT:
+        var oben = karte.tile(x, y - 1) !== T.BETT, unten = karte.tile(x, y + 1) !== T.BETT;
+        links = karte.tile(x - 1, y) !== T.BETT; rechts = karte.tile(x + 1, y) !== T.BETT;
+        r(c, sx, sy - (oben ? 3 : 0), K, K + (oben ? 3 : 0) - (unten ? 1 : 0), P.kontur);
+        var bx0 = sx + (links ? 2 : 0), bw = K - (links ? 2 : 0) - (rechts ? 2 : 0);
+        if (oben) { r(c, bx0, sy - 1, bw, 6, P.holz); pille(c, sx + (links ? 3 : 1), sy + 1, 12, 7, '#ffffff'); r(c, bx0, sy + 8, bw, 8, P.decke); }
+        else { r(c, bx0, sy, bw, unten ? 13 : K, P.decke); }
+        if (!oben) { herz(c, sx + 5, sy + 3, '#ff9fb8'); }
+        if (unten) r(c, bx0, sy + 11, bw, 2, '#ffb7cb');
+        break;
+    }
   }
 
   // ---------- Objekte ----------
   function zeichneBaum(c, sx, sy) {
-    // sx, sy = linke obere Ecke der Kachel
     var cx = sx + 8, by = sy + 14;
-    ellipse(c, cx, by, 7, 2, P.schatten);
-    r(c, cx - 3, by - 9, 6, 10, P.kontur); r(c, cx - 2, by - 9, 4, 9, P.stamm);
-    kreis(c, cx - 4, by - 16, 7, P.kontur); kreis(c, cx + 4, by - 15, 7, P.kontur); kreis(c, cx, by - 21, 7, P.kontur);
-    kreis(c, cx - 4, by - 16, 6, P.blatt2); kreis(c, cx + 4, by - 15, 6, P.blatt2); kreis(c, cx, by - 21, 6, P.blatt);
-    kreis(c, cx - 3, by - 17, 4, P.blatt); kreis(c, cx - 2, by - 23, 2, P.blatt3);
-    r(c, cx + 3, by - 18, 2, 2, '#5b6e3a'); r(c, cx - 5, by - 13, 2, 2, '#5b6e3a'); r(c, cx + 1, by - 25, 2, 2, '#5b6e3a');
+    ellipse(c, cx, by, 8, 3, P.schatten);
+    rr(c, cx - 3, by - 9, 6, 10, P.kontur); r(c, cx - 2, by - 9, 4, 9, P.stamm);
+    kreis(c, cx - 5, by - 15, 7, P.kontur); kreis(c, cx + 5, by - 15, 7, P.kontur); kreis(c, cx, by - 21, 8, P.kontur);
+    kreis(c, cx - 5, by - 15, 6, P.blatt2); kreis(c, cx + 5, by - 15, 6, P.blatt2); kreis(c, cx, by - 21, 7, P.blatt);
+    kreis(c, cx - 3, by - 17, 4, P.blatt); kreis(c, cx - 2, by - 24, 3, P.blatt3);
+    r(c, cx + 3, by - 18, 2, 2, '#6f8f4a'); r(c, cx - 6, by - 13, 2, 2, '#6f8f4a'); r(c, cx + 2, by - 26, 2, 2, '#6f8f4a');
   }
   function zeichneBrunnen(c, sx, sy, zeit) {
-    // 2x2 Kacheln ab sx, sy
     ellipse(c, sx + 16, sy + 28, 15, 3, P.schatten);
-    box(c, sx + 2, sy + 6, 28, 22, P.stein);
-    r(c, sx + 3, sy + 20, 26, 7, P.stein2);
+    pille(c, sx + 2, sy + 6, 28, 22, P.stein);
+    r(c, sx + 3, sy + 20, 26, 6, P.stein2);
     r(c, sx + 3, sy + 20, 26, 1, P.kontur);
-    for (var i = 6; i < 28; i += 6) r(c, sx + 2 + i, sy + 21, 1, 6, P.kontur);
-    box(c, sx + 6, sy + 9, 20, 10, P.wasser);
+    for (var i = 6; i < 28; i += 6) r(c, sx + 2 + i, sy + 21, 1, 5, P.kontur);
+    pille(c, sx + 6, sy + 9, 20, 10, P.wasser);
     r(c, sx + 9 + Math.floor((zeit * 4) % 10), sy + 12, 4, 1, P.wasser2);
-    // Pfosten und Balken mit Eimer
     r(c, sx + 4, sy - 6, 4, 16, P.kontur); r(c, sx + 5, sy - 5, 2, 14, P.holz);
     r(c, sx + 24, sy - 6, 4, 16, P.kontur); r(c, sx + 25, sy - 5, 2, 14, P.holz);
-    box(c, sx + 2, sy - 9, 28, 5, P.holz);
+    pille(c, sx + 1, sy - 10, 30, 6, P.dach);
     r(c, sx + 16, sy - 4, 1, 7, P.kontur);
-    box(c, sx + 13, sy + 2, 7, 6, '#9aa4b1');
+    box(c, sx + 13, sy + 2, 7, 6, '#b8c4e0');
   }
 
-  // ---------- Figuren ----------
-  var BIEL = { kind: false, haut: '#d9a074', haar: '#3b2a22', haarGlanz: '#6b4c3b', bart: '#4a3226', hemd: '#fbf8f0', hemd2: '#dcd6c8', hose: '#d9c08f', schuhe: '#efe0b8', sohle: '#b08a5a' };
+  // ---------- Figuren (v0.2: grosser Kopf, grosse Augen, runde Formen) ----------
+  var BIEL = { kind: false, haut: '#e8b08a', haar: '#3e2c26', haarGlanz: '#6e5246', bart: '#4a342a', hemd: '#fffaf0', hemd2: '#e6dece', hose: '#e2c896', schuhe: '#f4e6c0', sohle: '#c09a6a' };
 
   function zeichnePerson(c, px, py, a, dir, frame) {
-    var kind = a.kind, kopf = kind ? 8 : 10, koerper = kind ? 5 : 8, bein = kind ? 3 : 4, schuh = 2;
+    var kind = a.kind, kopf = kind ? 10 : 11, koerper = kind ? 4 : 6, bein = kind ? 2 : 3, schuh = 2;
     var Hh = kopf + koerper + bein + schuh, ox = Math.round(px) - 8, oy = Math.round(py) - Hh + 1;
     var flip = dir === 'links', seite = dir === 'links' || dir === 'rechts';
     function q(x, y, w, h, col) { c.fillStyle = col; c.fillRect(ox + (flip ? 16 - x - w : x), oy + y, w, h); }
+    function qr(x, y, w, h, col) { q(x + 1, y, w - 2, h, col); q(x, y + 1, w, h - 2, col); }
     var schritt = (frame === 1) ? 1 : (frame === 3 ? -1 : 0);
     var bob = (frame === 1 || frame === 3) ? 1 : 0;
     ellipse(c, Math.round(px), Math.round(py) + 1, 6, 2, P.schatten);
@@ -169,60 +270,99 @@
     // Beine und Schuhe
     q(4, bY, 8, bein + schuh, P.kontur);
     if (seite) {
-      q(5 + schritt, bY, 4, bein, a.hose); q(7 - schritt, bY, 4, bein, a.hose);
-      q(4 + schritt * 2, sY, 5, schuh, P.kontur); q(5 + schritt * 2, sY, 4, 1, a.schuhe);
-      q(7 - schritt * 2, sY, 5, schuh, P.kontur); q(8 - schritt * 2, sY, 4, 1, a.schuhe);
+      q(5 + schritt, bY, 3, bein, a.hose); q(8 - schritt, bY, 3, bein, a.hose);
+      qr(4 + schritt * 2, sY - 1, 5, schuh + 1, P.kontur); q(5 + schritt * 2, sY, 3, 1, a.schuhe);
+      qr(7 - schritt * 2, sY - 1, 5, schuh + 1, P.kontur); q(8 - schritt * 2, sY, 3, 1, a.schuhe);
     } else {
       var lo = schritt > 0 ? -1 : 0, ro = schritt < 0 ? -1 : 0;
       q(5, bY, 3, bein + lo, a.hose); q(8, bY, 3, bein + ro, a.hose);
-      q(4, sY + lo, 4, schuh, P.kontur); q(5, sY + lo, 3, 1, a.schuhe);
-      q(8, sY + ro, 4, schuh, P.kontur); q(8, sY + ro, 3, 1, a.schuhe);
-      if (a.sohle) { q(5, sY + lo + 1, 2, 1, a.sohle); q(9, sY + ro + 1, 2, 1, a.sohle); }
+      qr(4, sY + lo - 1, 4, schuh + 1, P.kontur); q(5, sY + lo, 2, 1, a.schuhe);
+      qr(8, sY + ro - 1, 4, schuh + 1, P.kontur); q(9, sY + ro, 2, 1, a.schuhe);
     }
-    // Koerper / Hemd
-    q(2, rY, 12, koerper, P.kontur);
-    q(3, rY, 10, koerper - 1, a.hemd);
-    q(3, rY + koerper - 2, 10, 1, a.hemd2);
+    // Koerper (rundlich)
+    qr(3, rY - 1, 10, koerper + 2, P.kontur);
+    q(4, rY, 8, koerper, a.hemd);
+    q(4, rY + koerper - 1, 8, 1, a.hemd2);
     if (seite) {
-      var arm = schritt;
-      q(6 + arm, rY + 1, 4, koerper - 2, P.kontur); q(7 + arm, rY + 1, 2, koerper - 4, a.hemd2); q(7 + arm, rY + koerper - 3, 2, 2, a.haut);
+      q(7 + schritt, rY + 1, 3, koerper - 1, P.kontur); q(8 + schritt, rY + 1, 1, koerper - 2, a.hemd2); q(8 + schritt, rY + koerper - 1, 1, 1, a.haut);
     } else {
-      q(3, rY + 1, 1, koerper - 4, a.hemd2); q(12, rY + 1, 1, koerper - 4, a.hemd2);
-      q(3, rY + koerper - 3, 2, 2, a.haut); q(11, rY + koerper - 3, 2, 2, a.haut);
-      if (dir === 'unten') { q(7, rY, 2, kind ? 1 : 2, a.haut); }
+      qr(1, rY, 3, koerper, P.kontur); qr(12, rY, 3, koerper, P.kontur);
+      q(2, rY + 1, 1, koerper - 3, a.hemd); q(13, rY + 1, 1, koerper - 3, a.hemd);
+      q(2, rY + koerper - 2, 1, 1, a.haut); q(13, rY + koerper - 2, 1, 1, a.haut);
+      if (dir === 'unten' && !kind) q(7, rY, 2, 2, a.haut);
     }
-    // Kopf
-    q(3, kY, 10, kopf + 1, P.kontur);
-    q(4, kY + 1, 8, kopf - 1, a.haut);
+    // Kopf: gross und rund
+    q(3, kY, 10, kopf + 1, P.kontur); q(2, kY + 1, 12, kopf - 1, P.kontur);
+    q(4, kY + 1, 8, kopf - 1, a.haut); q(3, kY + 2, 10, kopf - 3, a.haut);
     var hg = a.haarGlanz || a.hemd2;
+    if (a.zoepfe && dir !== 'oben') {
+      qr(0, kY + 3, 3, 5, P.kontur); q(1, kY + 4, 1, 3, a.haar);
+      qr(13, kY + 3, 3, 5, P.kontur); q(14, kY + 4, 1, 3, a.haar);
+    }
     if (dir === 'oben') {
-      q(4, kY + 1, 8, kopf - 2, a.haar); q(6, kY + 1, 2, 1, hg);
-      if (a.bart) { q(4, kY + kopf - 3, 1, 2, a.bart); q(11, kY + kopf - 3, 1, 2, a.bart); }
+      q(4, kY + 1, 8, kopf - 1, a.haar); q(3, kY + 2, 10, kopf - 3, a.haar); q(6, kY + 2, 3, 1, hg);
+      if (a.zoepfe) { qr(0, kY + 3, 3, 5, P.kontur); q(1, kY + 4, 1, 3, a.haar); qr(13, kY + 3, 3, 5, P.kontur); q(14, kY + 4, 1, 3, a.haar); }
+      if (a.bart) { q(3, kY + kopf - 3, 1, 2, a.bart); q(12, kY + kopf - 3, 1, 2, a.bart); }
     } else if (seite) {
-      q(4, kY + 1, 8, 3, a.haar); q(4, kY + 4, 4, kind ? 3 : 4, a.haar); q(6, kY + 1, 2, 1, hg);
-      var auge = kind ? 4 : 5;
-      q(10, kY + auge, 1, 1, P.kontur);
-      if (a.bart) { q(7, kY + 7, 5, 3, a.bart); q(8, kY + 7, 1, 1, a.haut); q(11, kY + 8, 1, 1, '#a8584a'); }
-      q(12, kY + auge + 1, 1, 2, a.haut);
-      if (kind) { q(3, kY + 3, 2, 3, a.haar); }
+      q(4, kY + 1, 8, 3, a.haar); q(3, kY + 2, 10, 2, a.haar); q(3, kY + 4, 4, 4, a.haar); q(10, kY + 4, 2, 1, a.haar); q(7, kY + 1, 2, 1, hg);
+      var ay = kY + 5;
+      q(9, ay, 2, 3, P.kontur); q(9, ay, 1, 1, P.augeHell);
+      q(12, kY + 7, 2, 2, a.haut); q(13, kY + 6, 1, 1, P.kontur);
+      if (a.bart) { q(7, kY + 8, 6, 3, a.bart); q(3, kY + 8, 4, 1, a.bart); q(11, kY + 9, 1, 1, '#c0605a'); }
+      else { q(9, kY + 8, 2, 1, P.backe); q(12, kY + 9, 1, 1, '#d0706a'); }
     } else {
-      q(4, kY + 1, 8, 3, a.haar); q(4, kY + 4, 1, 2, a.haar); q(11, kY + 4, 1, 2, a.haar); q(6, kY + 1, 2, 1, hg);
-      var ay = kind ? 4 : 5;
-      q(6, kY + ay, 1, 1, P.kontur); q(9, kY + ay, 1, 1, P.kontur);
-      if (a.bart) { q(4, kY + 7, 8, 3, a.bart); q(5, kY + 6, 1, 1, a.bart); q(10, kY + 6, 1, 1, a.bart); q(7, kY + 8, 2, 1, '#a8584a'); q(6, kY + 7, 1, 1, '#6b4c3b'); }
-      else { q(7, kY + ay + 2, 2, 1, '#c96d5e'); q(5, kY + ay + 1, 1, 1, '#f5a3a3'); q(10, kY + ay + 1, 1, 1, '#f5a3a3'); }
-      if (kind) { q(2, kY + 3, 2, 3, P.kontur); q(2, kY + 4, 1, 1, a.haar); q(12, kY + 3, 2, 3, P.kontur); q(13, kY + 4, 1, 1, a.haar); }
+      // Pony und Haar
+      q(4, kY + 1, 8, 3, a.haar); q(3, kY + 2, 10, 2, a.haar); q(3, kY + 4, 1, 3, a.haar); q(12, kY + 4, 1, 3, a.haar);
+      q(5, kY + 4, 2, 1, a.haar); q(9, kY + 4, 1, 1, a.haar);
+      q(6, kY + 2, 2, 1, hg);
+      var ey = kY + 5;
+      // Grosse Augen mit Lichtpunkt
+      q(5, ey, 2, 3, P.kontur); q(9, ey, 2, 3, P.kontur);
+      q(5, ey, 1, 1, P.augeHell); q(9, ey, 1, 1, P.augeHell);
+      if (a.bart) {
+        q(4, kY + 8, 8, 3, a.bart); q(3, kY + 6, 1, 3, a.bart); q(12, kY + 6, 1, 3, a.bart);
+        q(7, kY + 9, 2, 1, '#c0605a'); q(4, kY + 8, 1, 1, a.haut); q(11, kY + 8, 1, 1, a.haut);
+      } else {
+        q(3, kY + 8, 2, 1, P.backe); q(11, kY + 8, 2, 1, P.backe);
+        q(7, kY + 8, 2, 1, '#d0706a');
+      }
     }
     return { oben: oy, hoehe: Hh };
   }
 
-  function zeichneBlase(c, cx, topY, symbol) {
-    var by = topY - 9;
-    kreis(c, cx, by, 6, P.kontur); kreis(c, cx, by, 5, P.box);
-    r(c, cx - 2, by + 6, 2, 2, P.kontur); r(c, cx - 4, by + 8, 1, 1, P.kontur);
+  function zeichneBlase(c, cx, topY, symbol, zeit) {
+    var by = topY - 9 + Math.round(Math.sin((zeit || 0) * 3) * 1);
+    kreis(c, cx, by, 7, P.kontur); kreis(c, cx, by, 6, P.box);
+    r(c, cx - 2, by + 7, 2, 2, P.kontur); r(c, cx - 4, by + 9, 1, 1, P.kontur);
     if (symbol === 'teller') { kreis(c, cx, by, 3, P.kontur); kreis(c, cx, by, 2, '#ffffff'); r(c, cx - 1, by - 1, 2, 2, '#ffb36b'); }
-    else if (symbol === 'ball') { kreis(c, cx, by, 3, P.kontur); kreis(c, cx, by, 2, '#ff6b6b'); r(c, cx - 2, by, 5, 1, '#ffffff'); }
-    else if (symbol === 'herz') { r(c, cx - 3, by - 2, 2, 2, '#ff6f91'); r(c, cx + 1, by - 2, 2, 2, '#ff6f91'); r(c, cx - 3, by - 1, 6, 2, '#ff6f91'); r(c, cx - 2, by + 1, 4, 1, '#ff6f91'); r(c, cx - 1, by + 2, 2, 1, '#ff6f91'); }
+    else if (symbol === 'ball') { kreis(c, cx, by, 3, P.kontur); kreis(c, cx, by, 2, '#ff8a8a'); r(c, cx - 2, by, 5, 1, '#ffffff'); }
+    else if (symbol === 'herz') herz(c, cx - 2, by - 2, '#ff7fa0');
+    else if (symbol === 'kissen') { pille(c, cx - 4, by - 3, 9, 6, P.kissen); }
+    else if (symbol === 'zzz') { r(c, cx - 3, by - 3, 3, 1, '#8f7fd9'); r(c, cx - 2, by - 2, 1, 1, '#8f7fd9'); r(c, cx - 3, by - 1, 3, 1, '#8f7fd9'); r(c, cx + 1, by, 3, 1, '#8f7fd9'); r(c, cx + 2, by + 1, 1, 1, '#8f7fd9'); r(c, cx + 1, by + 2, 3, 1, '#8f7fd9'); }
+  }
+
+  // Zielmarkierung beim Klicken: huepfendes Herz mit Ring
+  function zeichneMarker(c, m, cx, cy) {
+    var sx = m.x * K - cx, sy = m.y * K - cy;
+    if (m.nein) { var a = 3; r(c, sx + 8 - a, sy + 8 - a, 2, 2, '#b9a9c9'); r(c, sx + 8 + a - 2, sy + 8 - a, 2, 2, '#b9a9c9'); r(c, sx + 7, sy + 7, 2, 2, '#b9a9c9'); r(c, sx + 8 - a, sy + 8 + a - 2, 2, 2, '#b9a9c9'); r(c, sx + 8 + a - 2, sy + 8 + a - 2, 2, 2, '#b9a9c9'); return; }
+    var ring = 4 + Math.round((Math.sin(m.t * 6) + 1) * 1.5);
+    ellipse(c, sx + 8, sy + 12, ring + 1, 3, P.kontur); ellipse(c, sx + 8, sy + 12, ring, 2, '#ffc6d8');
+    var hop = Math.round(Math.abs(Math.sin(m.t * 5)) * 3);
+    var hx = sx + 5, hy = sy + 1 - hop;
+    r(c, hx - 1, hy, 9, 6, P.kontur); r(c, hx, hy - 1, 3, 1, P.kontur); r(c, hx + 4, hy - 1, 3, 1, P.kontur); r(c, hx + 1, hy + 6, 5, 1, P.kontur); r(c, hx + 2, hy + 7, 3, 1, P.kontur);
+    herz(c, hx + 1, hy, '#ff7fa0'); r(c, hx + 1, hy, 1, 1, '#ffffff');
+  }
+
+  function zeichneKochen(c, karte, st, cx, cy) {
+    if (!st.kochen) return;
+    var sx = 5 * K - cx, sy = 2 * K - cy, z = st.zeit;
+    for (var i = 0; i < 3; i++) {
+      var ph = (z * 0.8 + i / 3) % 1;
+      kreis(c, sx + 6 + i * 3 + Math.round(Math.sin(z * 3 + i) * 2), sy - 4 - Math.round(ph * 12), 2 - Math.round(ph), 'rgba(255,255,255,' + (0.9 - ph * 0.7).toFixed(2) + ')');
+    }
+    var anteil = 1 - st.kochen.rest / st.kochen.dauer;
+    pille(c, sx - 4, sy - 22, 24, 6, '#ffffff');
+    r(c, sx - 2, sy - 20, Math.round(20 * anteil), 2, '#ff9fb8');
   }
 
   // ---------- Text (scharf auf eigener UI-Ebene) ----------
@@ -237,34 +377,40 @@
 
   // ---------- Hauptzeichnen ----------
   function zeichne(R, st) {
-    var c = R.ctx, karte = st.karte, kam = st.kamera, zeit = st.zeit;
+    var c = R.ctx, karte = st.karte, kam = st.kamera, zeit = st.zeit, T = Dorf.Karte.T;
     var cx = Math.round(kam.x), cy = Math.round(kam.y);
     if (R.ui) { R.ui.setTransform(1, 0, 0, 1, 0, 0); R.ui.clearRect(0, 0, R.uiCanvas.width, R.uiCanvas.height); R.ui.setTransform(R.uiSkala, 0, 0, R.uiSkala, 0, 0); }
     r(c, 0, 0, W, H, P.kontur);
 
     var x0 = Math.floor(cx / K), y0 = Math.floor(cy / K), x1 = Math.min(karte.w - 1, x0 + Math.ceil(W / K) + 1), y1 = Math.min(karte.h - 1, y0 + Math.ceil(H / K) + 1);
-    for (var y = Math.max(0, y0); y <= y1; y++) for (var x = Math.max(0, x0); x <= x1; x++) zeichneKachel(c, karte, x, y, x * K - cx, y * K - cy, zeit);
+    var liste = [];
+    for (var y = Math.max(0, y0); y <= y1; y++) for (var x = Math.max(0, x0); x <= x1; x++) {
+      zeichneKachel(c, karte, x, y, x * K - cx, y * K - cy, zeit, st);
+      if (istMoebel(karte.tile(x, y))) (function (mx, my) { liste.push({ y: my * K + 14, f: function () { zeichneMoebel(c, karte, mx, my, mx * K - cx, my * K - cy); } }); })(x, y);
+    }
     for (var i = 0; i < karte.blumen.length; i++) {
       var b = karte.blumen[i], bx = b.x - cx, by = b.y - cy;
       if (bx < -4 || by < -4 || bx > W + 4 || by > H + 4) continue;
-      r(c, bx - 1, by, 3, 1, b.farbe); r(c, bx, by - 1, 1, 3, b.farbe); r(c, bx, by, 1, 1, '#ffcf40');
+      r(c, bx - 1, by - 1, 3, 3, b.farbe); r(c, bx - 2, by, 5, 1, b.farbe); r(c, bx, by - 2, 1, 5, b.farbe); r(c, bx, by, 1, 1, '#ffcf40');
     }
+    if (st.marker) zeichneMarker(c, st.marker, cx, cy);
 
     // Objekte und Figuren nach Fuss-y sortiert
-    var liste = [];
     karte.baeume.forEach(function (t) { var sx = t.x * K - cx, sy = t.y * K - cy; if (sx > -24 && sx < W + 24 && sy > -32 && sy < H + 32) liste.push({ y: t.y * K + 14, f: function () { zeichneBaum(c, sx, sy); } }); });
     liste.push({ y: (karte.brunnen.y + 1) * K + 12, f: function () { zeichneBrunnen(c, karte.brunnen.x * K - cx, karte.brunnen.y * K - cy, zeit); } });
     st.gaeste.forEach(function (gs) {
-      liste.push({ y: gs.y, f: function () {
-        var info = zeichnePerson(c, gs.x - cx, gs.y - cy, gs.aussehen, gs.dir, gs.frame);
+      var sitzt = Dorf.Gaeste.sitzt(gs), off = sitzt ? 14 : 0;
+      liste.push({ y: gs.y - (sitzt ? 12 : 0), f: function () {
+        var info = zeichnePerson(c, gs.x - cx, gs.y - off - cy, gs.aussehen, gs.dir, gs.frame);
         var sym = Dorf.Gaeste.symbol(gs);
-        if (sym) zeichneBlase(c, Math.round(gs.x - cx) + 4, info.oben, sym);
+        if (sym) zeichneBlase(c, Math.round(gs.x - cx) + 5, info.oben, sym, zeit);
       } });
     });
     var sp = st.spieler;
     liste.push({ y: sp.y + 0.1, f: function () { zeichnePerson(c, sp.x - cx, sp.y - cy, BIEL, sp.dir, sp.frame); } });
     liste.sort(function (a, b) { return a.y - b.y; });
     liste.forEach(function (e) { e.f(); });
+    zeichneKochen(c, karte, st, cx, cy);
 
     // Debug: Pfade
     if (st.debug) {
@@ -272,6 +418,7 @@
         for (var k = gs.pfadIndex; k < gs.pfad.length; k++) { var n = gs.pfad[k]; r(c, n.x * K + 7 - cx, n.y * K + 7 - cy, 3, 3, gs.aussehen.farbe); }
         if (gs.zielTile) { c.strokeStyle = gs.aussehen.farbe; c.lineWidth = 1; c.strokeRect(gs.zielTile.x * K - cx + 0.5, gs.zielTile.y * K - cy + 0.5, 15, 15); }
       });
+      for (var k2 = sp.pfadIndex; k2 < sp.pfad.length; k2++) { var n2 = sp.pfad[k2]; r(c, n2.x * K + 7 - cx, n2.y * K + 7 - cy, 2, 2, '#ffffff'); }
     }
 
     // Tageslicht
@@ -279,15 +426,20 @@
     if (tn.a > 0.001) { c.fillStyle = 'rgba(' + tn.r + ',' + tn.g + ',' + tn.b + ',' + tn.a.toFixed(3) + ')'; c.fillRect(0, 0, W, H); }
 
     // HUD oben
-    c.fillStyle = 'rgba(43,33,53,0.78)'; c.fillRect(0, 0, W, 11);
+    c.fillStyle = 'rgba(75,58,90,0.82)'; c.fillRect(0, 0, W, 11);
     text(R, 'Tag ' + st.uhr.tag + '   ' + Dorf.Uhr.text(st.uhr) + '   ' + Dorf.Uhr.phase(st.uhr), 4, 2, { farbe: '#fff4dc', fett: true });
-    text(R, 'Finca · E sprechen · F1 Debug', W - 4, 2, { farbe: '#cdbfe0', align: 'right' });
+    if (st.essen > 0) {
+      kreis(c, 150, 5, 3, '#ffffff'); r(c, 148, 4, 4, 2, '#f3c27a');
+      text(R, '× ' + st.essen, 155, 2, { farbe: '#ffe7b0', fett: true });
+    }
+    text(R, 'Finca ' + (Dorf.VERSION || '') + ' · Klick: laufen · E: sprechen', W - 4, 2, { farbe: '#e2d6f5', align: 'right' });
 
     // Sprechblase (Dialogbox unten)
     if (st.blase && !st.abend) {
-      box(c, 6, 140, W - 12, 32, P.box);
-      box(c, 10, 134, 44, 10, '#ffd9a8');
-      text(R, st.blase.sprecher, 32, 135, { align: 'center', fett: true });
+      var bf = { Biel: '#ffe0b8', Mia: '#ffd1e0', Jonas: '#c9f2e2' }[st.blase.sprecher] || '#ffe0b8';
+      pille(c, 6, 140, W - 12, 32, P.box);
+      pille(c, 10, 133, 46, 11, bf);
+      text(R, st.blase.sprecher, 33, 135, { align: 'center', fett: true });
       text(R, st.blase.text, 14, 150, { groesse: 8 });
     }
 
@@ -295,25 +447,25 @@
 
     // Abendszene
     if (st.abend) {
-      c.fillStyle = 'rgba(28,22,60,0.62)'; c.fillRect(0, 0, W, H);
+      c.fillStyle = 'rgba(58,44,96,0.6)'; c.fillRect(0, 0, W, H);
       for (var s = 0; s < 24; s++) { var hs = hash(s, 7); r(c, hs % W, 14 + (hs >> 9) % 60, 1, 1, '#fff6c8'); }
-      kreis(c, 270, 34, 9, '#fff3c4'); kreis(c, 274, 31, 8, 'rgba(28,22,60,0.9)');
-      box(c, 50, 64, 220, 56, P.box);
+      kreis(c, 270, 34, 9, '#fff3c4'); kreis(c, 274, 31, 8, 'rgba(58,44,96,0.95)');
+      pille(c, 50, 64, 220, 56, P.box);
       text(R, 'Bona nit! Tag geschafft', W / 2, 72, { align: 'center', fett: true, groesse: 12 });
       text(R, '(Gute Nacht!) Tag ' + st.uhr.tag + ' auf der Finca ist vorbei.', W / 2, 90, { align: 'center' });
-      text(R, 'Enter oder Leertaste: nächster Tag', W / 2, 104, { align: 'center', farbe: '#7a5a9a' });
+      text(R, 'Enter, Leertaste oder Tippen: nächster Tag', W / 2, 104, { align: 'center', farbe: '#7a5a9a' });
     }
   }
 
   function zeichneDebug(R, st) {
     var c = R.ctx;
-    c.fillStyle = 'rgba(20,16,30,0.72)'; c.fillRect(2, 14, 150, 62);
+    c.fillStyle = 'rgba(40,30,55,0.78)'; c.fillRect(2, 14, 170, 62);
     var t = Dorf.Gaeste.tileVon(st.spieler), z = 16;
-    text(R, 'FPS ' + Math.round(st.fps || 0) + '  Seed ' + st.rng.seed, 5, z, { farbe: '#b6f5c8' }); z += 9;
-    text(R, 'Biel Kachel ' + t.x + ',' + t.y, 5, z, { farbe: '#b6f5c8' }); z += 9;
+    text(R, 'FPS ' + Math.round(st.fps || 0) + '  Seed ' + st.rng.seed + '  ' + (Dorf.VERSION || ''), 5, z, { farbe: '#b6f5c8' }); z += 9;
+    text(R, 'Biel Kachel ' + t.x + ',' + t.y + '  Tafel ' + st.essen, 5, z, { farbe: '#b6f5c8' }); z += 9;
     st.gaeste.forEach(function (gs) {
       var b = gs.beduerfnisse;
-      text(R, gs.name + ': Satt ' + b.satt.toFixed(0) + '  Spielen ' + b.spielen.toFixed(0), 5, z, { farbe: '#ffe7b0' }); z += 8;
+      text(R, gs.name + ': Satt ' + b.satt.toFixed(0) + '  Spielen ' + b.spielen.toFixed(0) + '  Ruhe ' + (b.ruhe !== undefined ? b.ruhe.toFixed(0) : '-'), 5, z, { farbe: '#ffe7b0' }); z += 8;
       text(R, '  ' + gs.zustand + ' → ' + (gs.ziel || '-') + '  Pfad ' + Math.max(0, gs.pfad.length - gs.pfadIndex), 5, z, { farbe: '#d8d0ec' }); z += 9;
     });
   }

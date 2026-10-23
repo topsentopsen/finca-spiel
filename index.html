@@ -3,14 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Finca (Prototyp)</title>
+<title>Finca v0.2 (Prototyp)</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #2b2135; overflow: hidden; }
+  html, body { margin: 0; height: 100%; background: #3a2e48; overflow: hidden; }
   body { display: flex; align-items: center; justify-content: center; }
-  #rahmen { position: relative; line-height: 0; box-shadow: 0 0 0 4px #4a3a5c, 0 8px 30px rgba(0,0,0,.5); border-radius: 4px; }
+  #rahmen { position: relative; line-height: 0; box-shadow: 0 0 0 4px #7a6494, 0 8px 30px rgba(0,0,0,.5); border-radius: 4px; }
   canvas { display: block; }
   #spiel { image-rendering: pixelated; image-rendering: crisp-edges; }
   #ui { position: absolute; left: 0; top: 0; pointer-events: none; }
+  #spiel { touch-action: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 </style>
 </head>
 <body>
@@ -18,15 +19,15 @@
   <canvas id="spiel" width="320" height="176"></canvas>
   <canvas id="ui" width="320" height="176"></canvas>
 </div>
-<script src="js/rng.js"></script>
-<script src="js/karte.js"></script>
-<script src="js/pfad.js"></script>
-<script src="js/kamera.js"></script>
-<script src="js/eingabe.js"></script>
-<script src="js/uhr.js"></script>
-<script src="js/spieler.js"></script>
-<script src="js/gaeste.js"></script>
-<script src="js/render.js"></script>
-<script src="js/main.js"></script>
+<script src="js/rng.js?v=0.2"></script>
+<script src="js/karte.js?v=0.2"></script>
+<script src="js/pfad.js?v=0.2"></script>
+<script src="js/kamera.js?v=0.2"></script>
+<script src="js/eingabe.js?v=0.2"></script>
+<script src="js/uhr.js?v=0.2"></script>
+<script src="js/spieler.js?v=0.2"></script>
+<script src="js/gaeste.js?v=0.2"></script>
+<script src="js/render.js?v=0.2"></script>
+<script src="js/main.js?v=0.2"></script>
 </body>
 </html>

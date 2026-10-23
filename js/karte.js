@@ -5,12 +5,22 @@
 
   var T = {
     GRAS: 0, WEG: 1, PFLASTER: 2, MAUER: 3, WAND: 4, BODEN: 5, FLIESE: 6,
-    WASSER: 7, RAND: 8, BRUNNEN: 9, OLIVE: 10, TAFEL: 11, HERD: 12, TOR: 13, BEET: 14
+    WASSER: 7, RAND: 8, BRUNNEN: 9, OLIVE: 10, TAFEL: 11, HERD: 12, TOR: 13, BEET: 14,
+    // ab v0.2: Einrichtung
+    TEPPICH: 15, COUCH: 16, PFLANZE: 17, ECKBANK: 18, ANRICHTE: 19, BETT: 20, SESSEL: 21, TISCH: 22
   };
   var BLOCK = {};
-  [T.MAUER, T.WAND, T.WASSER, T.BRUNNEN, T.OLIVE, T.TAFEL, T.HERD, T.TOR].forEach(function (t) { BLOCK[t] = true; });
+  [T.MAUER, T.WAND, T.WASSER, T.BRUNNEN, T.OLIVE, T.TAFEL, T.HERD, T.TOR,
+    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH].forEach(function (t) { BLOCK[t] = true; });
 
   var KACHEL = 16, BREITE = 40, HOEHE = 30;
+
+  // Raeume (Innenflaeche ohne Waende). v0.1: Kueche 6x7, Wohnbereich 5x7, Gaestehaus 6x6.
+  var RAEUME = {
+    kueche: { x0: 3, y0: 2, x1: 9, y1: 9, name: 'Küche' },
+    wohnen: { x0: 11, y0: 2, x1: 15, y1: 9, name: 'Wohnbereich' },
+    gaestehaus: { x0: 30, y0: 17, x1: 35, y1: 23, name: 'Gästehaus' }
+  };
 
   function erstelle(rng) {
     var w = BREITE, h = HOEHE;
@@ -28,15 +38,22 @@
     rect(12, 12, 27, 20, T.PFLASTER);
     rect(19, 15, 20, 16, T.BRUNNEN);
 
-    // Haupthaus mit Kueche (links) und Wohnbereich (rechts)
-    ring(3, 2, 16, 10, T.WAND);
-    rect(4, 3, 9, 9, T.FLIESE);
-    rect(11, 3, 15, 9, T.BODEN);
-    for (var y = 3; y <= 9; y++) set(10, y, T.WAND);
-    set(10, 6, T.BODEN);          // Tuer Kueche <-> Wohnbereich
-    rect(5, 3, 7, 3, T.HERD);      // Herdzeile
-    set(7, 10, T.FLIESE);          // Kuechentuer zur Arkade
-    set(13, 10, T.BODEN);          // Haustuer zum Innenhof
+    // Haupthaus (v0.2 groesser): Kueche links, Wohnbereich rechts
+    ring(2, 1, 16, 10, T.WAND);
+    rect(3, 2, 9, 9, T.FLIESE);
+    rect(11, 2, 15, 9, T.BODEN);
+    for (var y = 2; y <= 9; y++) set(10, y, T.WAND);
+    set(10, 6, T.BODEN);            // Tuer Kueche <-> Wohnbereich
+    // Kueche: Anrichte, Herdzeile, Pflanze, Eckbank mit Tisch
+    set(3, 2, T.ANRICHTE); rect(4, 2, 6, 2, T.HERD); rect(7, 2, 8, 2, T.ANRICHTE); set(9, 2, T.PFLANZE);
+    set(3, 7, T.ECKBANK); set(3, 8, T.ECKBANK); set(4, 8, T.ECKBANK); set(4, 7, T.TISCH);
+    set(7, 10, T.FLIESE);            // Kuechentuer zur Arkade
+    // Wohnbereich: Couch an der Wand, Teppich, Sessel, Pflanzen in den Ecken
+    rect(12, 2, 14, 2, T.COUCH);
+    rect(12, 4, 14, 5, T.TEPPICH);
+    set(15, 4, T.SESSEL);
+    set(11, 2, T.PFLANZE); set(15, 9, T.PFLANZE);
+    set(13, 10, T.BODEN);            // Haustuer zum Innenhof
     set(13, 11, T.PFLASTER);
 
     // Arkade mit langer Tafel
@@ -48,9 +65,12 @@
     rect(25, 3, 34, 8, T.WASSER);
     rect(25, 10, 26, 11, T.WEG);
 
-    // Nebengebaeude (Gaestehaus)
-    ring(29, 17, 36, 24, T.WAND);
-    rect(30, 18, 35, 23, T.BODEN);
+    // Nebengebaeude (Gaestehaus, v0.2 groesser) mit Bett, Teppich, Pflanze
+    ring(29, 16, 36, 24, T.WAND);
+    rect(30, 17, 35, 23, T.BODEN);
+    set(34, 17, T.BETT); set(35, 17, T.BETT); set(34, 18, T.BETT); set(35, 18, T.BETT);
+    rect(31, 20, 33, 21, T.TEPPICH);
+    set(30, 17, T.PFLANZE); set(35, 23, T.SESSEL);
     set(29, 19, T.BODEN);
     set(28, 19, T.PFLASTER);
 
@@ -73,24 +93,25 @@
 
     // Blumen als Deko (Seed-Zufall, nur auf Gras)
     var blumen = [];
-    var farben = ['#ff9fb5', '#ffe17a', '#c9a7ff', '#ffffff'];
-    for (var i = 0; i < 70; i++) {
+    var farben = ['#ffb3c7', '#ffe9a0', '#d8c2ff', '#ffffff', '#b8e8ff'];
+    for (var i = 0; i < 80; i++) {
       var bx = rng.int(1, w - 2), by = rng.int(1, h - 2);
       if (tiles[by * w + bx] === T.GRAS) blumen.push({ x: bx * KACHEL + rng.int(2, 13), y: by * KACHEL + rng.int(2, 13), farbe: rng.pick(farben) });
     }
 
     var karte = {
-      w: w, h: h, kachel: KACHEL, tiles: tiles, baeume: baeume, blumen: blumen,
+      w: w, h: h, kachel: KACHEL, tiles: tiles, baeume: baeume, blumen: blumen, raeume: RAEUME,
       brunnen: { x: 19, y: 15 },
       tile: function (x, y) { if (x < 0 || y < 0 || x >= w || y >= h) return T.MAUER; return tiles[y * w + x]; },
       blockiert: function (x, y) { return !!BLOCK[karte.tile(x, y)]; }
     };
 
-    function zieleNeben(typ, nur) {
+    function zieleNeben(typ, nur, filter) {
       var out = [];
       for (var yy = 0; yy < h; yy++) for (var xx = 0; xx < w; xx++) {
         if (karte.blockiert(xx, yy)) continue;
         if (nur && tiles[yy * w + xx] !== nur) continue;
+        if (filter && !filter(xx, yy)) continue;
         if (karte.tile(xx + 1, yy) === typ || karte.tile(xx - 1, yy) === typ || karte.tile(xx, yy + 1) === typ || karte.tile(xx, yy - 1) === typ) out.push({ x: xx, y: yy });
       }
       return out;
@@ -98,11 +119,22 @@
     karte.orte = {
       tafel: zieleNeben(T.TAFEL),
       pool: zieleNeben(T.WASSER, T.RAND),
+      // Platz direkt vor der Couch (Gast setzt sich drauf)
+      couch: zieleNeben(T.COUCH, null, function (xx, yy) { return karte.tile(xx, yy - 1) === T.COUCH; }),
+      // Platz vor dem Herd (Biel kocht)
+      herd: zieleNeben(T.HERD, null, function (xx, yy) { return karte.tile(xx, yy - 1) === T.HERD; }),
       bummeln: (function () { var o = []; for (var yy = 12; yy <= 20; yy++) for (var xx = 12; xx <= 27; xx++) if (!karte.blockiert(xx, yy)) o.push({ x: xx, y: yy }); return o; })()
     };
     karte.start = { biel: { x: 19, y: 18 }, mia: { x: 16, y: 17 }, jonas: { x: 23, y: 17 } };
+    // Begehbare Bodenflaeche eines Raums (inklusive Teppich, ohne Moebel)
+    karte.flaeche = function (id) {
+      var r = RAEUME[id], n = 0;
+      for (var yy = r.y0; yy <= r.y1; yy++) for (var xx = r.x0; xx <= r.x1; xx++) if (!karte.blockiert(xx, yy)) n++;
+      return n;
+    };
+    karte.groesse = function (id) { var r = RAEUME[id]; return (r.x1 - r.x0 + 1) * (r.y1 - r.y0 + 1); };
     return karte;
   }
 
-  Dorf.Karte = { T: T, KACHEL: KACHEL, BREITE: BREITE, HOEHE: HOEHE, erstelle: erstelle };
+  Dorf.Karte = { T: T, KACHEL: KACHEL, BREITE: BREITE, HOEHE: HOEHE, RAEUME: RAEUME, erstelle: erstelle };
 })(globalThis);
