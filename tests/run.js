@@ -3,7 +3,7 @@
 'use strict';
 var fs = require('fs'), path = require('path'), vm = require('vm');
 
-var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'glueck', 'gaeste', 'tiere', 'render', 'ton', 'main'];
+var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'garten', 'glueck', 'gaeste', 'tiere', 'render', 'ton', 'main'];
 
 function ladeKontext(extra) {
   var ctx = { console: console, Math: Math };
@@ -197,12 +197,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.4', function () {
+test('Version: sichtbares Label ist v0.5', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.4');
+  gleich(D.VERSION, 'v0.5');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.4') >= 0, 'Titel enthaelt v0.4');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.4') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.5') >= 0, 'Titel enthaelt v0.5');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.5') >= 0, n + ' eingebunden'); });
 });
 test('Debug: F1 ist frei, Debug liegt auf Backquote', function () {
   var D = ladeKontext().Dorf;
@@ -488,6 +488,7 @@ test('Ton: Spiel meldet Glocke beim Reden, Kochgeraeusch, Fertig und leise Schri
   wahr(schritte >= 2 && schritte <= 6, 'Schritte pro Sekunde: ' + schritte);
   st.eingabe.loese('ArrowRight');
   st.toene.length = 0;
+  st.vorrat.orange = 1;
   D.Spiel.kochen(st, 'ensaimada');
   wahr(st.toene.indexOf('kochen') >= 0);
   for (i = 0; i < 60 * 5; i++) D.Spiel.schritt(st, 1 / 60);
@@ -531,6 +532,7 @@ test('Kochmenue: Tippen auf eine Karte kocht genau dieses Gericht, daneben tippe
   karten.forEach(function (k) { wahr(k.x >= 0 && k.y >= 12 && k.x + k.w <= 320 && k.y + k.h <= 176, 'Karte im Bild'); wahr(k.w >= 40 && k.h >= 40, 'gross genug zum Tippen'); });
   D.Spiel.oeffneMenue(st);
   gleich(D.Spiel.klickBild(st, 5, 170), 'zurueck'); gleich(st.menue, null);
+  st.vorrat.tomate = 2; st.vorrat.orange = 1;
   D.Spiel.oeffneMenue(st);
   var k = karten[2];
   gleich(D.Spiel.klickBild(st, k.x + k.w / 2, k.y + k.h / 2), 'gekocht');
@@ -670,6 +672,8 @@ test('Glueck: Tagesziel einmal feiern, nie sinken, neuer Tag beginnt frisch', fu
   G.gib(st, st.gaeste[0], 'liebling');
   wahr(!st.tagesziel.erreicht, 'erst wenn alle gluecklich sind');
   G.gib(st, st.gaeste[1], 'liebling');
+  wahr(!st.tagesziel.erreicht, 'Padrina fehlt noch');
+  G.gib(st, st.gaeste[2], 'liebling');
   wahr(st.tagesziel.erreicht && st.tagesziel.neu, 'Ziel erreicht');
   D.Spiel.schritt(st, 1 / 30);
   gleich(st.tagesziel.neu, false, 'nur einmal gemeldet');
@@ -731,7 +735,7 @@ test('Streicheln: Taste E beim Gecko, Gaeste in der Naehe freuen sich mit', func
   var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 6 }), g = st.tiere.gecko, mia = st.gaeste[0];
   st.spieler.x = g.x; st.spieler.y = 11 * 16 + 10;
   mia.x = st.spieler.x + 30; mia.y = st.spieler.y + 10;  // aber nicht in Sprechweite
-  st.gaeste[1].x = 2000;
+  st.gaeste[1].x = 2000; if (st.gaeste[2]) st.gaeste[2].x = 2000;
   st.toene.length = 0;
   var vor = mia.glueck;
   st.eingabe.druecke('KeyE'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende();
@@ -794,6 +798,196 @@ test('Render: Wiese, Esel, Gecko, Herzen im HUD und Abendfeier zeichnen ohne Feh
   st.gaeste.forEach(function (g) { g.glueck = D.Glueck.MAX; }); D.Glueck.pruefe(st);
   st.abend = true; texte.length = 0; D.Render.zeichne(R, st);
   wahr(texte.some(function (s) { return /Alle Gäste sind glücklich/.test(s); }), 'Abendfeier');
+});
+
+// ---------- Garten, Fuettern und Padrina (v0.5) ----------
+function tasteE(D, st) { st.eingabe.druecke('KeyE'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende(); st.eingabe.loese('KeyE'); }
+test('Garten: Beet mit Tomaten und Karotten, Orangenbaum und Oliven, alles reif am Morgen', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 1 }), T = D.Karte.T, k = st.karte;
+  var arten = {};
+  st.garten.liste.forEach(function (p) {
+    arten[p.art] = (arten[p.art] || 0) + 1;
+    wahr(p.reif, 'reif am Morgen');
+    if (p.baum) wahr(k.blockiert(p.x, p.y), 'Baum ist fest'); else gleich(k.tile(p.x, p.y), T.BEET, 'Pflanze im Beet');
+  });
+  wahr(arten.tomate >= 2 && arten.karotte >= 2 && arten.orange >= 1 && arten.olive >= 1, JSON.stringify(arten));
+  gleich(k.tile(10, 19), T.ORANGE);
+  wahr(k.baeume.some(function (b) { return b.art === 'orange'; }), 'Orangenbaum wird gezeichnet');
+  // jede Pflanze ist fuer Biel erreichbar
+  st.garten.liste.forEach(function (p) {
+    var ok = !k.blockiert(p.x, p.y) || [[0, 1], [1, 0], [-1, 0], [0, -1]].some(function (d) { return !k.blockiert(p.x + d[0], p.y + d[1]) && D.Pfad.suche(k, 19, 18, p.x + d[0], p.y + d[1]); });
+    wahr(ok, p.art + ' erreichbar');
+  });
+  gleich(JSON.stringify(st.vorrat), JSON.stringify({ tomate: 0, karotte: 0, orange: 0, olive: 0 }), 'Korb leer am Anfang');
+});
+test('Garten: Ernten mit E, waechst gemuetlich nach, voller Korb und neuer Tag', function () {
+  var D = ladeKontext().Dorf, GA = D.Garten, st = D.Spiel.erstelle({ seed: 1 });
+  st.gaeste = [];
+  var tom = GA.an(st.garten, 3, 16);
+  st.spieler.x = 3 * 16 + 8; st.spieler.y = 16 * 16 + 12;
+  st.toene.length = 0;
+  tasteE(D, st);
+  gleich(st.vorrat.tomate, 1, 'eine Tomate im Korb');
+  wahr(!tom.reif, 'Pflanze waechst nach');
+  wahr(st.toene.indexOf('ernte') >= 0, 'leises Ernte Geraeusch');
+  wahr(/Tomate/.test(st.blase.text) && /tomàtiga/.test(st.blase.text), st.blase.text);
+  wahr(st.herzchen.some(function (h) { return h.bild === 'tomate'; }), 'Tomate hopst in den Korb');
+  // noch nicht reif: freundlicher Hinweis, nichts passiert
+  gleich(D.Spiel.klick(st, 3 * 16 + 8, 16 * 16 + 8), 'ernten');
+  gleich(st.vorrat.tomate, 1); wahr(/Bald/.test(st.blase.text), 'freundlich');
+  // nach anderthalb Spielstunden wieder reif, vorher nicht
+  GA.update(st.garten, 1.0); wahr(!tom.reif, 'braucht etwas Zeit');
+  GA.update(st.garten, 0.6); wahr(tom.reif, 'wieder reif');
+  // ueber die Spieluhr: eine Stunde sind 40 Sekunden
+  GA.ernte(st.garten, st.vorrat, tom);
+  for (var i = 0; i < 30 * 61; i++) D.Spiel.schritt(st, 1 / 30);
+  wahr(tom.reif, 'nach gut einer Minute wieder reif');
+  // voller Korb: Frucht bleibt einfach haengen
+  st.vorrat.tomate = GA.VORRAT_MAX;
+  gleich(GA.ernte(st.garten, st.vorrat, tom), 0); wahr(tom.reif, 'bleibt reif');
+  // Orangenbaum gibt zwei, Oliven auch
+  var ora = st.garten.liste.filter(function (p) { return p.art === 'orange'; })[0];
+  gleich(GA.ernte(st.garten, st.vorrat, ora), 2); gleich(st.vorrat.orange, 2);
+  // neuer Tag: alles wieder reif
+  st.uhr.minute = D.Uhr.ENDE; D.Spiel.schritt(st, 1 / 30); wahr(st.abend);
+  st.naechsterTag = true; D.Spiel.schritt(st, 1 / 30);
+  wahr(st.garten.liste.every(function (p) { return p.reif; }), 'ueber Nacht nachgewachsen');
+});
+test('Garten: Klick auf den Orangenbaum laeuft hin und erntet', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 2 });
+  st.gaeste = [];
+  gleich(D.Spiel.klick(st, 10 * 16 + 8, 19 * 16 + 4), 'ernten');
+  for (var i = 0; i < 60 * 20 && st.vorrat.orange === 0; i++) D.Spiel.schritt(st, 1 / 60);
+  gleich(st.vorrat.orange, 2, 'zwei Orangen geerntet');
+});
+test('Kochen mit Zutaten: Pa amb oli geht immer, frisch gibt es mehr, sonst freundlicher Hinweis', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 1 });
+  st.gaeste = [];
+  // leerer Korb: Pa amb oli aus der Speisekammer
+  wahr(D.Spiel.kochen(st, 'paamboli'), 'Pa amb oli geht immer');
+  for (var i = 0; i < 60 * 6; i++) D.Spiel.schritt(st, 1 / 60);
+  gleich(st.teller.length, 3);
+  st.teller.length = 0;
+  // mit Tomate und Olive: ein Teller mehr, Zutaten werden verbraucht
+  st.vorrat.tomate = 1; st.vorrat.olive = 2;
+  D.Spiel.kochen(st, 'paamboli'); wahr(/frisch/.test(st.blase.text));
+  gleich(st.vorrat.tomate, 0); gleich(st.vorrat.olive, 1);
+  for (i = 0; i < 60 * 6; i++) D.Spiel.schritt(st, 1 / 60);
+  gleich(st.teller.length, 4, 'frisch: vier Teller');
+  st.teller.length = 0;
+  // Tumbet ohne Tomaten: Hinweis, kein Fehler, kein Kochen
+  st.toene.length = 0;
+  gleich(D.Spiel.kochen(st, 'tumbet'), false);
+  gleich(st.kochen, null);
+  wahr(/2 Tomaten/.test(st.blase.text) && /Garten/.test(st.blase.text), st.blase.text);
+  gleich(D.Spiel.kochen(st, 'ensaimada'), false); wahr(/1 Orange/.test(st.blase.text));
+  // mit Zutaten klappt es und verbraucht sie
+  st.vorrat.tomate = 3;
+  wahr(D.Spiel.kochen(st, 'tumbet')); gleich(st.vorrat.tomate, 1);
+  // Menue zeigt die Zutaten
+  var P = D.Garten.pruefe({ tomate: 0, karotte: 0, orange: 0, olive: 0 }, D.Gerichte.hole('paamboli'));
+  wahr(P.ok && !P.frisch, 'Speisekammer reicht');
+  D.Gerichte.REIHE.forEach(function (id) { wahr(D.Gerichte.hole(id).zutaten, id + ' hat Zutaten'); });
+});
+test('Fuettern: Karotte fuer Bruna, sie mampft, extra Herz fuer Gaeste in der Naehe', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 6 }), e = st.tiere.esel, mia = st.gaeste[0];
+  st.spieler.x = 29 * 16 + 8; st.spieler.y = 12 * 16 + 12;
+  e.x = 31 * 16 + 4; e.y = 12 * 16 + 12; e.ziel = null;
+  mia.x = st.spieler.x; mia.y = st.spieler.y + 40;
+  st.gaeste[1].x = 2000; st.gaeste[2].x = 2000;
+  st.vorrat.karotte = 2;
+  var vor = mia.glueck, vorJ = st.gaeste[1].glueck;
+  st.toene.length = 0; st.herzchen.length = 0;
+  tasteE(D, st);
+  gleich(st.vorrat.karotte, 1, 'Karotte verbraucht');
+  wahr(e.mampft > 0, 'Bruna mampft');
+  gleich(e.gefuettert, 1);
+  wahr(st.toene.indexOf('mampf') >= 0, 'Mampf Geraeusch');
+  wahr(st.herzchen.length >= 2, 'zwei Herzen');
+  gleich(mia.glueck, vor + D.Glueck.GRUND.fuettern.menge, 'Mia freut sich sehr');
+  gleich(st.gaeste[1].glueck, vorJ, 'Jonas ist zu weit weg');
+  wahr(/Bruna|Karotte/.test(st.blase.text), st.blase.text);
+  // waehrend sie mampft bleibt sie stehen
+  var x0 = e.x;
+  for (var i = 0; i < 60; i++) D.Spiel.schritt(st, 1 / 60);
+  gleich(e.x, x0, 'bleibt beim Mampfen stehen');
+  // ohne Karotte wird normal gestreichelt
+  st.vorrat.karotte = 0; e.mampft = 0; e.freude = 0;
+  var gs = e.gestreichelt;
+  D.Spiel.streichle(st, e);
+  gleich(e.gestreichelt, gs + 1); gleich(e.gefuettert, 1);
+  // Effekte bleiben leise
+  wahr(D.Glueck.GRUND.fuettern.menge >= D.Glueck.PRO_HERZ, 'ein ganzes Herz');
+});
+test('Padrina: dritter Gast mit eigenem Lieblingsgericht, mag das Sofa, geht gemuetlich', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 1 });
+  gleich(st.gaeste.map(function (g) { return g.name; }).join(','), 'Mia,Jonas,Padrina');
+  var pa = st.gaeste[2];
+  gleich(pa.liebling, 'paamboli');
+  var lieblinge = st.gaeste.map(function (g) { return g.liebling; });
+  gleich(lieblinge.filter(function (l, i) { return lieblinge.indexOf(l) === i; }).length, 3, 'jeder hat ein eigenes Lieblingsgericht');
+  wahr(pa.tempo < D.Gaeste.TEMPO, 'geht gemuetlich');
+  wahr(pa.profil.ruhe > st.gaeste[0].profil.ruhe && pa.profil.spielen < 1, 'liebt das Sofa, weniger Pool');
+  wahr(pa.aussehen.dutt && pa.aussehen.brille, 'Dutt und Brille');
+  wahr(!st.karte.blockiert(st.karte.start.padrina.x, st.karte.start.padrina.y), 'Startplatz frei');
+  // Sprueche fuer alle Lagen
+  var rng = D.RNG.erstelle(1);
+  [['frei', null], ['unterwegs', 'tafel'], ['unterwegs', 'couch'], ['aktiv', 'couch'], ['aktiv', 'pool']].forEach(function (z) {
+    pa.zustand = z[0]; pa.ziel = z[1]; pa.portion = false;
+    var s2 = D.Gaeste.spruch(pa, rng); wahr(typeof s2 === 'string' && s2.length > 5, z.join(' '));
+  });
+  pa.zustand = 'aktiv'; pa.ziel = 'tafel';
+  D.Gerichte.REIHE.forEach(function (id) { pa.portion = id; wahr(D.Gaeste.spruch(pa, rng).length > 5); });
+  // wird muede und setzt sich aufs Sofa
+  st = D.Spiel.erstelle({ seed: 1 }); pa = st.gaeste[2];
+  st.gaeste = [pa];
+  pa.beduerfnisse.satt = 90; pa.beduerfnisse.spielen = 90; pa.beduerfnisse.ruhe = 20;
+  for (var i = 0; i < 30 * 60 && !D.Gaeste.sitzt(pa); i++) D.Spiel.schritt(st, 1 / 30);
+  wahr(D.Gaeste.sitzt(pa), 'Padrina sitzt auf dem Sofa');
+  // Lieblingsgericht auf der Tafel nimmt sie zuerst
+  st.teller = ['tumbet', 'paamboli'];
+  pa.zustand = 'unterwegs'; pa.ziel = 'tafel';
+  wahr(D.Gaeste.nimmTeller(pa, st)); gleich(pa.portion, 'paamboli');
+});
+test('Drei Gaeste: Herzen im HUD, Korb, Menue mit Zutaten und Abend zeichnen ohne Fehler', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 1 }), texte = [];
+  var ctx = new Proxy({}, { get: function (o, k) { if (k in o) return o[k]; return function () { if (k === 'fillText') texte.push(arguments[0]); return { addColorStop: function () {} }; }; }, set: function (o, k, v) { o[k] = v; return true; } });
+  var R = { ctx: ctx, ui: ctx, uiSkala: 1, uiCanvas: { width: 960, height: 528 } };
+  st.spieler.x = 6 * 16; st.spieler.y = 17 * 16; st.kamera.x = 0; st.kamera.y = 180;
+  st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.5;
+  st.herzchen.push({ x: 60, y: 260, t: 0.2, bild: 'karotte' });
+  st.tiere.esel.mampft = 1;
+  st.vorrat.tomate = 2;
+  D.Render.zeichne(R, st);
+  ['Mia', 'Jonas', 'Padrina'].forEach(function (n) { wahr(texte.indexOf(n) >= 0, n + ' im HUD'); });
+  wahr(texte.indexOf('2') >= 0, 'Korb zeigt Anzahl');
+  D.Spiel.sage(st, 'Padrina', 'Bon dia, fillet!'); texte.length = 0; D.Render.zeichne(R, st);
+  wahr(texte.indexOf('Padrina') >= 0);
+  D.Spiel.oeffneMenue(st); texte.length = 0; D.Render.zeichne(R, st);
+  wahr(texte.indexOf('geht immer') >= 0, 'Pa amb oli geht immer');
+  wahr(texte.indexOf('alles da') >= 0, 'Tumbet: Tomaten da');
+  wahr(texte.indexOf('ernten') >= 0, 'Ensaïmada: Orange ernten');
+  st.menue = null;
+  st.gaeste.forEach(function (g) { g.glueck = D.Glueck.MAX; }); D.Glueck.pruefe(st);
+  st.abend = true; texte.length = 0; D.Render.zeichne(R, st);
+  ['Mia', 'Jonas', 'Padrina'].forEach(function (n) { wahr(texte.indexOf(n) >= 0, n + ' am Abend'); });
+  gleich(D.Ton.erstelle(null).spiele('mampf'), false, 'ohne Ton still');
+});
+test('Langer Lauf: drei Tage mit Zufallsklicks, Ernten, Fuettern und Kochen ohne Fehler', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 9 }), rng = D.RNG.erstelle(77);
+  for (var tag = 0; tag < 3; tag++) {
+    for (var i = 0; i < 10 * 700 && !st.abend; i++) {
+      if (i % 25 === 0) D.Spiel.klick(st, rng.int(0, 40 * 16 - 1), rng.int(0, 30 * 16 - 1));
+      if (i % 97 === 0) tasteE(D, st);
+      if (i % 301 === 0) D.Spiel.kochen(st, D.Gerichte.REIHE[rng.int(0, 2)]);
+      D.Spiel.schritt(st, 1 / 10);
+      D.Garten.REIHE.forEach(function (a) { wahr(st.vorrat[a] >= 0 && st.vorrat[a] <= D.Garten.VORRAT_MAX, 'Korb im Rahmen'); });
+      wahr(st.teller.length <= D.Spiel.TAFEL_MAX);
+      st.gaeste.forEach(function (g) { wahr(isFinite(g.x) && isFinite(g.y) && g.glueck >= 0 && g.glueck <= D.Glueck.MAX); });
+    }
+    st.uhr.minute = D.Uhr.ENDE; D.Spiel.schritt(st, 1 / 10); st.naechsterTag = true; D.Spiel.schritt(st, 1 / 10);
+  }
+  gleich(st.uhr.tag, 4);
 });
 
 // ---------- Ausfuehren ----------

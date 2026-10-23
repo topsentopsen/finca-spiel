@@ -3,7 +3,7 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.4';
+  var VERSION = 'v0.5';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   Dorf.VERSION = VERSION;
 
@@ -21,7 +21,9 @@
       uhr: Dorf.Uhr.erstelle(),
       kamera: Dorf.Kamera.erstelle(Dorf.Render ? Dorf.Render.W : 320, Dorf.Render ? Dorf.Render.H : 176, karte.w * karte.kachel, karte.h * karte.kachel)
     };
-    st.gaeste = [Dorf.Gaeste.erstelle('mia', karte), Dorf.Gaeste.erstelle('jonas', karte)];
+    st.gaeste = Dorf.Gaeste.REIHE.map(function (id) { return Dorf.Gaeste.erstelle(id, karte); });
+    st.garten = Dorf.Garten.erstelle(karte);
+    st.vorrat = Dorf.Garten.leererVorrat();
     st.tiere = Dorf.Tiere.erstelle(karte, seed);
     Dorf.Kamera.sofort(st.kamera, st.spieler.x, st.spieler.y - 12);
     sage(st, 'Biel', 'Bon dia! (Guten Morgen!) Willkommen auf der Finca.', 5);
@@ -74,6 +76,11 @@
       if (istNah(sp, gast, 26)) { rede(st, gast); return 'gast'; }
       ziel = besterNachbar(st, gt.x, gt.y, [[0, 1], [1, 0], [-1, 0], [0, -1]].map(function (d) { return { x: gt.x + d[0], y: gt.y + d[1] }; }));
       aktion = { art: 'sprechen', gast: gast, versuche: 0 };
+    } else if (Dorf.Garten.an(st.garten, tx, ty)) {
+      var pf = Dorf.Garten.an(st.garten, tx, ty);
+      if (Dorf.Garten.nah(pf, sp)) { ernte(st, pf); return 'ernten'; }
+      ziel = karte.blockiert(tx, ty) ? besterNachbar(st, tx, ty) : { x: tx, y: ty };
+      aktion = { art: 'ernten', pflanze: pf };
     } else if (karte.tile(tx, ty) === T.HERD) {
       ziel = besterNachbar(st, tx, ty, karte.orte.herd);
       aktion = { art: 'kochen' };
@@ -110,12 +117,41 @@
   function streichle(st, tier) {
     var sp = st.spieler, dx = tier.x - sp.x, dy = tier.y - sp.y;
     if (Math.abs(dx) > Math.abs(dy)) sp.dir = dx < 0 ? 'links' : 'rechts'; else sp.dir = dy < 0 ? 'oben' : 'unten';
+    if (tier.art === 'esel' && st.vorrat && st.vorrat.karotte > 0) return fuettere(st, tier);
     Dorf.Tiere.streichle(tier, sp);
     st.herzchen.push({ x: tier.x, y: tier.y - (tier.art === 'esel' ? 22 : 8), t: 0, farbe: '#ff7fa0' });
     klang(st, tier.art === 'esel' ? 'esel' : 'gecko');
     sage(st, 'Biel', Dorf.Tiere.spruch(tier), 3.5);
     if (Dorf.Glueck) st.gaeste.forEach(function (gs) { if (Math.hypot(gs.x - tier.x, gs.y - tier.y) < 72) Dorf.Glueck.gib(st, gs, 'tier'); });
     return true;
+  }
+
+  // Bruna bekommt eine Karotte aus dem Korb: sie mampft, zwei Herzen steigen auf, Gaeste in der Naehe freuen sich sehr
+  function fuettere(st, tier) {
+    st.vorrat.karotte--;
+    Dorf.Tiere.fuettere(tier, st.spieler);
+    st.herzchen.push({ x: tier.x - 5, y: tier.y - 22, t: 0, farbe: '#ff7fa0' });
+    st.herzchen.push({ x: tier.x + 6, y: tier.y - 26, t: -0.25, farbe: '#ffb3d1' });
+    klang(st, 'mampf');
+    sage(st, 'Biel', Dorf.Tiere.fuetterSpruch(tier), 3.5);
+    if (Dorf.Glueck) st.gaeste.forEach(function (gs) { if (Math.hypot(gs.x - tier.x, gs.y - tier.y) < 112) Dorf.Glueck.gib(st, gs, 'fuettern'); });
+    return true;
+  }
+
+  // Ernten: die Frucht hopst in Biels Korb. Ist sie noch nicht reif, sagt Biel freundlich Bescheid.
+  function ernte(st, p) {
+    var sp = st.spieler, A = Dorf.Garten.ARTEN[p.art], q = Dorf.Garten.punkt(p), dx = q.x - sp.x, dy = q.y - sp.y;
+    if (Math.abs(dx) > Math.abs(dy)) sp.dir = dx < 0 ? 'links' : 'rechts'; else if (Math.abs(dy) > 2) sp.dir = dy < 0 ? 'oben' : 'unten';
+    if (!p.reif) {
+      sage(st, 'Biel', (p.baum ? 'Am Baum' : 'Im Beet') + ' wächst gerade noch alles nach. Bald ist es wieder reif!', 3);
+      return 0;
+    }
+    if ((st.vorrat[p.art] || 0) >= Dorf.Garten.VORRAT_MAX) { sage(st, 'Biel', 'Mein Korb ist voll mit ' + A.mehrzahl + '. Erst mal kochen!', 3); return 0; }
+    var n = Dorf.Garten.ernte(st.garten, st.vorrat, p);
+    st.herzchen.push({ x: q.x, y: q.y - 14, t: 0, bild: p.art });
+    klang(st, 'ernte');
+    sage(st, 'Biel', (n === 1 ? 'Eine ' + A.name : n + ' ' + A.mehrzahl) + '! (' + A.wort + ')' + (p.art === 'karotte' ? ' Die mag Bruna.' : ''), 2.5);
+    return n;
   }
 
   function amHerd(st) {
@@ -141,8 +177,15 @@
     if (st.teller.length >= TAFEL_MAX) { sage(st, 'Biel', 'Die Tafel ist schon voll gedeckt.', 3); return false; }
     st.spieler.dir = 'oben';
     st.letzteWahl = Dorf.Gerichte.REIHE.indexOf(G.id);
-    st.kochen = { rest: G.dauer, dauer: G.dauer, gericht: G.id };
-    sage(st, 'Biel', 'Ich mache ' + G.name + ' (' + G.info + ').', 3.5);
+    var z = Dorf.Garten.pruefe(st.vorrat, G);
+    if (!z.ok) {
+      sage(st, 'Biel', 'Für ' + G.name + ' hole ich noch ' + Dorf.Garten.fehltText(z.fehlt) + ' aus dem Garten.', 4);
+      klang(st, 'menue');
+      return false;
+    }
+    if (z.frisch) Dorf.Garten.verbrauche(st.vorrat, G);
+    st.kochen = { rest: G.dauer, dauer: G.dauer, gericht: G.id, frisch: z.frisch && !!G.immer };
+    sage(st, 'Biel', 'Ich mache ' + G.name + ' (' + G.info + ')' + (st.kochen.frisch ? ' mit frischer Tomate und Olive!' : '.'), 3.5);
     klang(st, 'kochen');
     return true;
   }
@@ -190,6 +233,7 @@
   function ankunft(st, a) {
     if (!a) return;
     if (a.art === 'kochen' && amHerd(st)) oeffneMenue(st);
+    else if (a.art === 'ernten') { if (Dorf.Garten.nah(a.pflanze, st.spieler)) ernte(st, a.pflanze); }
     else if (a.art === 'streicheln') {
       var t = a.tier;
       if (Dorf.Tiere.nah(t, st.spieler)) { if (t.ziel && t.lockt) { st.wartetAuf = { tier: t, rest: 3 }; return; } streichle(st, t); }
@@ -221,6 +265,7 @@
         Dorf.Uhr.neuerTag(st.uhr);
         st.gaeste.forEach(function (gs) { gs.beduerfnisse.satt = 60; if (gs.beduerfnisse.ruhe !== undefined) gs.beduerfnisse.ruhe = 80; });
         if (Dorf.Glueck) Dorf.Glueck.neuerTag(st);
+        Dorf.Garten.neuerTag(st.garten);
         st.herzchen.length = 0;
         sage(st, 'Biel', 'Bon dia! (Guten Morgen!) Tag ' + st.uhr.tag + ' beginnt.', 4);
       }
@@ -229,6 +274,7 @@
     var stunden = Dorf.Uhr.update(st.uhr, dt);
     st.gaeste.forEach(function (gs) { Dorf.Gaeste.update(gs, st, dt, stunden); });
     Dorf.Tiere.update(st.tiere, st.karte, dt);
+    Dorf.Garten.update(st.garten, stunden);
     for (var hz = st.herzchen.length - 1; hz >= 0; hz--) { st.herzchen[hz].t += dt; if (st.herzchen[hz].t > 1.4) st.herzchen.splice(hz, 1); }
     // Biel wartet kurz am Zaun, bis Bruna angetrottet ist
     if (st.wartetAuf) {
@@ -254,16 +300,18 @@
       var naechster = null, best = 28;
       st.gaeste.forEach(function (gs) { var d = Math.hypot(gs.x - st.spieler.x, gs.y - (Dorf.Gaeste.sitzt(gs) ? 14 : 0) - st.spieler.y); if (d < best) { best = d; naechster = gs; } });
       var nahTier = naechster ? null : Dorf.Tiere.naechstes(st.tiere, st.spieler);
+      var nahPflanze = (naechster || nahTier) ? null : Dorf.Garten.naechste(st.garten, st.spieler);
       if (naechster) rede(st, naechster);
       else if (nahTier) streichle(st, nahTier);
+      else if (nahPflanze) ernte(st, nahPflanze);
       else if (amHerd(st)) oeffneMenue(st);
     }
     if (st.kochen) {
       st.kochen.rest -= dt;
       if (st.kochen.rest <= 0) {
-        var G = Dorf.Gerichte.hole(st.kochen.gericht);
+        var G = Dorf.Gerichte.hole(st.kochen.gericht), anzahl = G.portionen + (st.kochen.frisch ? 1 : 0);
         st.kochen = null;
-        for (var p = 0; p < G.portionen && st.teller.length < TAFEL_MAX; p++) st.teller.push(G.id);
+        for (var p = 0; p < anzahl && st.teller.length < TAFEL_MAX; p++) st.teller.push(G.id);
         sage(st, 'Biel', G.name + ' ist fertig und steht auf der Tafel!', 3.5);
         klang(st, 'fertig');
       }
@@ -302,6 +350,8 @@
     if (mu) st.uhr.minute = Math.max(Dorf.Uhr.START, Math.min(Dorf.Uhr.ENDE - 1, parseInt(mu[1], 10) * 60));
     if (win.location && /[?&]herzen=1/.test(win.location.search || '')) st.gaeste.forEach(function (gs) { gs.glueck = Dorf.Glueck.MAX - 5; });
     if (win.location && /[?&]abend=1/.test(win.location.search || '')) st.uhr.minute = Dorf.Uhr.ENDE;
+    // ?korb=1 legt von allem drei Stueck in den Korb (zum Ausprobieren)
+    if (win.location && /[?&]korb=1/.test(win.location.search || '')) Dorf.Garten.REIHE.forEach(function (a) { st.vorrat[a] = 3; });
     // Entwicklerhilfe: ?menue=1 oeffnet gleich das Kochmenue (fuer Screenshots)
     if (win.location && /[?&]menue=1/.test(win.location.search || '')) oeffneMenue(st);
     var R = Dorf.Render.erstelle(canvas, ui);

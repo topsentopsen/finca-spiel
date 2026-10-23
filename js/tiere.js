@@ -33,6 +33,7 @@
   function update(tiere, karte, dt) {
     var rng = tiere.rng;
     tiere.liste.forEach(function (t) {
+      if (t.mampft > 0) { t.mampft = Math.max(0, t.mampft - dt); t.freude = Math.max(0, t.freude - dt); t.frame = 0; return; }
       if (t.freude > 0) { t.freude = Math.max(0, t.freude - dt); t.frame = 0; return; }
       if (t.ziel) { geheZu(t, dt, t.art === 'esel' ? (t.lockt ? 20 : 12) : 36); if (!t.ziel) { t.lockt = false; t.warte = t.art === 'esel' ? 2 + rng.next() * 4 : 3 + rng.next() * 6; } return; }
       t.warte -= dt;
@@ -68,6 +69,16 @@
     if (sp) tier.dir = sp.x < tier.x ? 'links' : 'rechts';
     tier.warte = 2;
   }
+  // ab v0.5: Karotte fuer Bruna. Sie mampft ein paar Sekunden und freut sich doppelt
+  var MAMPFEN = 2.5;
+  function fuettere(tier, sp) {
+    streichle(tier, sp);
+    tier.gestreichelt--;
+    tier.freude = FREUDE * 1.5; tier.mampft = MAMPFEN; tier.warte = MAMPFEN + 0.5;
+    tier.gefuettert = (tier.gefuettert || 0) + 1;
+  }
+  var FUETTER_SPRUECHE = ['Bruna mampft die Karotte. Knusper knusper, iii aah!', 'Bruna liebt Karotten! Auf Mallorquinisch: pastanaga.', 'Bruna schmatzt ganz zufrieden und wackelt mit dem Schwanz.'];
+  function fuetterSpruch(tier) { return FUETTER_SPRUECHE[((tier.gefuettert || 1) - 1) % FUETTER_SPRUECHE.length]; }
 
   var SPRUECHE = {
     esel: ['Bruna wackelt mit den Ohren. So süß!', 'Bruna mag es, hinter den Ohren gekrault zu werden.', 'Ase heißt Esel auf Mallorquinisch. Bruna ist ein liebes Ase.', 'Bruna stupst dich mit der weichen Nase an.'],
@@ -75,5 +86,5 @@
   };
   function spruch(tier) { var l = SPRUECHE[tier.art]; return l[(tier.gestreichelt - 1 + l.length) % l.length]; }
 
-  Dorf.Tiere = { REICHWEITE: REICHWEITE, FREUDE: FREUDE, erstelle: erstelle, update: update, an: an, nah: nah, naechstes: naechstes, locke: locke, streichle: streichle, spruch: spruch, SPRUECHE: SPRUECHE };
+  Dorf.Tiere = { REICHWEITE: REICHWEITE, FREUDE: FREUDE, erstelle: erstelle, update: update, an: an, nah: nah, naechstes: naechstes, locke: locke, streichle: streichle, fuettere: fuettere, fuetterSpruch: fuetterSpruch, MAMPFEN: MAMPFEN, spruch: spruch, SPRUECHE: SPRUECHE };
 })(globalThis);

@@ -94,6 +94,14 @@
     var blinz = Math.floor(zeit * 1.3) % 6 === 0 && (zeit * 1.3) % 1 < 0.15;
     if (e.freude > 0) r(c, kx + s * 1 - 1, ky + 3, 3, 1, K2); else r(c, kx + s * 1, ky + 2, 1, blinz ? 1 : 2, K2);
     r(c, kx + s * 2 - (links ? 1 : 0), ky + 5, 2, 1, '#ffb3c8');
+    // Karotte im Maul, wird beim Mampfen kuerzer
+    if (e.mampft > 0) {
+      var MA = (Dorf.Tiere && Dorf.Tiere.MAMPFEN) || 2.5, len = Math.max(1, Math.ceil(e.mampft / MA * 5)), kau = Math.floor(zeit * 8) % 2;
+      var mx = links ? kx - 5 - len : kx + 5;
+      r(c, mx - 1, ky + 5 + kau, len + 2, 3, K2); r(c, mx, ky + 6 + kau, len, 1, '#ffa04d');
+      r(c, links ? mx - 2 : mx + len + 1, ky + 4 + kau, 2, 1, '#5fbf6a');
+      if (kau) r(c, kx + s * 3, ky + 9, 1, 1, '#ffa04d');
+    }
   }
 
   // Kleiner Gecko: minzgruen, sitzt flach an der Wand
@@ -116,9 +124,63 @@
     (st.herzchen || []).forEach(function (h) {
       var a = Math.max(0, 1 - h.t / 1.4), dx = Math.round(Math.sin(h.t * 6) * 2);
       c.globalAlpha = a;
-      herz(c, Math.round(h.x - cx) - 2 + dx, Math.round(h.y - cy - h.t * 14), h.farbe || '#ff7fa0');
+      if (h.t < 0) { c.globalAlpha = 1; return; }
+      if (h.bild) zeichneZutat(c, h.bild, Math.round(h.x - cx), Math.round(h.y - cy - h.t * 12));
+      else herz(c, Math.round(h.x - cx) - 2 + dx, Math.round(h.y - cy - h.t * 14), h.farbe || '#ff7fa0');
       c.globalAlpha = 1;
     });
+  }
+
+  // ---------- Garten (ab v0.5) ----------
+  // kleines Bild einer Zutat, Mitte bei (x, y)
+  function zeichneZutat(c, art, x, y, blass) {
+    if (blass) c.globalAlpha = (c.globalAlpha || 1) * 0.4;
+    if (art === 'tomate') { kreis(c, x, y, 3, P.kontur); kreis(c, x, y, 2, '#ff6f61'); r(c, x - 1, y - 1, 1, 1, '#ffc2b8'); r(c, x - 1, y - 3, 3, 1, '#5fbf6a'); }
+    else if (art === 'karotte') { r(c, x - 2, y - 2, 5, 3, P.kontur); r(c, x - 1, y + 1, 3, 2, P.kontur); r(c, x, y + 3, 1, 1, P.kontur); r(c, x - 1, y - 1, 3, 2, '#ffa04d'); r(c, x, y + 1, 1, 2, '#ffa04d'); r(c, x - 2, y - 4, 1, 2, '#5fbf6a'); r(c, x, y - 5, 1, 3, '#5fbf6a'); r(c, x + 2, y - 4, 1, 2, '#5fbf6a'); }
+    else if (art === 'orange') { kreis(c, x, y, 3, P.kontur); kreis(c, x, y, 2, '#ffb037'); r(c, x - 1, y - 1, 1, 1, '#ffe0a0'); r(c, x, y - 4, 2, 1, '#5fbf6a'); }
+    else { rr(c, x - 2, y - 3, 5, 6, P.kontur); rr(c, x - 1, y - 2, 3, 4, '#9a7cc4'); r(c, x - 1, y - 2, 1, 1, '#e0d2f5'); r(c, x + 1, y - 4, 2, 1, '#5fbf6a'); }
+    if (blass) c.globalAlpha = 1;
+  }
+  // Korb mit den geernteten Zutaten (unter den Herzen)
+  function zeichneVorrat(R, st, y) {
+    var c = R.ctx, v = st.vorrat;
+    if (!v || !Dorf.Garten) return;
+    pille(c, 2, y, 72, 12, 'rgba(255,248,236,0.92)');
+    Dorf.Garten.REIHE.forEach(function (a, i) {
+      var x = 9 + i * 17, n = v[a] || 0;
+      zeichneZutat(c, a, x, y + 6, n === 0);
+      text(R, String(n), x + 4, y + 2, { groesse: 6, fett: true, farbe: n ? P.kontur : '#b9a8cc' });
+    });
+  }
+  function glitzer(c, x, y, zeit, phase) {
+    var t = (zeit * 0.8 + phase) % 3;
+    if (t > 0.5) return;
+    var a = t < 0.25 ? t * 4 : (0.5 - t) * 4;
+    c.globalAlpha = a; r(c, x, y - 1, 1, 3, '#ffffff'); r(c, x - 1, y, 3, 1, '#ffffff'); c.globalAlpha = 1;
+  }
+  // Pflanze im Beet: reif mit Fruechten, sonst kleine gruene Knospe die langsam waechst
+  function zeichnePflanze(c, p, sx, sy, zeit) {
+    var x = sx + 8, y = sy + 13, w = p.reif ? 1 : p.wachs, ph = (p.x * 7 + p.y * 3) % 10 / 3;
+    ellipse(c, x, y + 1, 5, 1, 'rgba(75,58,90,0.18)');
+    if (p.art === 'tomate') {
+      var hoch = 6 + Math.round(w * 4);
+      r(c, x, y - hoch - 2, 1, hoch + 2, '#b3805b');
+      rr(c, x - 4, y - hoch + 1, 4, 3, '#5fbf6a'); rr(c, x + 1, y - hoch - 1, 4, 3, '#4fae5c'); rr(c, x - 3, y - 4, 7, 4, '#6ccc72');
+      if (p.reif) { zeichneZutat(c, 'tomate', x - 3, y - hoch + 4); zeichneZutat(c, 'tomate', x + 3, y - hoch + 2); glitzer(c, x + 4, y - hoch, zeit, ph); }
+      else if (w > 0.4) { kreis(c, x - 3, y - hoch + 4, 1, '#a8e07a'); kreis(c, x + 3, y - hoch + 2, 1, '#a8e07a'); }
+    } else {
+      var lb = 2 + Math.round(w * 3);
+      r(c, x - 3, y - lb - 1, 1, lb, '#5fbf6a'); r(c, x - 1, y - lb - 3, 2, lb + 2, '#6ccc72'); r(c, x + 2, y - lb - 1, 1, lb, '#5fbf6a');
+      if (p.reif) { r(c, x - 2, y - 2, 5, 3, P.kontur); r(c, x - 1, y - 1, 3, 2, '#ffa04d'); glitzer(c, x + 4, y - 5, zeit, ph); }
+    }
+  }
+  // Fruechte am Baum (Orangen oder Oliven)
+  function zeichneBaumFruechte(c, p, sx, sy, zeit) {
+    var cx = sx + 8, by = sy + 14, ph = (p.x * 5 + p.y) % 10 / 3;
+    if (!p.reif) return;
+    var pos = [[-5, -14], [4, -18], [0, -24]];
+    pos.forEach(function (q) { zeichneZutat(c, p.art, cx + q[0], by + q[1]); });
+    glitzer(c, cx + 7, by - 22, zeit, ph);
   }
 
   // kleine Herzen fuer die Gaeste (HUD und Abendszene)
@@ -136,6 +198,7 @@
       text(R, g.name, 6, y - 1, { groesse: 6 });
       herzReihe(c, g, 40, y);
     });
+    zeichneVorrat(R, st, 13 + h + 2);
   }
 
   function zeichneKachel(c, karte, x, y, sx, sy, zeit, st) {
@@ -151,7 +214,7 @@
       case T.ZAUN:
         zeichneZaun(c, karte, x, y, sx, sy, hs);
         break;
-      case T.GRAS: case T.OLIVE:
+      case T.GRAS: case T.OLIVE: case T.ORANGE:
         r(c, sx, sy, K, K, P.gras);
         if (hs % 3 === 0) { r(c, sx + (hs % 11) + 2, sy + ((hs >> 4) % 10) + 3, 1, 2, P.gras2); r(c, sx + (hs % 11) + 4, sy + ((hs >> 4) % 10) + 2, 1, 3, P.gras2); }
         if (hs % 5 === 1) r(c, sx + ((hs >> 7) % 12) + 2, sy + ((hs >> 9) % 12) + 2, 2, 1, P.gras3);
@@ -340,6 +403,12 @@
   }
 
   // ---------- Objekte ----------
+  function zeichneOrangenbaum(c, sx, sy) {
+    var cx = sx + 8, by = sy + 14;
+    ellipse(c, cx, by, 7, 3, P.schatten);
+    rr(c, cx - 2, by - 8, 5, 9, P.kontur); r(c, cx - 1, by - 8, 3, 8, P.stamm);
+    kreis(c, cx, by - 17, 9, P.kontur); kreis(c, cx, by - 17, 8, '#5fbf6a'); kreis(c, cx - 2, by - 19, 5, '#7fd68a'); kreis(c, cx - 3, by - 21, 2, '#bff0b0');
+  }
   function zeichneBaum(c, sx, sy) {
     var cx = sx + 8, by = sy + 14;
     ellipse(c, cx, by, 8, 3, P.schatten);
@@ -410,6 +479,7 @@
       qr(0, kY + 3, 3, 5, P.kontur); q(1, kY + 4, 1, 3, a.haar);
       qr(13, kY + 3, 3, 5, P.kontur); q(14, kY + 4, 1, 3, a.haar);
     }
+    if (a.dutt) { qr(4, kY - 3, 8, 5, P.kontur); q(5, kY - 2, 6, 3, a.haar); q(6, kY - 2, 2, 1, hg); }
     if (dir === 'oben') {
       q(4, kY + 1, 8, kopf - 1, a.haar); q(3, kY + 2, 10, kopf - 3, a.haar); q(6, kY + 2, 3, 1, hg);
       if (a.zoepfe) { qr(0, kY + 3, 3, 5, P.kontur); q(1, kY + 4, 1, 3, a.haar); qr(13, kY + 3, 3, 5, P.kontur); q(14, kY + 4, 1, 3, a.haar); }
@@ -418,6 +488,7 @@
       q(4, kY + 1, 8, 3, a.haar); q(3, kY + 2, 10, 2, a.haar); q(3, kY + 4, 4, 4, a.haar); q(10, kY + 4, 2, 1, a.haar); q(7, kY + 1, 2, 1, hg);
       var ay = kY + 5;
       q(9, ay, 2, 3, P.kontur); q(9, ay, 1, 1, P.augeHell);
+      if (a.brille) { q(8, ay - 1, 4, 1, a.brille); q(11, ay, 1, 3, a.brille); q(8, ay + 3, 4, 1, a.brille); q(5, ay - 1, 3, 1, a.brille); }
       q(12, kY + 7, 2, 2, a.haut); q(13, kY + 6, 1, 1, P.kontur);
       if (a.bart) { q(7, kY + 8, 6, 3, a.bart); q(3, kY + 8, 4, 1, a.bart); q(11, kY + 9, 1, 1, '#c0605a'); }
       else { q(9, kY + 8, 2, 1, P.backe); q(12, kY + 9, 1, 1, '#d0706a'); }
@@ -430,6 +501,7 @@
       // Grosse Augen mit Lichtpunkt
       q(5, ey, 2, 3, P.kontur); q(9, ey, 2, 3, P.kontur);
       q(5, ey, 1, 1, P.augeHell); q(9, ey, 1, 1, P.augeHell);
+      if (a.brille) { q(4, ey - 1, 4, 1, a.brille); q(8, ey - 1, 4, 1, a.brille); q(7, ey, 2, 1, a.brille); q(4, ey + 3, 4, 1, a.brille); q(8, ey + 3, 4, 1, a.brille); }
       if (a.bart) {
         q(4, kY + 8, 8, 3, a.bart); q(3, kY + 6, 1, 3, a.bart); q(12, kY + 6, 1, 3, a.bart);
         q(7, kY + 9, 2, 1, '#c0605a'); q(4, kY + 8, 1, 1, a.haut); q(11, kY + 8, 1, 1, a.haut);
@@ -508,9 +580,22 @@
       zeichneTeller(c, k.id, 0, 0);
       c.restore();
       text(R, G.name, k.x + k.w / 2, k.y - hop + 33, { align: 'center', fett: true, groesse: 7 });
-      umbruch(R, G.wirkung, k.w - 8, 6).slice(0, 3).forEach(function (zeile, j) {
-        text(R, zeile, k.x + k.w / 2, k.y - hop + 43 + j * 7, { align: 'center', groesse: 6, farbe: '#7a5a9a' });
+      umbruch(R, G.wirkung, k.w - 8, 6).slice(0, 2).forEach(function (zeile, j) {
+        text(R, zeile, k.x + k.w / 2, k.y - hop + 42 + j * 7, { align: 'center', groesse: 6, farbe: '#7a5a9a' });
       });
+      // Zutaten aus dem Garten: gruen wenn genug im Korb, sonst blass mit Hinweis
+      if (Dorf.Garten && st.vorrat) {
+        var zp = Dorf.Garten.pruefe(st.vorrat, G), za = Object.keys(G.zutaten || {}), zy = k.y - hop + 61;
+        var zx = k.x + 6;
+        za.forEach(function (art) {
+          var fehlt = !!zp.fehlt[art];
+          zeichneZutat(c, art, zx + 2, zy, fehlt);
+          text(R, String(G.zutaten[art]), zx + 6, zy - 3, { groesse: 6, fett: true, farbe: fehlt ? '#c9a3c0' : '#4f9a6a' });
+          zx += 14;
+        });
+        var hinweis = G.immer ? (zp.frisch ? '+1 frisch' : 'geht immer') : (zp.ok ? 'alles da' : 'ernten');
+        text(R, hinweis, k.x + k.w - 5, zy - 3, { align: 'right', groesse: 6, fett: true, farbe: (zp.ok && (zp.frisch || !G.immer)) ? '#4f9a6a' : '#b07aa8' });
+      }
     });
     text(R, 'Tippen oder 1, 2, 3 · Pfeile und E · Esc: zurück', W / 2, M.y + M.h - 8, { align: 'center', groesse: 6, farbe: '#7a5a9a' });
   }
@@ -546,7 +631,12 @@
     if (st.marker) zeichneMarker(c, st.marker, cx, cy);
 
     // Objekte und Figuren nach Fuss-y sortiert
-    karte.baeume.forEach(function (t) { var sx = t.x * K - cx, sy = t.y * K - cy; if (sx > -24 && sx < W + 24 && sy > -32 && sy < H + 32) liste.push({ y: t.y * K + 14, f: function () { zeichneBaum(c, sx, sy); } }); });
+    karte.baeume.forEach(function (t) { var sx = t.x * K - cx, sy = t.y * K - cy; if (sx > -24 && sx < W + 24 && sy > -32 && sy < H + 32) liste.push({ y: t.y * K + 14, f: function () { if (t.art === 'orange') zeichneOrangenbaum(c, sx, sy); else zeichneBaum(c, sx, sy); var fr = st.garten && Dorf.Garten.an(st.garten, t.x, t.y); if (fr) zeichneBaumFruechte(c, fr, sx, sy, zeit); } }); });
+    (st.garten ? st.garten.liste : []).forEach(function (p) {
+      if (p.baum) return;
+      var sx = p.x * K - cx, sy = p.y * K - cy;
+      if (sx > -20 && sx < W + 20 && sy > -24 && sy < H + 24) liste.push({ y: p.y * K + 10, f: function () { zeichnePflanze(c, p, sx, sy, zeit); } });
+    });
     liste.push({ y: (karte.brunnen.y + 1) * K + 12, f: function () { zeichneBrunnen(c, karte.brunnen.x * K - cx, karte.brunnen.y * K - cy, zeit); } });
     st.gaeste.forEach(function (gs) {
       var sitzt = Dorf.Gaeste.sitzt(gs), off = sitzt ? 14 : 0;
@@ -596,7 +686,7 @@
 
     // Sprechblase (Dialogbox unten)
     if (st.blase && !st.abend && !st.menue) {
-      var bf = { Biel: '#ffe0b8', Mia: '#ffd1e0', Jonas: '#c9f2e2' }[st.blase.sprecher] || '#ffe0b8';
+      var bf = { Biel: '#ffe0b8', Mia: '#ffd1e0', Jonas: '#c9f2e2', Padrina: '#e6dcff' }[st.blase.sprecher] || '#ffe0b8';
       pille(c, 6, 140, W - 12, 32, P.box);
       pille(c, 10, 133, 46, 11, bf);
       text(R, st.blase.sprecher, 33, 135, { align: 'center', fett: true });

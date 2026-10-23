@@ -9,11 +9,13 @@
     // ab v0.2: Einrichtung
     TEPPICH: 15, COUCH: 16, PFLANZE: 17, ECKBANK: 18, ANRICHTE: 19, BETT: 20, SESSEL: 21, TISCH: 22,
     // ab v0.4: kleine Eselwiese mit Holzzaun
-    ZAUN: 23, WIESE: 24
+    ZAUN: 23, WIESE: 24,
+    // ab v0.5: Orangenbaum am Garten
+    ORANGE: 25
   };
   var BLOCK = {};
   [T.MAUER, T.WAND, T.WASSER, T.BRUNNEN, T.OLIVE, T.TAFEL, T.HERD, T.TOR,
-    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH, T.ZAUN, T.WIESE].forEach(function (t) { BLOCK[t] = true; });
+    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH, T.ZAUN, T.WIESE, T.ORANGE].forEach(function (t) { BLOCK[t] = true; });
 
   var KACHEL = 16, BREITE = 40, HOEHE = 30;
 
@@ -97,6 +99,14 @@
       [27, 26], [31, 27], [35, 26], [37, 21], [37, 4], [37, 8], [2, 14], [10, 16], [22, 2], [18, 3]];
     var baeume = [];
     oliven.forEach(function (p) { set(p[0], p[1], T.OLIVE); baeume.push({ x: p[0], y: p[1] }); });
+    // Orangenbaum neben dem Beet (v0.5)
+    set(10, 19, T.ORANGE); baeume.push({ x: 10, y: 19, art: 'orange' });
+    // Was im Garten waechst: Tomaten und Karotten im Beet, Orangen und Oliven an den Baeumen am Beet
+    var garten = [
+      { art: 'tomate', x: 3, y: 16 }, { art: 'tomate', x: 5, y: 16 }, { art: 'tomate', x: 7, y: 16 },
+      { art: 'karotte', x: 4, y: 18 }, { art: 'karotte', x: 6, y: 18 }, { art: 'karotte', x: 8, y: 18 },
+      { art: 'orange', x: 10, y: 19, baum: true }, { art: 'olive', x: 10, y: 16, baum: true }, { art: 'olive', x: 2, y: 14, baum: true }
+    ];
 
     // Blumen als Deko (Seed-Zufall, nur auf Gras)
     var blumen = [];
@@ -108,7 +118,7 @@
 
     var karte = {
       w: w, h: h, kachel: KACHEL, tiles: tiles, baeume: baeume, blumen: blumen, raeume: RAEUME,
-      brunnen: { x: 19, y: 15 }, wiese: WIESE,
+      brunnen: { x: 19, y: 15 }, wiese: WIESE, garten: garten,
       // Gecko sitzt an der Hauswand rechts der Haustuer (Pixelbereich auf der Wandfront)
       gecko: { x0: 14 * KACHEL + 3, x1: 16 * KACHEL + 12, y: 10 * KACHEL + 12 },
       tile: function (x, y) { if (x < 0 || y < 0 || x >= w || y >= h) return T.MAUER; return tiles[y * w + x]; },
@@ -132,9 +142,11 @@
       couch: zieleNeben(T.COUCH, null, function (xx, yy) { return karte.tile(xx, yy - 1) === T.COUCH; }),
       // Platz vor dem Herd (Biel kocht)
       herd: zieleNeben(T.HERD, null, function (xx, yy) { return karte.tile(xx, yy - 1) === T.HERD; }),
-      bummeln: (function () { var o = []; for (var yy = 12; yy <= 20; yy++) for (var xx = 12; xx <= 27; xx++) if (!karte.blockiert(xx, yy)) o.push({ x: xx, y: yy }); return o; })()
+      bummeln: (function () { var o = []; for (var yy = 12; yy <= 20; yy++) for (var xx = 12; xx <= 27; xx++) if (!karte.blockiert(xx, yy)) o.push({ x: xx, y: yy }); return o; })(),
+      // ab v0.5 schauen Gaeste auch mal bei Bruna am Zaun vorbei
+      zaun: [{ x: 29, y: 11 }, { x: 29, y: 13 }, { x: 32, y: 15 }, { x: 35, y: 15 }]
     };
-    karte.start = { biel: { x: 19, y: 18 }, mia: { x: 16, y: 17 }, jonas: { x: 23, y: 17 } };
+    karte.start = { biel: { x: 19, y: 18 }, mia: { x: 16, y: 17 }, jonas: { x: 23, y: 17 }, padrina: { x: 21, y: 13 } };
     // Begehbare Bodenflaeche eines Raums (inklusive Teppich, ohne Moebel)
     karte.flaeche = function (id) {
       var r = RAEUME[id], n = 0;

@@ -12,7 +12,8 @@
     liebling: { menge: 25 },
     pool: { menge: 10 },
     couch: { menge: 10 },
-    tier: { menge: 8, pause: 6 }
+    tier: { menge: 8, pause: 6 },
+    fuettern: { menge: 20, pause: 8 }
   };
 
   function start(gast) { gast.glueck = START; gast.glueckPause = {}; }

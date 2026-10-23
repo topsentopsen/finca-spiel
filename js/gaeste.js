@@ -12,13 +12,17 @@
     mia: { name: 'Mia', alter: 7, liebling: 'ensaimada', profil: { satt: 1.3, spielen: 1.4, ruhe: 0.6 }, start: { satt: 55, spielen: 45, ruhe: 85 },
       aussehen: { kind: true, haut: '#f3c29b', haar: '#c98b4a', bart: null, zoepfe: true, hemd: '#ffb3c7', hemd2: '#f493ad', hose: '#ffb3c7', schuhe: '#ffffff', farbe: '#ff7fa0' } },
     jonas: { name: 'Jonas', alter: 41, liebling: 'tumbet', profil: { satt: 1.0, spielen: 0.8, ruhe: 1.2 }, start: { satt: 34, spielen: 70, ruhe: 50 },
-      aussehen: { kind: false, haut: '#eab48c', haar: '#9a6a3e', bart: null, hemd: '#aeeed6', hemd2: '#86d4b8', hose: '#9cb8ee', schuhe: '#5a4a44', farbe: '#4fb594' } }
+      aussehen: { kind: false, haut: '#eab48c', haar: '#9a6a3e', bart: null, hemd: '#aeeed6', hemd2: '#86d4b8', hose: '#9cb8ee', schuhe: '#5a4a44', farbe: '#4fb594' } },
+    // ab v0.5: Padrina, die Oma. Liebt das Sofa, geht gemuetlich und mag Pa amb oli wie frueher
+    padrina: { name: 'Padrina', alter: 78, liebling: 'paamboli', tempo: 28, profil: { satt: 0.9, spielen: 0.4, ruhe: 1.6 }, start: { satt: 50, spielen: 80, ruhe: 42 },
+      aussehen: { kind: false, haut: '#f0c4a4', haar: '#cfc8da', haarGlanz: '#f4f1f8', bart: null, dutt: true, brille: '#7a5a9a', hemd: '#a9d2ff', hemd2: '#88b6ef', hose: '#a9d2ff', schuhe: '#7a6a8a', farbe: '#a77fd6' } }
   };
+  var REIHE = ['mia', 'jonas', 'padrina'];
 
   function erstelle(id, karte) {
     var d = DEFS[id], t = karte.start[id];
     var gast = {
-      id: id, name: d.name, alter: d.alter, liebling: d.liebling, profil: d.profil, aussehen: d.aussehen,
+      id: id, name: d.name, alter: d.alter, liebling: d.liebling, tempo: d.tempo || TEMPO, profil: d.profil, aussehen: d.aussehen,
       beduerfnisse: { satt: d.start.satt, spielen: d.start.spielen, ruhe: d.start.ruhe }, portion: false,
       x: t.x * K + 8, y: t.y * K + 12, dir: 'unten', animT: 0, frame: 0,
       zustand: 'frei', ziel: null, zielTile: null, pfad: [], pfadIndex: 0, warte: 1
@@ -46,7 +50,7 @@
   function plane(gast, welt, art) {
     var karte = welt.karte, von = tileVon(gast);
     var belegt = welt.gaeste.filter(function (o) { return o !== gast && o.zielTile; }).map(function (o) { return o.zielTile.x + ',' + o.zielTile.y; });
-    var ziele = (art === 'bummeln') ? [welt.rng.pick(karte.orte.bummeln)] : karte.orte[art].slice();
+    var ziele = (art === 'bummeln') ? [welt.rng.pick((karte.orte.zaun && welt.rng.next() < 0.25) ? karte.orte.zaun : karte.orte.bummeln)] : karte.orte[art].slice();
     ziele.sort(function (a, b) { return (Math.abs(a.x - von.x) + Math.abs(a.y - von.y)) - (Math.abs(b.x - von.x) + Math.abs(b.y - von.y)); });
     for (var i = 0; i < ziele.length; i++) {
       var z = ziele[i];
@@ -60,7 +64,7 @@
   function laufe(gast, dt) {
     if (gast.pfadIndex >= gast.pfad.length) return true;
     var n = gast.pfad[gast.pfadIndex], zx = n.x * K + 8, zy = n.y * K + 12;
-    var dx = zx - gast.x, dy = zy - gast.y, dist = Math.sqrt(dx * dx + dy * dy), schritt = TEMPO * dt;
+    var dx = zx - gast.x, dy = zy - gast.y, dist = Math.sqrt(dx * dx + dy * dy), schritt = (gast.tempo || TEMPO) * dt;
     if (Math.abs(dx) > Math.abs(dy)) gast.dir = dx < 0 ? 'links' : 'rechts'; else if (dy) gast.dir = dy < 0 ? 'oben' : 'unten';
     gast.animT += dt; gast.frame = Math.floor(gast.animT * 8) % 4;
     if (dist <= schritt) { gast.x = zx; gast.y = zy; gast.pfadIndex++; } else { gast.x += dx / dist * schritt; gast.y += dy / dist * schritt; }
@@ -148,6 +152,18 @@
       couch: ['Ich leg mich kurz hin. Migdiada (Mittagsruhe)!'],
       aktiv_couch: ['Herrlich ruhig hier drinnen.'],
       frei: ['Moltes gràcies (Vielen Dank) für den Kaffee!', 'Herrlich ruhig hier am Brunnen.', 'Die Clastra (Innenhof) ist wunderschön.']
+    },
+    padrina: {
+      tafel: ['Ein Pa amb oli wie früher, das wär jetzt was.'],
+      pool: ['Ich halte nur kurz die Füße ins Wasser.'],
+      aktiv_pool: ['Ui, das Wasser ist frisch! Herrlich.'],
+      aktiv_tafel: ['Bon profit, fillet! (Guten Appetit, mein Kleiner!)'],
+      portion_paamboli: ['Pa amb oli! Genau wie bei mir zu Hause. Molt bo! (Sehr gut!)'],
+      portion_ensaimada: ['Ensaïmada zum Kaffee, die mochte schon mein Großvater.'],
+      portion_tumbet: ['Tumbet wärmt den Bauch. Danke, fillet.'],
+      couch: ['Meine alten Knochen wollen aufs Sofa.'],
+      aktiv_couch: ['Ah, so ein Sofa ist Gold wert. Ich strick ein bisschen.', 'Hier sitz ich am liebsten.'],
+      frei: ['Bon dia, fillet! (Guten Morgen, mein Kleiner!)', 'Hast du schon die Tomaten im Garten gesehen?', 'Bruna ist ein gutes Eselchen.', 'Poc a poc. (Immer schön langsam.) So sagt man hier.']
     }
   };
   function spruch(gast, rng) {
@@ -158,5 +174,5 @@
     return rng.pick(s[key] || s.frei);
   }
 
-  Dorf.Gaeste = { BASIS: BASIS, PORTION_BONUS: PORTION_BONUS, DEFS: DEFS, erstelle: erstelle, nimmTeller: nimmTeller, abfall: abfall, entscheide: entscheide, plane: plane, update: update, symbol: symbol, spruch: spruch, tileVon: tileVon, sitzt: sitzt };
+  Dorf.Gaeste = { REIHE: REIHE, TEMPO: TEMPO, BASIS: BASIS, PORTION_BONUS: PORTION_BONUS, DEFS: DEFS, erstelle: erstelle, nimmTeller: nimmTeller, abfall: abfall, entscheide: entscheide, plane: plane, update: update, symbol: symbol, spruch: spruch, tileVon: tileVon, sitzt: sitzt };
 })(globalThis);

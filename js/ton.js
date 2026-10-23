@@ -265,6 +265,8 @@
       else if (name === 'herz') { ton(1568, j, 0.35, 0.03); ton(2093, j + 0.09, 0.45, 0.025); }
       else if (name === 'esel') { ton(196, j, 0.28, 0.05, 'triangle', 247); ton(247, j + 0.3, 0.32, 0.045, 'triangle', 185); ton(1318.5, j + 0.62, 0.6, 0.025); }
       else if (name === 'gecko') { ton(2637, j, 0.05, 0.02, 'triangle'); ton(3136, j + 0.08, 0.05, 0.02, 'triangle'); ton(1975.5, j + 0.2, 0.4, 0.02); }
+      else if (name === 'ernte') { ton(660, j, 0.09, 0.035, 'sine', 990); ton(1318.5, j + 0.08, 0.3, 0.025); }
+      else if (name === 'mampf') { [0, 0.16, 0.32].forEach(function (d) { ton(220, j + d, 0.07, 0.04, 'triangle', 150); }); ton(1568, j + 0.5, 0.35, 0.03); ton(2093, j + 0.6, 0.45, 0.025); }
       else if (name === 'feier') { [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach(function (f, i) { ton(f, j + i * 0.16, 1.1, 0.04); }); }
       else if (name === 'nacht') { ton(783.99, j, 1.0, 0.035); ton(659.25, j + 0.3, 1.0, 0.03); ton(523.25, j + 0.6, 1.4, 0.03); }
       else if (name === 'schritt') {
