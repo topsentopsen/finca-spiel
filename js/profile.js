@@ -10,9 +10,9 @@
   var Dorf = g.Dorf = g.Dorf || {};
 
   var LISTE = [
-    { id: 'esel', bild: 'esel', farbe: '#e6defb', rand: '#9a86c8' },
-    { id: 'huhn', bild: 'huhn', farbe: '#fff1c9', rand: '#e0ad3e' },
-    { id: 'gecko', bild: 'gecko', farbe: '#d4f2e6', rand: '#56b06c' }
+    { id: 'esel', bild: 'esel', name: 'Esel', wer: 'Der Esel', farbe: '#e6defb', rand: '#9a86c8' },
+    { id: 'huhn', bild: 'huhn', name: 'Huhn', wer: 'Das Huhn', farbe: '#fff1c9', rand: '#e0ad3e' },
+    { id: 'gecko', bild: 'gecko', name: 'Gecko', wer: 'Der Gecko', farbe: '#d4f2e6', rand: '#56b06c' }
   ];
   var KONTO = 'finca.zeitkonto', LETZTES = 'finca.profil', RUHIG = 'finca.ruhig';
   var MAX_SEK = 24 * 3600;
@@ -84,12 +84,179 @@
       try { d = JSON.parse(lies(sp, spielstandSchluessel(p.id)) || 'null'); } catch (e) { d = null; }
       if (d && typeof d.tag === 'number' && isFinite(d.tag)) tag = Math.max(1, Math.min(9999, Math.floor(d.tag)));
       if (Dorf.Sticker) sticker = Dorf.Sticker.anzahl(Dorf.Sticker.lade(sp, albumSchluessel(p.id)));
-      return { id: p.id, bild: p.bild, farbe: p.farbe, rand: p.rand, tag: tag, sticker: sticker,
+      return { id: p.id, bild: p.bild, name: p.name, farbe: p.farbe, rand: p.rand, tag: tag, sticker: sticker,
         sek: sekunden(konto, p.id), fertig: fertig(konto, p.id) };
     });
   }
 
-  Dorf.Profile = { LISTE: LISTE, KONTO: KONTO, LETZTES: LETZTES, RUHIG: RUHIG, hole: hole, schluessel: schluessel,
+  // ---------- ab v0.11: Minuten pro Bild (5 bis 15, nie ueber die harte Grenze) ----------
+  var GRENZEN = 'finca.grenzen', WOCHE = 'finca.woche', MIN_GRENZE = 5, WOCHE_TAGE = 14, CODE_KOPF = 'FINCA1';
+  function maxGrenze() { return Math.floor(((Dorf.Uhr && Dorf.Uhr.TAG_LIMIT) || 900) / 60); }
+  function klemmeGrenze(v) {
+    var m = maxGrenze();
+    if (typeof v !== 'number' || !isFinite(v)) return m;
+    return Math.max(MIN_GRENZE, Math.min(m, Math.round(v)));
+  }
+  function ladeGrenzen(sp) {
+    var roh = lies(sp, GRENZEN), d = null, aus = {};
+    try { d = roh ? JSON.parse(roh) : null; } catch (e) { d = null; }
+    LISTE.forEach(function (p) { if (d && typeof d === 'object' && typeof d[p.id] === 'number') aus[p.id] = klemmeGrenze(d[p.id]); });
+    return aus;
+  }
+  function schreibeGrenzen(sp, gr) {
+    var aus = {};
+    LISTE.forEach(function (p) { if (gr && typeof gr[p.id] === 'number') aus[p.id] = klemmeGrenze(gr[p.id]); });
+    return schreib(sp, GRENZEN, JSON.stringify(aus));
+  }
+  function grenze(gr, id) { return gr && typeof gr[id] === 'number' ? klemmeGrenze(gr[id]) : maxGrenze(); }
+  // Schlaeft das Bild heute? Entweder schon ins Bett gegangen oder die eingestellten Minuten sind voll
+  function schlaeft(konto, gr, id) { return fertig(konto, id) || sekunden(konto, id) >= grenze(gr, id) * 60; }
+  // Eltern geben mehr Minuten: wer noch mindestens eine halbe Minute uebrig hat, wacht wieder auf
+  function entsperre(konto, gr) {
+    var auf = [];
+    if (!konto) return auf;
+    LISTE.forEach(function (p) {
+      var e = konto.profile[p.id];
+      if (e && e.fertig && e.sek < grenze(gr, p.id) * 60 - 30) { e.fertig = false; auf.push(p.id); }
+    });
+    return auf;
+  }
+
+  // ---------- ab v0.11: Wochenrueckblick (Sekunden je Kalendertag und Bild, 14 Tage aufbewahrt) ----------
+  function verschiebe(tag, k) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(tag || '');
+    if (!m) return tag;
+    var d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3] + k));
+    return d.getUTCFullYear() + '-' + zwei(d.getUTCMonth() + 1) + '-' + zwei(d.getUTCDate());
+  }
+  function ladeWoche(sp) {
+    var roh = lies(sp, WOCHE), d = null, w = { tage: {} };
+    try { d = roh ? JSON.parse(roh) : null; } catch (e) { d = null; }
+    if (d && d.tage && typeof d.tage === 'object') Object.keys(d.tage).forEach(function (t) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(t) || !d.tage[t] || typeof d.tage[t] !== 'object') return;
+      var e = {};
+      LISTE.forEach(function (p) { var v = d.tage[t][p.id]; if (typeof v === 'number' && isFinite(v) && v > 0) e[p.id] = Math.min(MAX_SEK, Math.round(v)); });
+      w.tage[t] = e;
+    });
+    return w;
+  }
+  function merkeWoche(w, konto) {
+    w = w && w.tage ? w : { tage: {} };
+    if (!konto || !konto.datum) return w;
+    var e = {};
+    LISTE.forEach(function (p) { var s = sekunden(konto, p.id); if (s > 0) e[p.id] = Math.round(s); });
+    w.tage[konto.datum] = e;
+    var grenzTag = verschiebe(konto.datum, -(WOCHE_TAGE - 1));
+    Object.keys(w.tage).forEach(function (t) { if (t < grenzTag || t > konto.datum) delete w.tage[t]; });
+    return w;
+  }
+  function schreibeWoche(sp, w) { return schreib(sp, WOCHE, JSON.stringify(w && w.tage ? { tage: w.tage } : { tage: {} })); }
+  // Die letzten 7 Kalendertage, aeltester zuerst. Heute kommt immer frisch aus dem Konto.
+  function letzteWoche(w, konto, heute) {
+    var aus = [];
+    for (var k = 6; k >= 0; k--) {
+      var t = verschiebe(heute, -k), sek = {};
+      var e = w && w.tage ? w.tage[t] : null;
+      LISTE.forEach(function (p) { sek[p.id] = e && e[p.id] ? e[p.id] : 0; });
+      if (k === 0 && konto && konto.datum === t) LISTE.forEach(function (p) { sek[p.id] = Math.max(sek[p.id], sekunden(konto, p.id)); });
+      aus.push({ datum: t, sek: sek });
+    }
+    return aus;
+  }
+
+  // ---------- ab v0.11: Sicherung als Text-Code (Spielstaende, Alben, Einstellungen; nie das Zeitkonto) ----------
+  function erlaubt(k) {
+    if (k === GRENZEN || k === RUHIG || k === LETZTES || k === 'finca.stumm' || k === 'finca.vorlesen') return true;
+    for (var i = 0; i < LISTE.length; i++) if (k === spielstandSchluessel(LISTE[i].id) || k === albumSchluessel(LISTE[i].id)) return true;
+    return false;
+  }
+  function erlaubteSchluessel() {
+    var l = [GRENZEN, RUHIG, LETZTES, 'finca.stumm', 'finca.vorlesen'];
+    LISTE.forEach(function (p) { l.push(spielstandSchluessel(p.id), albumSchluessel(p.id)); });
+    return l;
+  }
+  function utf8(str) {
+    var b = [];
+    for (var i = 0; i < str.length; i++) {
+      var c = str.charCodeAt(i);
+      if (c >= 0xd800 && c < 0xdc00 && i + 1 < str.length) { var c2 = str.charCodeAt(i + 1); if (c2 >= 0xdc00 && c2 < 0xe000) { c = 0x10000 + ((c - 0xd800) << 10) + (c2 - 0xdc00); i++; } }
+      if (c < 0x80) b.push(c);
+      else if (c < 0x800) b.push(0xc0 | c >> 6, 0x80 | c & 63);
+      else if (c < 0x10000) b.push(0xe0 | c >> 12, 0x80 | c >> 6 & 63, 0x80 | c & 63);
+      else b.push(0xf0 | c >> 18, 0x80 | c >> 12 & 63, 0x80 | c >> 6 & 63, 0x80 | c & 63);
+    }
+    return b;
+  }
+  function ausUtf8(b) {
+    var s = '', i = 0;
+    while (i < b.length) {
+      var c = b[i++], cp;
+      if (c < 0x80) cp = c;
+      else if (c < 0xe0) cp = (c & 31) << 6 | b[i++] & 63;
+      else if (c < 0xf0) { cp = (c & 15) << 12 | (b[i++] & 63) << 6; cp |= b[i++] & 63; }
+      else { cp = (c & 7) << 18 | (b[i++] & 63) << 12; cp |= (b[i++] & 63) << 6; cp |= b[i++] & 63; }
+      if (cp >= 0x10000) { cp -= 0x10000; s += String.fromCharCode(0xd800 + (cp >> 10), 0xdc00 + (cp & 1023)); }
+      else s += String.fromCharCode(cp);
+    }
+    return s;
+  }
+  var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  function zuB64(b) {
+    var s = '';
+    for (var i = 0; i < b.length; i += 3) {
+      var n = b[i] << 16 | (b[i + 1] || 0) << 8 | (b[i + 2] || 0);
+      s += B64[n >> 18 & 63] + B64[n >> 12 & 63] + (i + 1 < b.length ? B64[n >> 6 & 63] : '=') + (i + 2 < b.length ? B64[n & 63] : '=');
+    }
+    return s;
+  }
+  function ausB64(s) {
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(s) || s.length % 4) return null;
+    var b = [];
+    for (var i = 0; i < s.length; i += 4) {
+      var n = 0, pad = 0;
+      for (var j = 0; j < 4; j++) { var ch = s[i + j]; if (ch === '=') { pad++; n <<= 6; } else n = n << 6 | B64.indexOf(ch); }
+      b.push(n >> 16 & 255); if (pad < 2) b.push(n >> 8 & 255); if (pad < 1) b.push(n & 255);
+    }
+    return b;
+  }
+  function pruefsumme(text) {
+    var h = 5381;
+    for (var i = 0; i < text.length; i++) h = ((h * 33) ^ text.charCodeAt(i)) >>> 0;
+    return ('000' + (h & 0xffff).toString(16)).slice(-4);
+  }
+  function sicherungsCode(sp) {
+    var d = {};
+    erlaubteSchluessel().forEach(function (k) { var v = lies(sp, k); if (v !== null && v !== undefined && v !== '') d[k] = String(v); });
+    var b = zuB64(utf8(JSON.stringify({ v: 1, d: d })));
+    return CODE_KOPF + '-' + pruefsumme(b) + '-' + b;
+  }
+  function liesCode(code) {
+    var c = String(code || '').replace(/\s+/g, '');
+    if (!c) return { ok: false, grund: 'leer' };
+    var m = /^FINCA1-([0-9a-f]{4})-([A-Za-z0-9+/=]+)$/.exec(c);
+    if (!m) return { ok: false, grund: 'form' };
+    if (pruefsumme(m[2]) !== m[1]) return { ok: false, grund: 'pruefsumme' };
+    var b = ausB64(m[2]), roh = null;
+    try { roh = b ? JSON.parse(ausUtf8(b)) : null; } catch (e) { roh = null; }
+    if (!roh || roh.v !== 1 || !roh.d || typeof roh.d !== 'object') return { ok: false, grund: 'inhalt' };
+    var daten = {}, n = 0;
+    Object.keys(roh.d).forEach(function (k) { if (erlaubt(k) && typeof roh.d[k] === 'string') { daten[k] = roh.d[k]; n++; } });
+    return { ok: true, daten: daten, anzahl: n };
+  }
+  // Uebernimmt nur erlaubte Schluessel. Was im Code fehlt, wird auf diesem Geraet geleert (der Code ersetzt den Stand).
+  function uebernimmCode(sp, code) {
+    var r = liesCode(code);
+    if (!r.ok) return r;
+    erlaubteSchluessel().forEach(function (k) { if (Object.prototype.hasOwnProperty.call(r.daten, k)) schreib(sp, k, r.daten[k]); else weg(sp, k); });
+    return r;
+  }
+
+  Dorf.Profile = { GRENZEN: GRENZEN, WOCHE: WOCHE, MIN_GRENZE: MIN_GRENZE, WOCHE_TAGE: WOCHE_TAGE, CODE_KOPF: CODE_KOPF,
+    maxGrenze: maxGrenze, klemmeGrenze: klemmeGrenze, ladeGrenzen: ladeGrenzen, schreibeGrenzen: schreibeGrenzen, grenze: grenze,
+    schlaeft: schlaeft, entsperre: entsperre, verschiebe: verschiebe, ladeWoche: ladeWoche, merkeWoche: merkeWoche,
+    schreibeWoche: schreibeWoche, letzteWoche: letzteWoche, erlaubt: erlaubt, sicherungsCode: sicherungsCode, liesCode: liesCode,
+    uebernimmCode: uebernimmCode, pruefsumme: pruefsumme,
+    LISTE: LISTE, KONTO: KONTO, LETZTES: LETZTES, RUHIG: RUHIG, hole: hole, schluessel: schluessel,
     spielstandSchluessel: spielstandSchluessel, albumSchluessel: albumSchluessel, datum: datum,
     ladeKonto: ladeKonto, schreibeKonto: schreibeKonto, pruefeDatum: pruefeDatum, buche: buche, sekunden: sekunden,
     fertig: fertig, setzeFertig: setzeFertig, gespielt: gespielt, letztes: letztes, merkeLetztes: merkeLetztes,

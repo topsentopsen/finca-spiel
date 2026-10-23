@@ -92,5 +92,10 @@
     };
   }
 
-  Dorf.Uhr = { licht: licht, TAG_LIMIT: TAG_LIMIT, DAEMMER_SEK: DAEMMER_SEK, DAEMMER_AB: DAEMMER_AB, mindestMinuten: mindestMinuten, schaetzeSpielzeit: schaetzeSpielzeit, daemmerung: daemmerung, START: START, ENDE: ENDE, SEK_PRO_STUNDE: SEK_PRO_STUNDE, erstelle: erstelle, update: update, vorbei: vorbei, neuerTag: neuerTag, text: text, phase: phase, toenung: toenung };
+  // ab v0.11: Eltern koennen weniger Minuten einstellen. Dann zaehlt die Uhr so, als waeren die fehlenden Minuten schon gespielt.
+  function belegt(spielzeit, grenzeSek) {
+    var g = typeof grenzeSek === 'number' && isFinite(grenzeSek) ? Math.min(TAG_LIMIT, Math.max(0, grenzeSek)) : TAG_LIMIT;
+    return Math.max(0, Math.min(TAG_LIMIT, (spielzeit || 0) + TAG_LIMIT - g));
+  }
+  Dorf.Uhr = { belegt: belegt, licht: licht, TAG_LIMIT: TAG_LIMIT, DAEMMER_SEK: DAEMMER_SEK, DAEMMER_AB: DAEMMER_AB, mindestMinuten: mindestMinuten, schaetzeSpielzeit: schaetzeSpielzeit, daemmerung: daemmerung, START: START, ENDE: ENDE, SEK_PRO_STUNDE: SEK_PRO_STUNDE, erstelle: erstelle, update: update, vorbei: vorbei, neuerTag: neuerTag, text: text, phase: phase, toenung: toenung };
 })(globalThis);

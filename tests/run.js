@@ -200,12 +200,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.10', function () {
+test('Version: sichtbares Label ist v0.11', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.10');
+  gleich(D.VERSION, 'v0.11');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.10 (Prototyp)') >= 0, 'Titel enthaelt v0.10');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.10"') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.11 (Prototyp)') >= 0, 'Titel enthaelt v0.11');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.11"') >= 0, n + ' eingebunden'); });
   wahr(html.indexOf('js/profile.js') < html.indexOf('js/main.js') && html.indexOf('js/leben.js') < html.indexOf('js/main.js'), 'neue Dateien vor main');
 });
 test('Debug: F1 ist frei, Debug liegt auf Backquote', function () {
@@ -1032,6 +1032,7 @@ function starteFake(o) {
       width: 320, height: 176, getContext: function () { return o.ctx || fakeProxyCtx(zaehler); }, getBoundingClientRect: function () { return { left: 0, top: 0, width: 640, height: 352 }; } };
   }
   var els = {}; ['spiel', 'ui', 'rahmen', 'ton-knopf', 'vollbild-knopf', 'knopf-aktion', 'vorlesen-knopf', 'eltern-knopf', 'hud'].forEach(function (id) { els[id] = el(id); });
+  if (o.extraEls) Object.keys(o.extraEls).forEach(function (id) { els[id] = o.extraEls[id]; });
   var queue = [], listener = {}, docL = {}, sp = o.speicher || fakeSpeicher();
   var win = {
     innerWidth: 640, innerHeight: 400, devicePixelRatio: 1, localStorage: sp, location: { search: o.suche || '' },
@@ -1060,7 +1061,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand.esel']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.10'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.11'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -1751,9 +1752,9 @@ test('Tagesgrenze v0.8: mit Huehnern, Eiern, Knopf und Herzflug endet der Tag sp
 });
 
 // ---------- v0.9: Bilderbuch, Sticker, Bild-Abend, Deko, Wolken, Gaehnen, Randplakette ----------
-test('Sticker: zwoelf Bilder, am Abend kommt genau einer pro Tag ins Album, Album bleibt beim Neuanfang', function () {
+test('Sticker: sechzehn Bilder (ab v0.11), am Abend kommt genau einer pro Tag ins Album, Album bleibt beim Neuanfang', function () {
   var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 1 });
-  gleich(D.Sticker.LISTE.length, 12);
+  gleich(D.Sticker.LISTE.length, 16);
   st.uhr.minute = D.Uhr.ENDE - 0.01; st.spielzeit = 100; D.Spiel.schritt(st, 1 / 60);
   wahr(st.abend && st.neuerSticker, 'Sticker vergeben'); gleich(D.Sticker.anzahl(st.album), 1);
   wahr(st.albumNeu, 'Punkt am Buch-Knopf');
@@ -1785,7 +1786,7 @@ test('Bilderbuch: auf mit B, blaettern mit Tippen und Pfeilen, Reiter, X und dan
   gleich(S.klickBild(st, B.x + B.w - 20, B.y + 70, true), 'blaettern'); gleich(st.buch.seite, 1);
   taste('ArrowRight'); gleich(st.buch.seite, 2); taste('ArrowRight'); gleich(st.buch.seite, 3, 'Album');
   taste('ArrowRight'); gleich(st.buch.seite, 3); wahr(st.buch.stups > 0, 'am Ende stupst es');
-  D.Render.zeichne(p.R, st); wahr(p.R.letztesBuch.album && p.R.letztesBuch.sticker.length === 12, 'Album mit 12 Plaetzen');
+  D.Render.zeichne(p.R, st); wahr(p.R.letztesBuch.album && p.R.letztesBuch.sticker.length === 16, 'Album mit 16 Plaetzen');
   gleich(p.log.texte.length, 0, 'Album ohne Text');
   S.klickBild(st, B.reiter[0].x + 5, B.reiter[0].y + 5, true); gleich(st.buch.seite, 0, 'Topf-Reiter');
   for (i = 0; i < 20; i++) S.schritt(st, 1 / 60);
@@ -1989,6 +1990,8 @@ test('Elternbereich: 3 Sekunden halten oeffnet, kurzes Tippen nicht; Spiel pausi
   // mit Pfeilen und Enter bedienbar
   S.oeffneEltern(st); st.eltern.t = 1;
   st.eingabe.druecke('ArrowDown'); S.schritt(st, 0.02); st.eingabe.ende(); st.eingabe.loese('ArrowDown');
+  gleich(st.eltern.wahl, 'minus_esel', 'ab v0.11 zuerst die Minuten');
+  for (var n = 0; n < 6; n++) { st.eingabe.druecke('ArrowDown'); S.schritt(st, 0.02); st.eingabe.ende(); st.eingabe.loese('ArrowDown'); }
   gleich(st.eltern.wahl, 'ruhig');
   st.eingabe.druecke('Enter'); S.schritt(st, 0.02); st.eingabe.ende(); st.eingabe.loese('Enter'); wahr(!st.ruhig, 'Enter schaltet um');
 });
@@ -2112,6 +2115,210 @@ test('Bildauswahl und Elternbereich zeichnen: Tag und Sticker als Pixelziffern, 
   wahr(R.letzteEltern && R.letzteEltern.zeilen.length === 3, 'Minuten je Bild');
   var E = D.Spiel.ELTERN;
   [E.zu, E.ruhig, E.wechseln, E.neu].forEach(function (k) { wahr(k.x >= E.x && k.x + k.w <= E.x + E.w && k.y + k.h <= E.y + E.h, 'Knopf im Feld'); wahr(k.h >= 20, 'gross genug'); });
+});
+
+// ---------- v0.11: Minuten pro Bild, Wochenrueckblick, Zeichen vor Schluss, Lied, Namen vorlesen, Sicherung ----------
+test('Minuten pro Bild: 5 bis 15, nie ueber die harte Grenze, kaputte Werte werden 15', function () {
+  var D = ladeKontext().Dorf, P = D.Profile, U = D.Uhr, sp = fakeSpeicher();
+  gleich(P.maxGrenze(), 15); gleich(P.MIN_GRENZE, 5);
+  gleich(P.klemmeGrenze(3), 5); gleich(P.klemmeGrenze(99), 15); gleich(P.klemmeGrenze(7.6), 8); gleich(P.klemmeGrenze(NaN), 15); gleich(P.klemmeGrenze('9'), 15);
+  gleich(P.grenze({}, 'esel'), 15, 'ohne Einstellung 15');
+  sp.d['finca.grenzen'] = JSON.stringify({ esel: 40, huhn: 8, gecko: 'x', boese: 3 });
+  var g = P.ladeGrenzen(sp); gleich(g.esel, 15, 'zu viel wird 15'); gleich(g.huhn, 8); wahr(!('gecko' in g) && !('boese' in g));
+  sp.d['finca.grenzen'] = '{kaputt'; gleich(JSON.stringify(P.ladeGrenzen(sp)), '{}');
+  P.schreibeGrenzen(sp, { huhn: 2, esel: 10 }); gleich(sp.d['finca.grenzen'], JSON.stringify({ esel: 10, huhn: 5 }));
+  // Uhr: mit 10 Minuten ist nach 10 Minuten Abend, mit 15 bleibt alles wie bisher
+  gleich(U.belegt(0, 900), 0); gleich(U.belegt(100, 600), 400); gleich(U.belegt(700, 600), 900); gleich(U.belegt(100, 5000), 100, 'nie mehr als 15');
+  var k = { datum: '2026-10-23', profile: { esel: { sek: 600, fertig: false }, huhn: { sek: 300, fertig: true } } };
+  wahr(P.schlaeft(k, { esel: 10 }, 'esel'), '10 Minuten voll'); wahr(!P.schlaeft(k, {}, 'esel'));
+  // mehr Minuten: das Huhn wacht wieder auf, der Esel mit fast voller Zeit nicht
+  k.profile.esel.fertig = true; k.profile.esel.sek = 890;
+  var auf = P.entsperre(k, { huhn: 15, esel: 15 });
+  gleich(auf.join(','), 'huhn'); wahr(!k.profile.huhn.fertig && k.profile.esel.fertig);
+});
+test('Minuten pro Bild im Spiel: weniger Minuten machen frueher Abend, mehr Minuten wecken die Auswahl, gespeichert', function () {
+  var sp = fakeSpeicher(), tag = { d: '2026-10-23' }, F = { Date: fakeDatum(tag) };
+  var a = starteFake({ speicher: sp, fenster: F }), st = a.h.st, S = a.D.Spiel, P = a.D.Profile, E = S.ELTERN;
+  gleich(S.grenzeSek(st), 900);
+  S.oeffneEltern(st); st.eltern.t = 1;
+  for (var i = 0; i < 12; i++) S.klickBild(st, E.bilder[0].minus.x + 3, E.bilder[0].minus.y + 3, true);
+  gleich(P.grenze(st.grenzen, 'esel'), 5, 'nicht unter 5'); gleich(S.grenzeSek(st), 300);
+  gleich(S.klickBild(st, E.bilder[1].plus.x + 3, E.bilder[1].plus.y + 3, true), 'grenze'); gleich(P.grenze(st.grenzen, 'huhn'), 15, 'nicht ueber 15');
+  a.frames(2); gleich(JSON.parse(sp.d['finca.grenzen']).esel, 5, 'gespeichert');
+  wahr(st.eltern.info[0].grenze === 5, 'Elternbereich zeigt 5');
+  S.schliesseEltern(st);
+  // die Uhr laeuft so, als waeren schon 10 Minuten gespielt: nach 5 Minuten ist Abend
+  for (i = 0; i < 400 && !st.abend; i++) a.frames(1, 1000);
+  wahr(st.abend, 'Abend'); wahr(P.sekunden(st.konto, 'esel') <= 5 * 60 + 3, 'nach hoechstens 5 Minuten (' + Math.round(P.sekunden(st.konto, 'esel')) + ' s)');
+  a.frames(60 * 15); st.naechsterTag = true; a.frames(2);
+  wahr(st.wahl && st.wahl.gesperrt, 'Schlafenszeit');
+  // Neuladen: Grenze bleibt
+  a.h.sichere();
+  var b = starteFake({ speicher: sp, fenster: F, wahl: true }), s2 = b.h.st;
+  gleich(P.grenze(s2.grenzen, 'esel'), 5); wahr(s2.wahl && s2.wahl.gesperrt, 'bleibt Schlafenszeit');
+  // Eltern geben wieder 10 Minuten: der Esel darf weiter, die Zeit zaehlt weiter
+  S.oeffneEltern(s2); s2.eltern.t = 1;
+  for (i = 0; i < 5; i++) S.elternTat(s2, 'plus_esel');
+  gleich(P.grenze(s2.grenzen, 'esel'), 10);
+  S.schliesseEltern(s2);
+  wahr(s2.wahl && !s2.wahl.gesperrt, 'Auswahl wieder offen');
+  gleich(S.waehleProfil(s2, 'esel'), 'weiter'); wahr(s2.spielzeit >= 299, 'gespielte Zeit zaehlt weiter');
+  wahr(S.uhrZeit(s2) >= 299 + 300 - 1, 'Uhr mit 5 fehlenden Minuten');
+});
+test('Wochenrueckblick: 7 Tage, aeltester zuerst, 14 Tage aufbewahrt, heute aus dem Konto', function () {
+  var D = ladeKontext().Dorf, P = D.Profile, sp = fakeSpeicher();
+  gleich(P.verschiebe('2026-10-23', -6), '2026-10-17'); gleich(P.verschiebe('2026-03-01', -1), '2026-02-28'); gleich(P.verschiebe('2026-12-31', 1), '2027-01-01');
+  var w = P.ladeWoche(sp); gleich(Object.keys(w.tage).length, 0);
+  for (var t = 19; t >= 0; t--) { var d = P.verschiebe('2026-10-23', -t); P.merkeWoche(w, { datum: d, profile: { esel: { sek: 60 * (t % 15) + 1, fertig: false } } }); }
+  // Tage nach dem eingetragenen Tag gelten als falsche Uhr und fallen weg; deshalb der Reihe nach
+  P.merkeWoche(w, { datum: '2026-10-23', profile: { esel: { sek: 61, fertig: false }, huhn: { sek: 120, fertig: false } } });
+  wahr(Object.keys(w.tage).length <= 14, 'hoechstens 14 Tage');
+  P.schreibeWoche(sp, w);
+  var w2 = P.ladeWoche(sp), k = { datum: '2026-10-23', profile: { huhn: { sek: 200, fertig: false } } };
+  var l = P.letzteWoche(w2, k, '2026-10-23');
+  gleich(l.length, 7); gleich(l[0].datum, '2026-10-17'); gleich(l[6].datum, '2026-10-23');
+  gleich(l[6].sek.huhn, 200, 'heute frisch aus dem Konto'); gleich(l[5].sek.esel, 61, 'gestern');
+  sp.d['finca.woche'] = JSON.stringify({ tage: { 'x': { esel: 5 }, '2026-10-20': { esel: -4, huhn: 'a', gecko: 30 } } });
+  var w3 = P.ladeWoche(sp); gleich(JSON.stringify(w3.tage), JSON.stringify({ '2026-10-20': { gecko: 30 } }), 'kaputte Werte weg');
+});
+test('Wochenrueckblick im Elternbereich: Balken je Bild, heute rechts, als Pixel gezeichnet', function () {
+  var sp = fakeSpeicher(), tag = { d: '2026-10-23' }, F = { Date: fakeDatum(tag) };
+  sp.d['finca.woche'] = JSON.stringify({ tage: { '2026-10-22': { esel: 900 }, '2026-10-20': { huhn: 300 } } });
+  var a = starteFake({ speicher: sp, fenster: F }), st = a.h.st, S = a.D.Spiel, R = a.h.R;
+  a.frames(600); a.h.sichere();
+  wahr(JSON.parse(sp.d['finca.woche']).tage['2026-10-23'].esel >= 9, 'heute in der Woche');
+  S.oeffneEltern(st); a.frames(2);
+  var z = R.letzteEltern.zeilen;
+  gleich(z.length, 3); gleich(z[0].woche.length, 7);
+  gleich(z[0].woche[5], 900, 'gestern 15 Minuten'); wahr(z[0].woche[6] >= 9, 'heute'); gleich(z[1].woche[3], 300);
+  var E = S.ELTERN;
+  E.bilder.forEach(function (B) {
+    [B, B.minus, B.plus].forEach(function (k) { wahr(k.x >= E.x && k.x + k.w <= E.x + E.w && k.y + k.h <= E.y + E.h, 'im Feld'); });
+    wahr(B.minus.w >= 18 && B.minus.h >= 14, 'minus gross genug');
+  });
+  wahr(E.sichern.x + E.sichern.w <= E.x + E.w && E.sichern.h >= 20, 'Sichern im Feld');
+});
+test('Zeichen vor Schluss: zwei Minuten vorher sagt Biel es einmal, ein Mond geht auf, sanfter Klang, kein Blinken', function () {
+  var a = starteFake(), st = a.h.st, S = a.D.Spiel, U = a.D.Uhr, R = a.h.R;
+  gleich(S.BALD_SEK, 120);
+  st.blase = null; st.spielzeit = U.TAG_LIMIT - 130; a.frames(2);
+  wahr(!st.baldGesagt, 'noch nicht');
+  st.blase = null; st.spielzeit = U.TAG_LIMIT - 119; a.frames(2);
+  wahr(st.baldGesagt, 'jetzt'); wahr(st.blase && /Bald ist Abend/.test(st.blase.text), 'Biel sagt es');
+  wahr(st.bald >= 0 && st.bald < 1, 'Mond beginnt');
+  var n = st.blase.nr; st.blase = null; a.frames(30); wahr(!st.blase || st.blase.nr === n, 'nur einmal');
+  // mit 10 Minuten Grenze kommt das Zeichen nach 8 Minuten
+  var b = starteFake(), s2 = b.h.st; s2.grenzen = { esel: 10 }; s2.blase = null; s2.spielzeit = 8 * 60 + 1; b.frames(2);
+  wahr(s2.baldGesagt, 'auch mit eigener Grenze');
+  // Klang leise (zwei sanfte Toene, nicht lauter als das Menue-Klicken)
+  var au = fakeAudio(), T = ladeKontext().Dorf.Ton.erstelle({ AudioContext: au.AC, localStorage: fakeSpeicher() });
+  T.entsperre(); var o0 = au.log.oszi; gleich(T.spiele('bald') === false, false, 'spielt'); gleich(au.log.oszi - o0, 2, 'zwei Toene');
+  wahr(/name === 'bald'\) \{ ton\(784, j, 0\.7, 0\.03\)/.test(fs.readFileSync(path.join(__dirname, '..', 'js', 'ton.js'), 'utf8')), 'leise 0.03');
+});
+test('Lied: drei Toene kurz hintereinander spielen ein kleines Lied und bringen am Abend den Lied-Sticker', function () {
+  var D = ladeKontext().Dorf, S = D.Spiel, T = D.Ton, st = S.erstelle({ seed: 1 }), ins = st.karte.instrumente[0];
+  gleich(S.LIED_TOENE, 3);
+  S.musiziere(st, ins); st.zeit += 1; S.musiziere(st, ins); st.zeit += 5; S.musiziere(st, ins);
+  wahr(!st.musik.some(function (m) { return m.art === 'lied'; }), 'zu langsam: kein Lied');
+  st.zeit += 1; S.musiziere(st, ins); st.zeit += 1; S.musiziere(st, ins);
+  wahr(st.musik.some(function (m) { return m.art === 'lied'; }), 'Lied gespielt');
+  wahr(st.heute && st.heute.lied, 'fuer den Sticker gemerkt'); wahr(st.noten.length <= S.NOTEN_MAX);
+  wahr(st.blase && /Lied/.test(st.blase.text), 'Biel freut sich');
+  var l = T.instrumentNoten('lied', 'C', 0);
+  wahr(l.length >= 5 && l.every(function (n) { return n.staerke <= 0.2 && n.klang === 'saite'; }), 'kleines leises Lied');
+  for (var i = 1; i < l.length; i++) wahr(l[i].versatz > l[i - 1].versatz, 'Toene nacheinander');
+  // am Abend: der Lied-Sticker (wenn noch nicht im Album)
+  st.uhr.minute = D.Uhr.ENDE - 0.01; st.spielzeit = 100; S.schritt(st, 1 / 60);
+  wahr(st.abend && st.neuerSticker, 'Sticker vergeben'); gleich(st.neuerSticker, 'lied');
+});
+test('Album v0.11: 16 Plaetze in 4 Reihen, neue Bilder Gitarre, Vogel, Falter gezeichnet', function () {
+  var D = ladeKontext().Dorf, S = D.Spiel, st = S.erstelle({ seed: 1 }), p = proxyR();
+  gleich(D.Sticker.LISTE.length, 16);
+  var ids = D.Sticker.LISTE.map(function (x) { return x.id; });
+  ['lied', 'gitarre', 'vogel', 'falter'].forEach(function (id) { wahr(ids.indexOf(id) >= 0, id); });
+  D.Sticker.LISTE.forEach(function (x) { st.album[x.id] = 1; });
+  st.buch = { seite: 3, t: 1, stups: 0 }; D.Render.zeichne(p.R, st);
+  gleich(p.R.letztesBuch.sticker.length, 16);
+});
+test('Namen vorlesen: Antippen und Pfeile sagen den Namen, schlafende Bilder sagen es auch', function () {
+  var gesagt = [];
+  function U(t) { this.text = t; }
+  var ss = { getVoices: function () { return [{ lang: 'de-DE', localService: true }]; }, cancel: function () {}, speak: function (u) { gesagt.push(u.text); } };
+  var au = fakeAudio();
+  var a = starteFake({ wahl: true, fenster: { speechSynthesis: ss, SpeechSynthesisUtterance: U, AudioContext: au.AC } });
+  var st = a.h.st, S = a.D.Spiel;
+  (a.listener.pointerdown || []).forEach(function (f) { f({}); }); a.frames(2);
+  wahr(st.wahl, 'Auswahl offen');
+  st.eingabe.druecke('ArrowRight'); a.frames(1); st.eingabe.loese('ArrowRight'); a.frames(2);
+  wahr(gesagt.some(function (t) { return /^(Esel|Huhn|Gecko)\.?$/.test(t); }), 'Name beim Fokus: ' + gesagt.join(' | '));
+  gleich(S.waehleProfil(st, 'huhn'), 'gewaehlt'); a.frames(2);
+  wahr(/^Huhn\b/.test(gesagt[gesagt.length - 1]), 'Name beim Waehlen: ' + gesagt[gesagt.length - 1]);
+  st.konto.profile.esel = { sek: 900, fertig: true };
+  S.oeffneEltern(st); S.elternTat(st, 'wechseln'); a.frames(1);
+  gleich(S.waehleProfil(st, 'esel'), 'schlaeft'); a.frames(2);
+  gleich(gesagt[gesagt.length - 1], 'Der Esel schläft. Morgen geht es weiter.');
+});
+test('Sicherung: Code mit Pruefsumme, nur erlaubte Daten, Zeitkonto bleibt, Umlaute bleiben', function () {
+  var D = ladeKontext().Dorf, P = D.Profile, sp = fakeSpeicher();
+  sp.d['finca.spielstand.esel'] = JSON.stringify({ tag: 4, name: 'Grüße 🌞' }); sp.d['finca.album.huhn'] = '{"herz":1}';
+  sp.d['finca.grenzen'] = '{"esel":10}'; sp.d['finca.ruhig'] = '1'; sp.d['finca.zeitkonto'] = '{"datum":"2026-10-23","profile":{"esel":{"sek":800}}}';
+  sp.d['fremd'] = 'geheim';
+  var code = P.sicherungsCode(sp);
+  wahr(/^FINCA1-[0-9a-f]{4}-[A-Za-z0-9+/=]+$/.test(code), 'Form');
+  var r = P.liesCode(code); wahr(r.ok); gleich(r.anzahl, 4);
+  wahr(!('finca.zeitkonto' in r.daten) && !('fremd' in r.daten), 'keine Zeit, nichts Fremdes');
+  gleich(JSON.parse(r.daten['finca.spielstand.esel']).name, 'Grüße 🌞');
+  // mit Leerzeichen und Zeilenumbruechen geht es auch
+  wahr(P.liesCode(' ' + code.slice(0, 20) + '\n' + code.slice(20) + ' ').ok, 'Umbrueche egal');
+  // kaputt
+  gleich(P.liesCode('').grund, 'leer'); gleich(P.liesCode('hallo').grund, 'form');
+  var teil = code.split('-'), b = teil[2], tausch = b[5] === 'A' ? 'B' : 'A';
+  gleich(P.liesCode(teil[0] + '-' + teil[1] + '-' + b.slice(0, 5) + tausch + b.slice(6)).grund, 'pruefsumme');
+  gleich(P.liesCode(code.slice(0, code.length - 8)).grund, 'pruefsumme', 'abgeschnitten');
+  var falsch = 'FINCA1-' + P.pruefsumme('e30=') + '-e30='; gleich(P.liesCode(falsch).grund, 'inhalt');
+  // uebernehmen auf ein anderes Geraet: ersetzt Stand, laesst Zeitkonto und Fremdes
+  var neu = fakeSpeicher(); neu.d['finca.zeitkonto'] = 'HEUTE'; neu.d['finca.album.gecko'] = '{"stern":1}'; neu.d['anderes'] = 'x';
+  wahr(P.uebernimmCode(neu, code).ok);
+  gleich(neu.d['finca.spielstand.esel'], sp.d['finca.spielstand.esel']); gleich(neu.d['finca.grenzen'], '{"esel":10}');
+  gleich(neu.d['finca.zeitkonto'], 'HEUTE', 'Zeitkonto bleibt'); gleich(neu.d['anderes'], 'x');
+  wahr(!neu.d['finca.album.gecko'], 'alter Stand ersetzt');
+  // ein boeser Code mit fremden Schluesseln schreibt nichts Fremdes
+  var json = JSON.stringify({ v: 1, d: { 'finca.zeitkonto': 'x', 'evil': 'y', 'finca.ruhig': '0' } });
+  var b64 = (typeof Buffer !== 'undefined') ? Buffer.from(json, 'utf8').toString('base64') : '';
+  var boese = 'FINCA1-' + P.pruefsumme(b64) + '-' + b64, n3 = fakeSpeicher();
+  wahr(P.uebernimmCode(n3, boese).ok); gleich(n3.d['finca.ruhig'], '0'); wahr(!('evil' in n3.d) && !('finca.zeitkonto' in n3.d));
+});
+test('Sicherung im Spiel: Knopf im Elternbereich zeigt das Fenster, Uebernehmen laedt neu, Tasten im Feld steuern nichts', function () {
+  function feld(id) { var l = {}; return { id: id, value: '', hidden: true, textContent: '', l: l, addEventListener: function (n, f) { (l[n] = l[n] || []).push(f); }, focus: function () {}, select: function () {}, klick: function () { (l.click || []).forEach(function (f) { f({ preventDefault: function () {} }); }); } }; }
+  var sp = fakeSpeicher(), extra = {};
+  ['sicherung', 'sicherung-code', 'sicherung-einfuegen', 'sicherung-meldung', 'sicherung-kopieren', 'sicherung-laden', 'sicherung-zu'].forEach(function (id) { extra[id] = feld(id); });
+  var neu = 0, kopiert = [];
+  var a = starteFake({ speicher: sp, fenster: { setTimeout: function (f) { f(); }, location: { search: '', reload: function () { neu++; } },
+    navigator: { clipboard: { writeText: function (t) { kopiert.push(t); return { then: function (ok) { ok(); } }; } } } } });
+  var og = a.doc.getElementById; a.doc.getElementById = function (id) { return extra[id] || og(id); };
+  // Fenster-Elemente werden beim Start gesucht: neu starten mit den Elementen
+  var b = (function () {
+    var sp2 = sp; sp2.d['finca.spielstand.huhn'] = '{"tag":2}';
+    return starteFake({ speicher: sp2, fenster: { setTimeout: function (f) { f(); }, location: { search: '', reload: function () { neu++; } }, navigator: { clipboard: { writeText: function (t) { kopiert.push(t); return { then: function (ok) { ok(); } }; } } } }, extraEls: extra });
+  })();
+  var st = b.h.st, S = b.D.Spiel, E = S.ELTERN;
+  S.oeffneEltern(st); st.eltern.t = 1;
+  gleich(S.klickBild(st, E.sichern.x + 5, E.sichern.y + 5, true), 'sichern'); b.frames(1);
+  wahr(!extra.sicherung.hidden, 'Fenster offen'); wahr(/^FINCA1-/.test(extra['sicherung-code'].value), 'Code steht drin');
+  // Spieltasten im Fenster: Eltern bleibt offen, nichts passiert
+  gleich(S.klickBild(st, E.zu.x + 3, E.zu.y + 3, true), 'nein', 'Klicks im Spiel gehen nicht durch');
+  extra['sicherung-kopieren'].klick(); gleich(kopiert[0], extra['sicherung-code'].value); wahr(/Kopiert/.test(extra['sicherung-meldung'].textContent));
+  extra['sicherung-einfuegen'].value = 'Quatsch'; extra['sicherung-laden'].klick(); wahr(/kein Finca Code/.test(extra['sicherung-meldung'].textContent)); gleich(neu, 0);
+  var code = extra['sicherung-code'].value;
+  extra['sicherung-einfuegen'].value = code; extra['sicherung-laden'].klick();
+  wahr(/Übernommen/.test(extra['sicherung-meldung'].textContent)); gleich(neu, 1, 'laedt neu'); wahr(!st.darfSpeichern, 'schreibt nicht mehr darueber');
+  extra['sicherung-zu'].klick(); b.frames(1); wahr(extra.sicherung.hidden, 'zu'); wahr(st.eltern, 'Elternbereich bleibt offen');
+  // Tasten in Textfeldern
+  var gedrueckt = 0, k2 = ladeKontext().Dorf.Eingabe, wl = {};
+  var w = { addEventListener: function (n, f) { wl[n] = f; } };
+  var e = k2.erstelle(w);
+  wl.keydown({ code: 'ArrowLeft', target: { tagName: 'TEXTAREA' }, preventDefault: function () { gedrueckt++; } });
+  gleich(gedrueckt, 0, 'im Textfeld kein preventDefault'); wahr(!e.neu('links'));
 });
 
 // ---------- Ausfuehren ----------

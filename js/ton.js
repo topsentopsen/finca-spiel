@@ -89,6 +89,12 @@
       l.push({ freq: 2600, versatz: 0, staerke: 0.05, klang: 'klick' });
       l.push({ freq: 3100, versatz: ACHTEL / 4, staerke: 0.04, klang: 'klick' });
       if (k % 3 === 2) l.push({ freq: 2800, versatz: ACHTEL / 2, staerke: 0.035, klang: 'klick' });
+    } else if (art === 'lied') {
+      // ab v0.11: ein kleines Lied aus dem aktuellen Akkord, hoch und wieder runter (eine Achtel nach dem letzten Schlag)
+      [a[1] + 12, a[2] + 12, a[3] + 12, a[1] + 24, a[3] + 12, a[2] + 12].forEach(function (m, i) {
+        l.push({ midi: m, versatz: ACHTEL * (1 + i), staerke: i === 3 ? 0.17 : 0.14, klang: 'saite' });
+      });
+      l.push({ midi: a[1] + 12, versatz: ACHTEL * 7, staerke: 0.12, klang: 'saite' });
     } else if (art === 'trommel') {
       // weicher, tiefer Schlag auf dem Grundton des Akkords
       l.push({ midi: a[0] + 12, versatz: 0, staerke: 0.09, klang: 'trommel' });
@@ -323,6 +329,7 @@
       else if (name === 'fertig') { ton(1046.5, j, 0.7, 0.045); ton(1318.5, j + 0.12, 0.7, 0.045); ton(1568, j + 0.24, 1.0, 0.045); }
       else if (name === 'kochen') { ton(330, j, 0.16, 0.05, 'sine', 660); ton(392, j + 0.18, 0.16, 0.04, 'sine', 784); }
       else if (name === 'menue') ton(880, j, 0.08, 0.025, 'triangle');
+      else if (name === 'bald') { ton(784, j, 0.7, 0.03); ton(659.3, j + 0.3, 1.1, 0.03); }
       else if (name === 'herz') { ton(1568, j, 0.35, 0.03); ton(2093, j + 0.09, 0.45, 0.025); }
       else if (name === 'esel') { ton(196, j, 0.28, 0.05, 'triangle', 247); ton(247, j + 0.3, 0.32, 0.045, 'triangle', 185); ton(1318.5, j + 0.62, 0.6, 0.025); }
       else if (name === 'gecko') { ton(2637, j, 0.05, 0.02, 'triangle'); ton(3136, j + 0.08, 0.05, 0.02, 'triangle'); ton(1975.5, j + 0.2, 0.4, 0.02); }

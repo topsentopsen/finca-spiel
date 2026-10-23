@@ -18,8 +18,13 @@
     { id: 'herz', bild: 'herz', farbe: '#ffdbe6', wenn: 'ziel' },
     { id: 'huhn', bild: 'huhn', farbe: '#fff8ee', wenn: 'huhn' },
     { id: 'gecko', bild: 'gecko', farbe: '#d4f2ee', wenn: 'gecko' },
+    // ab v0.11: Musik und Tiere im Garten (Album mit 16 Plaetzen)
+    { id: 'lied', bild: 'note', farbe: '#ffe7b8', wenn: 'lied' },
+    { id: 'gitarre', bild: 'gitarre', farbe: '#ffe1c9', wenn: 'musik' },
+    { id: 'vogel', bild: 'vogel', farbe: '#dcecff', wenn: 'vogel' },
     { id: 'mond', bild: 'mond', farbe: '#d8d0f4' },
-    { id: 'stern', bild: 'stern', farbe: '#fff0a8' }
+    { id: 'stern', bild: 'stern', farbe: '#fff0a8' },
+    { id: 'falter', bild: 'falter', farbe: '#ffe3ec' }
   ];
   function hole(id) { for (var i = 0; i < LISTE.length; i++) if (LISTE[i].id === id) return LISTE[i]; return null; }
   function anzahl(album) { var n = 0; LISTE.forEach(function (s) { if (album && album[s.id]) n++; }); return n; }

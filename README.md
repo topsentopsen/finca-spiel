@@ -1,4 +1,4 @@
-# Finca v0.10
+# Finca v0.11
 
 A small browser game with a handheld look, written in pure JavaScript. There is no build, no npm and there are no external assets. Music and sounds are generated in code with WebAudio.
 
@@ -43,8 +43,16 @@ At the first start the game asks "Wer spielt?" with three big pictures (donkey, 
 
 Time rule (chosen and tested): **15 minutes per picture per calendar day**. Real play seconds are booked in `finca.zeitkonto` together with the date. Reloading, "Neu anfangen", switching pictures or `?neu=1` never give time back. Whoever played today comes straight back into their own picture after a reload. When a picture's day is over, the whole picture chooser shows "Schlafenszeit" and every picture just sleeps when tapped, so a child cannot simply pick another picture. Only the parent area ("Anderes Bild") opens a chooser where a different child whose time is not used up can play; pictures with used up time still sleep. At midnight every picture gets a new 15 minutes; an open "Schlafenszeit" chooser notices this within 2 seconds.
 
+From v0.11 parents can set the minutes per picture between 5 and 15 (stored in `finca.grenzen`). 15 is the hard upper limit and can never be exceeded. A lower limit counts immediately: if a picture has already played longer today, its evening starts right away. Raising the limit wakes a sleeping picture again if at least 30 seconds are left. The game clock goes a bit faster on a shorter day, so the evening still arrives in time.
+
+Two minutes before the time is up Biel says once "Bald ist Abend. Noch ein bisschen spielen!" with a soft two note sound, and a small moon slowly fades in at the top right of the day arc (no blinking).
+
+When a picture is chosen, its name is read aloud ("Esel!", "Huhn!", "Gecko!"), also when moving with the arrow keys; a sleeping picture says "Der Esel schläft. Morgen geht es weiter."
+
 ## Parent area (from v0.10)
 Hold the gear button for 3 seconds. Shows the minutes played today per picture, the switch "Weniger Bewegung" (no hopping, glittering or pulsing, birds stay put; taken from the system setting the first time and saved in `finca.ruhig`), "Anderes Bild" and "Neu anfangen". Esc, the X or a tap outside closes it.
+
+From v0.11 it also shows, per picture, minus and plus buttons for the daily minutes (5 to 15) and a small bar chart of the last 7 days (today darker, a dot for days without play; stored in `finca.woche`, at most 14 days kept). The button "Sichern" opens a window with a backup code (starts with `FINCA1-`, has a checksum). "Code kopieren" copies it; on another device paste it and press "Übernehmen", then the game restarts with the saved games, albums and settings of all pictures. The code never contains the play time of today (`finca.zeitkonto`), so it cannot be used to get extra minutes. A wrong or incomplete code is rejected with a short message and nothing changes.
 
 ## Phone zoom (from v0.10)
 On small touch screens (shorter side under 500 px) the world is drawn 1.25 times bigger so Biel and the guests are easier to see; hearts, menus and the book keep their full size on their own layer. `?zoom=1` or `?zoom=1.25` forces it.
@@ -55,6 +63,7 @@ A game day lasts at most 15 real minutes of active play. The normal pace is abou
 ## For children who cannot read yet
 Everything important can be understood without reading:
 - The top left shows pictures instead of text: a small day arc with the sun (or the moon at night), a face for every guest with five hearts below (a gold ring when all five are full) and the basket with the harvest.
+- Instruments: tapping one instrument three times in a row plays a little tune; after a tune the music sticker is given in the evening (once in the album it stays there).
 - Every tap shows a small ring where the finger touched. Biel wears a straw hat and stands on a soft golden ring.
 - If nothing happens for a few seconds, a pulsing pink arrow with a small picture bubble shows the next useful step (speech bubble for a guest, the fruit for a plant, a pot for the stove, a carrot for Bruna), with a soft ring on the ground and a quiet "pling" at most every 20 seconds. Targets off screen get a round badge with an arrow at the edge. The hint waits longer once a child has done that action a few times, and disappears on the next tap.
 - In the cooking menu the dish that works best right now gets the arrow, dishes with missing ingredients look faded and cookable ones get a green check.
@@ -135,6 +144,7 @@ node tests/run.js
 Uses only Node's built-in `vm` module. Nothing has to be installed. 105 tests, including a ten day soak test with random taps, keys, start over questions and a save and load every day.
 
 ## Version history
+- **v0.11** (23.10.2026): parents set minutes per picture (5 to 15, never above 15) with minus and plus, weekly review as pixel bars in the parent area, backup and transfer as a code ("Sichern"). Gentle sign two minutes before the end (Biel says it once, a moon fades in). Three taps on an instrument play a little tune and give a music sticker. Picture names are read aloud in the chooser. Album with 16 stickers (new: song, guitar, bird, moon, star, butterfly).
 - **v0.10** (23.10.2026): pictures (profiles) for each child with their own save, hearts and album, chosen by tapping a picture; 15 minutes per picture per calendar day that cannot be bypassed by switching, reloading or starting over. Hidden parent area (hold the gear 3 seconds) with "Neu anfangen", "Weniger Bewegung" and picture switching; the start over button is gone from the children's view. Guitar, castanets and drum to tap, playing soft notes in the chord of the music. Birds and butterflies in the background (birds hop away when Biel comes close, all leave in the evening). Pixel digits for numbers. Phone zoom. New soft sounds (picture chosen, sleeping, parent area, birds). The edge badge sits further away from the hearts.
 - **v0.9** (23.10.2026): "Bona nit" as a picture scene with a starry sky, string lights and the guests at the long table, hearts counting up, then the sticker of the day. Cooking cards and a picture recipe book without reading, the egg in a golden slot, a wiggle and bloop when something is missing. A small sticker album to look at. Decoration: bougainvillea on the walls, shutters at some windows, flower planters in the courtyard, at the arcade and the gate. Thought clouds over the guests and yawning when tired. Round hint badges at the screen edge that avoid the basket and the touch button. Own small favicon drawn inline. The 15 minute day limit stays and is tested again with book and menu use.
 - **v0.8** (23.10.2026): redrawn figures with their own shapes (Mia small with pigtails, Jonas broad with glasses, Padrina with a bun, skirt and walking stick, Biel with a straw hat), a small hop while talking. Speech bubbles show only pictures, no names and no text, and pop in next to the speaker; the speaker's face at the top glows. One context button on touch devices whose picture shows the fitting action. Hearts fly from the guest up to their face before they count, and the basket in the bottom left visibly fills with the harvested items. Hens with a little coop lay eggs; an egg is a new ingredient that is never required: in Ensaïmada and Tumbet it adds one extra plate. Optional read aloud with the browser's own German voice. The 15 minute day limit stays and is tested again with hens, eggs and flying hearts.

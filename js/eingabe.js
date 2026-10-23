@@ -51,8 +51,10 @@
       ende: function () { frisch = {}; klicks = []; }
     };
     if (win && win.addEventListener) {
-      win.addEventListener('keydown', function (ev) { if (RELEVANT[ev.code]) { ev.preventDefault(); e.druecke(ev.code); } });
-      win.addEventListener('keyup', function (ev) { if (RELEVANT[ev.code]) { ev.preventDefault(); e.loese(ev.code); } });
+      // ab v0.11: Tippen in einem Textfeld (Sicherung im Elternbereich) steuert nicht das Spiel
+      var imFeld = function (ev) { var t = ev && ev.target, n = t && t.tagName ? String(t.tagName).toUpperCase() : ''; return n === 'TEXTAREA' || n === 'INPUT' || n === 'BUTTON' && !!(t.closest && t.closest('#sicherung')); };
+      win.addEventListener('keydown', function (ev) { if (imFeld(ev)) return; if (RELEVANT[ev.code]) { ev.preventDefault(); e.druecke(ev.code); } });
+      win.addEventListener('keyup', function (ev) { if (imFeld(ev)) return; if (RELEVANT[ev.code]) { ev.preventDefault(); e.loese(ev.code); } });
       win.addEventListener('blur', function () { halt = {}; });
       win.addEventListener('pagehide', function () { halt = {}; });
     }
