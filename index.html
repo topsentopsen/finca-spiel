@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Finca v0.2 (Prototyp)</title>
+<title>Finca v0.3 (Prototyp)</title>
 <style>
   html, body { margin: 0; height: 100%; background: #3a2e48; overflow: hidden; }
   body { display: flex; align-items: center; justify-content: center; }
@@ -12,22 +12,67 @@
   #spiel { image-rendering: pixelated; image-rendering: crisp-edges; }
   #ui { position: absolute; left: 0; top: 0; pointer-events: none; }
   #spiel { touch-action: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+  /* Knoepfe (ab v0.3): Groesse folgt der Spielskalierung --s, auf dem Handy mindestens fingergross */
+  .knopf { position: absolute; border: 0; padding: 0; margin: 0; cursor: pointer; -webkit-tap-highlight-color: transparent;
+    touch-action: manipulation; font-family: "Trebuchet MS", Verdana, sans-serif; line-height: 1; }
+  .knopf svg { width: 100%; height: 100%; display: block; }
+  .knopf:focus-visible { outline: 3px solid #ffd36e; outline-offset: 1px; }
+  #oben { position: absolute; top: calc(var(--s, 3) * 1px); right: calc(var(--s, 3) * 2px); display: flex; gap: calc(var(--s, 3) * 2px); }
+  #oben .knopf { position: relative; width: max(26px, calc(var(--s, 3) * 9px)); height: max(26px, calc(var(--s, 3) * 9px));
+    border-radius: 30%; background: #fff4dc; box-shadow: 0 0 0 2px #4b3a5a; }
+  #ton-knopf .an { display: block; } #ton-knopf .weg { display: none; }
+  #ton-knopf.aus .an { display: none; } #ton-knopf.aus .weg { display: block; }
+  #ton-knopf.aus { background: #e3dbea; }
+  #touch { display: none; position: absolute; right: calc(var(--s, 3) * 4px); bottom: calc(var(--s, 3) * 46px);
+    flex-direction: column; gap: calc(var(--s, 3) * 4px); }
+  #rahmen.touch #touch { display: flex; }
+  #touch .knopf { position: relative; width: max(64px, calc(var(--s, 3) * 30px)); height: max(64px, calc(var(--s, 3) * 30px));
+    border-radius: 50%; box-shadow: 0 0 0 3px #4b3a5a, 0 4px 0 3px #4b3a5a; color: #4b3a5a; font-weight: bold;
+    font-size: max(12px, calc(var(--s, 3) * 5px)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; opacity: 0.93; }
+  #touch .knopf svg { width: 46%; height: 46%; }
+  #touch .knopf:active { transform: translateY(3px); box-shadow: 0 0 0 3px #4b3a5a, 0 1px 0 3px #4b3a5a; }
+  #knopf-sprechen { background: #c9f2e2; } #knopf-kochen { background: #ffd1e0; }
+  #hinweis { display: none; position: fixed; left: 0; right: 0; bottom: 12px; text-align: center; color: #fff4dc;
+    font: bold 15px "Trebuchet MS", Verdana, sans-serif; }
+  @media (orientation: portrait) and (pointer: coarse) { #hinweis { display: block; } }
 </style>
 </head>
 <body>
 <div id="rahmen">
   <canvas id="spiel" width="320" height="176"></canvas>
   <canvas id="ui" width="320" height="176"></canvas>
+  <div id="oben">
+    <button id="ton-knopf" class="knopf" type="button" title="Musik und Ton an oder aus (Taste M)" aria-label="Ton ausschalten">
+      <svg class="an" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="#ff9fb8" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M16 9c1.3 1.6 1.3 4.4 0 6M18.5 6.5c2.8 3 2.8 8 0 11" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
+      <svg class="weg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="#c9bcd8" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M16 9l5 6M21 9l-5 6" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
+    <button id="vollbild-knopf" class="knopf" type="button" title="Vollbild an oder aus" aria-label="Vollbild">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5" fill="none" stroke="#4b3a5a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
+  </div>
+  <div id="touch">
+    <button id="knopf-sprechen" class="knopf" type="button" aria-label="Sprechen">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-9l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" fill="#ffffff" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><circle cx="8" cy="10.5" r="1.3" fill="#4b3a5a"/><circle cx="12" cy="10.5" r="1.3" fill="#4b3a5a"/><circle cx="16" cy="10.5" r="1.3" fill="#4b3a5a"/></svg>
+      Sprechen
+    </button>
+    <button id="knopf-kochen" class="knopf" type="button" aria-label="Kochen">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v4a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z" fill="#ffffff" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M2 11h20M9 7c0-1.5 1-1.5 1-3M14 7c0-1.5 1-1.5 1-3" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
+      Kochen
+    </button>
+  </div>
 </div>
-<script src="js/rng.js?v=0.2"></script>
-<script src="js/karte.js?v=0.2"></script>
-<script src="js/pfad.js?v=0.2"></script>
-<script src="js/kamera.js?v=0.2"></script>
-<script src="js/eingabe.js?v=0.2"></script>
-<script src="js/uhr.js?v=0.2"></script>
-<script src="js/spieler.js?v=0.2"></script>
-<script src="js/gaeste.js?v=0.2"></script>
-<script src="js/render.js?v=0.2"></script>
-<script src="js/main.js?v=0.2"></script>
+<div id="hinweis">Tipp: Handy quer halten</div>
+<script src="js/rng.js?v=0.3"></script>
+<script src="js/karte.js?v=0.3"></script>
+<script src="js/pfad.js?v=0.3"></script>
+<script src="js/kamera.js?v=0.3"></script>
+<script src="js/eingabe.js?v=0.3"></script>
+<script src="js/uhr.js?v=0.3"></script>
+<script src="js/spieler.js?v=0.3"></script>
+<script src="js/gerichte.js?v=0.3"></script>
+<script src="js/gaeste.js?v=0.3"></script>
+<script src="js/render.js?v=0.3"></script>
+<script src="js/ton.js?v=0.3"></script>
+<script src="js/main.js?v=0.3"></script>
 </body>
 </html>

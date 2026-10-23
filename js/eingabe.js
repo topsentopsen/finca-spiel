@@ -7,6 +7,9 @@
     hoch: ['ArrowUp', 'KeyW'], runter: ['ArrowDown', 'KeyS'],
     links: ['ArrowLeft', 'KeyA'], rechts: ['ArrowRight', 'KeyD'],
     sprechen: ['KeyE'], weiter: ['Enter', 'NumpadEnter', 'Space'],
+    // ab v0.3: Kochen, Ton an/aus, Menue
+    kochen: ['KeyK'], stumm: ['KeyM'], abbruch: ['Escape', 'Backspace'],
+    wahl1: ['Digit1', 'Numpad1'], wahl2: ['Digit2', 'Numpad2'], wahl3: ['Digit3', 'Numpad3'],
     // Debug liegt ab v0.2 auf der Taste links neben der 1 (auf deutschen Tastaturen ^), kein Konflikt mit der Browser-Hilfe
     debug: ['Backquote']
   };
@@ -27,6 +30,9 @@
       neu: function (a) { return AKTIONEN[a].some(function (c) { return !!frisch[c]; }); },
       // Klick in internen Canvas-Pixeln (0..320, 0..176)
       klicke: function (x, y) { klicks.push({ x: x, y: y }); },
+      // Knopf auf dem Bildschirm: wirkt wie ein kurzer Tastendruck
+      tippe: function (a) { if (AKTIONEN[a]) frisch[AKTIONEN[a][0]] = true; },
+      touch: false,
       klicks: function () { return klicks; },
       ende: function () { frisch = {}; klicks = []; }
     };
@@ -38,6 +44,7 @@
     if (canvas && canvas.addEventListener) {
       canvas.addEventListener('pointerdown', function (ev) {
         if (ev.preventDefault) ev.preventDefault();
+        if (ev.pointerType === 'touch') e.touch = true;
         var rect = canvas.getBoundingClientRect();
         var p = zuIntern(ev.clientX, ev.clientY, rect, W || 320, H || 176);
         e.klicke(p.x, p.y);

@@ -3,7 +3,7 @@
 'use strict';
 var fs = require('fs'), path = require('path'), vm = require('vm');
 
-var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gaeste', 'render', 'main'];
+var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'gaeste', 'render', 'ton', 'main'];
 
 function ladeKontext(extra) {
   var ctx = { console: console, Math: Math };
@@ -197,11 +197,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.2', function () {
+test('Version: sichtbares Label ist v0.3', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.2');
+  gleich(D.VERSION, 'v0.3');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.2') >= 0, 'Titel enthaelt v0.2');
+  wahr(html.indexOf('Finca v0.3') >= 0, 'Titel enthaelt v0.3');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.3') >= 0, n + ' eingebunden'); });
 });
 test('Debug: F1 ist frei, Debug liegt auf Backquote', function () {
   var D = ladeKontext().Dorf;
@@ -314,11 +315,14 @@ test('Kochen: Klick auf den Herd, Biel kocht, Portionen stehen auf der Tafel', f
   var st = D.Spiel.erstelle({ seed: 1 });
   st.gaeste = [];
   gleich(D.Spiel.klick(st, 5 * 16 + 8, 2 * 16 + 8), 'kochen');
-  for (var i = 0; i < 60 * 25 && !st.kochen; i++) D.Spiel.schritt(st, 1 / 60);
+  for (var i = 0; i < 60 * 25 && !st.menue; i++) D.Spiel.schritt(st, 1 / 60);
+  wahr(st.menue, 'Menue offen');
+  st.eingabe.druecke('Digit1'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende();
   wahr(st.kochen, 'Kochen begonnen');
-  gleich(st.essen, 0);
+  gleich(st.teller.length, 0);
   for (i = 0; i < 60 * (D.Spiel.KOCHDAUER + 1); i++) D.Spiel.schritt(st, 1 / 60);
-  gleich(st.kochen, null); gleich(st.essen, D.Spiel.PORTIONEN, 'Portionen');
+  gleich(st.kochen, null); gleich(st.teller.length, D.Spiel.PORTIONEN, 'Portionen');
+  gleich(st.teller[0], 'paamboli');
 });
 test('Kochen: Taste E vor dem Herd', function () {
   var D = ladeKontext().Dorf;
@@ -326,17 +330,19 @@ test('Kochen: Taste E vor dem Herd', function () {
   st.gaeste = [];
   var h = st.karte.orte.herd[0];
   st.spieler.x = h.x * 16 + 8; st.spieler.y = h.y * 16 + 12;
+  st.eingabe.druecke('KeyE'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende(); st.eingabe.loese('KeyE');
+  wahr(st.menue, 'Menue offen'); wahr(!st.kochen);
   st.eingabe.druecke('KeyE'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende();
-  wahr(st.kochen, 'kocht');
+  wahr(st.kochen, 'kocht'); gleich(st.menue, null);
 });
 test('Kochen: hungriger Gast nimmt eine Portion und wird schneller satt', function () {
   var D = ladeKontext().Dorf;
   var st = D.Spiel.erstelle({ seed: 5 });
-  st.essen = 3;
+  st.teller = ['paamboli', 'paamboli', 'paamboli'];
   var mia = st.gaeste[0];
   mia.beduerfnisse = { satt: 20, spielen: 90, ruhe: 90 };
   for (var i = 0; i < 30 * 40 && mia.zustand !== 'aktiv'; i++) D.Spiel.schritt(st, 1 / 30);
-  gleich(mia.ziel, 'tafel'); wahr(mia.portion, 'Portion genommen'); gleich(st.essen, 2);
+  gleich(mia.ziel, 'tafel'); gleich(mia.portion, 'paamboli', 'Portion genommen'); gleich(st.teller.length, 2);
   var vorher = mia.beduerfnisse.satt;
   D.Gaeste.update(mia, st, 0, 0.1);
   var mit = mia.beduerfnisse.satt - vorher;
@@ -369,6 +375,268 @@ test('KI: lange Laeufe bleiben deterministisch und kein Gast steht in Moebeln', 
     D.Spiel.schritt(st, 1 / 30);
     if (i % 30 === 0) st.gaeste.forEach(function (gs) { var t = D.Gaeste.tileVon(gs); wahr(!st.karte.blockiert(t.x, t.y), gs.name + ' auf freier Kachel ' + t.x + ',' + t.y); });
   }
+});
+
+// ---------- Musik und Ton (v0.3) ----------
+function fakeSpeicher() { var d = {}; return { d: d, getItem: function (k) { return k in d ? d[k] : null; }, setItem: function (k, v) { d[k] = String(v); } }; }
+// Aufzeichnendes Ersatz-WebAudio: merkt sich jede Lautstaerke, die gesetzt wird
+function fakeAudio() {
+  var log = { kontexte: 0, quellen: 0, gains: [], ziele: [], oszi: 0 };
+  function param(v, istGain) {
+    function merke(x) { if (istGain) log.gains.push(x); }
+    return { value: v, setValueAtTime: merke, linearRampToValueAtTime: merke,
+      exponentialRampToValueAtTime: function () {}, setTargetAtTime: function (x) { if (istGain) log.ziele.push(x); }, cancelScheduledValues: function () {} };
+  }
+  function knoten(extra) { var k = { connect: function () {}, start: function () { log.quellen++; }, stop: function () {} }; Object.keys(extra || {}).forEach(function (n) { k[n] = extra[n]; }); return k; }
+  function AC() {
+    log.kontexte++;
+    this.currentTime = 0; this.sampleRate = 8000; this.state = 'running'; this.destination = {};
+  }
+  AC.prototype.createGain = function () { var g = knoten({ gain: param(1, true) }); var p = g.gain; var alt = p.value; Object.defineProperty(p, 'value', { get: function () { return alt; }, set: function (v) { alt = v; log.gains.push(v); } }); return g; };
+  AC.prototype.createBiquadFilter = function () { return knoten({ frequency: param(1000), Q: param(1), type: '' }); };
+  AC.prototype.createDynamicsCompressor = function () { return knoten(); };
+  AC.prototype.createDelay = function () { return knoten({ delayTime: param(0) }); };
+  AC.prototype.createStereoPanner = function () { return knoten({ pan: param(0) }); };
+  AC.prototype.createOscillator = function () { log.oszi++; return knoten({ frequency: param(440), type: 'sine' }); };
+  AC.prototype.createBufferSource = function () { return knoten({ buffer: null, loop: false, playbackRate: param(1) }); };
+  AC.prototype.createBuffer = function (ch, len) { var d = new Float32Array(len); return { getChannelData: function () { return d; } }; };
+  AC.prototype.resume = function () { this.state = 'running'; };
+  AC.prototype.suspend = function () { this.state = 'suspended'; };
+  return { AC: AC, log: log };
+}
+function fakeTonFenster(speicher, audio) {
+  var l = {}, takte = [];
+  return { l: l, takte: takte, localStorage: speicher, AudioContext: audio ? audio.AC : undefined,
+    addEventListener: function (n, f) { (l[n] = l[n] || []).push(f); },
+    setInterval: function (f) { takte.push(f); return takte.length; } };
+}
+
+test('Musik: ruhige Schleife in a-Moll, langsames Tempo, Melodie nur jede zweite Runde', function () {
+  var T = ladeKontext().Dorf.Ton;
+  wahr(T.BPM <= 80, 'langsam');
+  var a = T.noten(0), b = T.noten(1);
+  wahr(a.every(function (n) { return n.zeit >= 0 && n.zeit < 64; }), '8 Takte zu 8 Achteln');
+  gleich(a.filter(function (n) { return n.art === 'melodie'; }).length, 0, 'erste Runde nur Begleitung');
+  wahr(b.filter(function (n) { return n.art === 'melodie'; }).length > 10, 'zweite Runde mit Melodie');
+  var tonleiter = [9, 11, 0, 2, 4, 5, 7, 8];   // a-Moll mit gis
+  wahr(b.every(function (n) { return tonleiter.indexOf(n.midi % 12) >= 0; }), 'nur Toene aus a-Moll');
+  wahr(b.every(function (n) { return n.staerke <= 0.6; }), 'keine lauten Noten');
+  nah(T.mtof(69), 440, 1e-9);
+});
+test('Musik: gezupfte Saite ist begrenzt, klingt aus und ist reproduzierbar', function () {
+  var T = ladeKontext().Dorf.Ton;
+  var s = T.zupfe(220, 8000, 2, 5), s2 = T.zupfe(220, 8000, 2, 5);
+  gleich(s.length, 16000);
+  var max = 0, i, anf = 0, end = 0;
+  for (i = 0; i < s.length; i++) { max = Math.max(max, Math.abs(s[i])); if (s[i] !== s2[i]) throw new Error('nicht gleich'); }
+  for (i = 200; i < 1800; i++) anf += s[i] * s[i];
+  for (i = 13000; i < 14600; i++) end += s[i] * s[i];
+  wahr(max <= 1, 'begrenzt'); wahr(end < anf / 4, 'klingt aus');
+  gleich(s[0], 0, 'sanfter Einsatz ohne Knacken'); gleich(s[s.length - 1], 0, 'sanftes Ende');
+});
+test('Ton: ohne WebAudio laeuft das Spiel stumm weiter, Stumm wird gespeichert', function () {
+  var T = ladeKontext().Dorf.Ton, sp = fakeSpeicher();
+  var t = T.erstelle(fakeTonFenster(sp, null));
+  gleich(t.stumm, false, 'Standard: Ton an');
+  gleich(t.entsperre(), false); gleich(t.spiele('glocke'), false);
+  t.umschalten();
+  gleich(sp.d[T.SCHLUESSEL], '1');
+  gleich(T.erstelle(fakeTonFenster(sp, null)).stumm, true, 'nach Neuladen weiter stumm');
+  t.umschalten(); gleich(sp.d[T.SCHLUESSEL], '0');
+  var kaputt = { getItem: function () { throw new Error('privat'); }, setItem: function () { throw new Error('privat'); } };
+  var t2 = T.erstelle(fakeTonFenster(kaputt, null)); t2.umschalten(); gleich(t2.stumm, true, 'ohne Speicher kein Absturz');
+});
+test('Ton: startet erst nach der ersten Beruehrung, leise eingeblendet', function () {
+  var T = ladeKontext().Dorf.Ton, au = fakeAudio(), win = fakeTonFenster(fakeSpeicher(), au);
+  var t = T.erstelle(win);
+  gleich(au.log.kontexte, 0, 'vor der Beruehrung kein Audio');
+  gleich(t.spiele('glocke'), false);
+  wahr(win.l.pointerdown && win.l.keydown && win.l.touchend, 'wartet auf Beruehrung oder Taste');
+  win.l.pointerdown[0]({});
+  gleich(au.log.kontexte, 1); wahr(t.bereit);
+  wahr(au.log.ziele.length >= 1 && au.log.ziele[au.log.ziele.length - 1] === T.LAUT.gesamt, 'blendet auf Zielwert ein');
+  wahr(T.LAUT.gesamt * T.LAUT.musik <= 0.35, 'leise Grundlautstaerke');
+  gleich(win.takte.length, 1, 'Taktgeber laeuft');
+  win.takte[0]();
+  wahr(t.gespielt > 0, 'Noten geplant');
+  wahr(au.log.gains.every(function (v) { return v <= 1; }), 'nie lauter als 1 (' + Math.max.apply(null, au.log.gains) + ')');
+  var abHier = au.log.gains.length;
+  ['glocke', 'fertig', 'kochen', 'menue', 'schritt'].forEach(function (n) { gleich(t.spiele(n), true, n); });
+  gleich(t.spiele('quatsch'), false);
+  var effekte = au.log.gains.slice(abHier);
+  wahr(effekte.length >= 10, 'Effekte haben Lautstaerken');
+  wahr(effekte.every(function (v) { return v <= 0.06; }), 'Effekte sehr leise ' + effekte.join(' '));
+  t.umschalten();
+  gleich(au.log.ziele[au.log.ziele.length - 1], 0, 'Stumm blendet aus');
+  var vorher = t.gespielt; t.ctx.currentTime = 5; win.takte[0]();
+  gleich(t.gespielt, vorher, 'stumm: keine neuen Noten');
+  gleich(t.spiele('glocke'), false, 'stumm: keine Effekte');
+  t.umschalten(); win.takte[0]();
+  wahr(t.gespielt > vorher, 'wieder an: Musik laeuft weiter');
+});
+test('Ton: Spiel meldet Glocke beim Reden, Kochgeraeusch, Fertig und leise Schritte', function () {
+  var D = ladeKontext().Dorf;
+  var st = D.Spiel.erstelle({ seed: 3 });
+  var jonas = st.gaeste[1];
+  st.spieler.x = jonas.x - 14; st.spieler.y = jonas.y;
+  st.eingabe.druecke('KeyE'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende(); st.eingabe.loese('KeyE');
+  wahr(st.toene.indexOf('glocke') >= 0, 'Glocke beim Sprechen');
+  st = D.Spiel.erstelle({ seed: 1 }); st.gaeste = [];
+  st.eingabe.druecke('ArrowRight');
+  for (var i = 0; i < 60; i++) D.Spiel.schritt(st, 1 / 60);
+  var schritte = st.toene.filter(function (n) { return n === 'schritt'; }).length;
+  wahr(schritte >= 2 && schritte <= 6, 'Schritte pro Sekunde: ' + schritte);
+  st.eingabe.loese('ArrowRight');
+  st.toene.length = 0;
+  D.Spiel.kochen(st, 'ensaimada');
+  wahr(st.toene.indexOf('kochen') >= 0);
+  for (i = 0; i < 60 * 5; i++) D.Spiel.schritt(st, 1 / 60);
+  wahr(st.toene.indexOf('fertig') >= 0, 'Fertig-Glocke');
+});
+
+// ---------- Kochmenue und Gerichte (v0.3) ----------
+test('Gerichte: drei Gerichte mit unterschiedlicher Wirkung', function () {
+  var D = ladeKontext().Dorf, G = D.Gerichte;
+  gleich(G.REIHE.join(','), 'paamboli,ensaimada,tumbet');
+  gleich(G.hole('paamboli').name, 'Pa amb oli'); gleich(G.hole('ensaimada').name, 'Ensaïmada'); gleich(G.hole('tumbet').name, 'Tumbet');
+  wahr(G.hole('paamboli').satt > G.hole('tumbet').satt && G.hole('tumbet').satt > G.hole('ensaimada').satt, 'Pa amb oli macht am meisten satt');
+  wahr(G.hole('ensaimada').extra.spielen > 0, 'Ensaïmada gibt Spiellaune');
+  wahr(G.hole('tumbet').extra.ruhe > 0, 'Tumbet macht ruhig');
+  wahr(G.hole('tumbet').dauer > G.hole('paamboli').dauer && G.hole('paamboli').dauer > G.hole('ensaimada').dauer, 'Kochzeiten verschieden');
+  gleich(G.hole('tumbet').portionen, 4); gleich(G.hole('ensaimada').portionen, 2);
+});
+test('Kochmenue: Pfeile waehlen, Biel bleibt stehen, Esc schliesst', function () {
+  var D = ladeKontext().Dorf;
+  var st = D.Spiel.erstelle({ seed: 1 }); st.gaeste = [];
+  var h = st.karte.orte.herd[0];
+  st.spieler.x = h.x * 16 + 8; st.spieler.y = h.y * 16 + 12;
+  gleich(D.Spiel.zumHerd(st), 'menue');
+  gleich(st.menue.wahl, 0);
+  var x0 = st.spieler.x;
+  st.eingabe.druecke('ArrowRight'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende();
+  for (var i = 0; i < 30; i++) D.Spiel.schritt(st, 1 / 60);
+  st.eingabe.loese('ArrowRight');
+  gleich(st.menue.wahl, 1, 'zweites Gericht'); gleich(st.spieler.x, x0, 'Biel laeuft nicht weg');
+  st.eingabe.druecke('ArrowLeft'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende(); st.eingabe.loese('ArrowLeft');
+  st.eingabe.druecke('ArrowLeft'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende(); st.eingabe.loese('ArrowLeft');
+  gleich(st.menue.wahl, 2, 'rundherum zum dritten');
+  st.eingabe.druecke('Escape'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende();
+  gleich(st.menue, null); gleich(st.kochen, null);
+});
+test('Kochmenue: Tippen auf eine Karte kocht genau dieses Gericht, daneben tippen schliesst', function () {
+  var D = ladeKontext().Dorf;
+  var st = D.Spiel.erstelle({ seed: 1 }); st.gaeste = [];
+  var karten = D.Spiel.menueKarten();
+  gleich(karten.length, 3);
+  karten.forEach(function (k) { wahr(k.x >= 0 && k.y >= 12 && k.x + k.w <= 320 && k.y + k.h <= 176, 'Karte im Bild'); wahr(k.w >= 40 && k.h >= 40, 'gross genug zum Tippen'); });
+  D.Spiel.oeffneMenue(st);
+  gleich(D.Spiel.klickBild(st, 5, 170), 'zurueck'); gleich(st.menue, null);
+  D.Spiel.oeffneMenue(st);
+  var k = karten[2];
+  gleich(D.Spiel.klickBild(st, k.x + k.w / 2, k.y + k.h / 2), 'gekocht');
+  gleich(st.kochen.gericht, 'tumbet');
+  for (var i = 0; i < 60 * 9; i++) D.Spiel.schritt(st, 1 / 60);
+  gleich(st.teller.join(','), 'tumbet,tumbet,tumbet,tumbet');
+  D.Spiel.oeffneMenue(st); gleich(st.menue.wahl, 2, 'merkt sich die letzte Wahl');
+  D.Spiel.kochen(st, 'ensaimada');
+  for (i = 0; i < 60 * 5; i++) D.Spiel.schritt(st, 1 / 60);
+  gleich(st.teller.length, D.Spiel.TAFEL_MAX, 'Tafel voll');
+  gleich(D.Spiel.oeffneMenue(st), false, 'volle Tafel: kein Menue');
+});
+test('Kochknopf: vom Innenhof zum Herd laufen, Menue oeffnet sich, zweiter Druck kocht', function () {
+  var D = ladeKontext().Dorf;
+  var st = D.Spiel.erstelle({ seed: 1 }); st.gaeste = [];
+  st.eingabe.tippe('kochen'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende();
+  wahr(st.spieler.ziel, 'laeuft los');
+  for (var i = 0; i < 60 * 25 && !st.menue; i++) D.Spiel.schritt(st, 1 / 60);
+  wahr(st.menue, 'Menue am Herd');
+  st.eingabe.tippe('kochen'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende();
+  gleich(st.kochen.gericht, 'paamboli');
+});
+test('Gerichte: Gast nimmt sein Lieblingsgericht, Ensaïmada gibt Spiellaune, Tumbet Ruhe', function () {
+  var D = ladeKontext().Dorf;
+  var st = D.Spiel.erstelle({ seed: 5 });
+  st.teller = ['paamboli', 'tumbet', 'ensaimada'];
+  var mia = st.gaeste[0], jonas = st.gaeste[1];
+  gleich(mia.liebling, 'ensaimada'); gleich(jonas.liebling, 'tumbet');
+  D.Gaeste.nimmTeller(mia, st); gleich(mia.portion, 'ensaimada');
+  D.Gaeste.nimmTeller(jonas, st); gleich(jonas.portion, 'tumbet');
+  gleich(st.teller.join(','), 'paamboli');
+  function zuwachs(gast, gericht, wert) {
+    gast.zustand = 'aktiv'; gast.ziel = 'tafel'; gast.portion = gericht;
+    gast.beduerfnisse = { satt: 40, spielen: 40, ruhe: 40 };
+    D.Gaeste.update(gast, st, 0, 0.1);
+    return gast.beduerfnisse[wert] - 40 + D.Gaeste.BASIS[wert] * gast.profil[wert] * 0.1;
+  }
+  wahr(zuwachs(mia, 'ensaimada', 'spielen') > 1, 'Ensaïmada: Spielen steigt');
+  nah(zuwachs(mia, 'paamboli', 'spielen'), 0, 1e-9, 'Pa amb oli: Spielen bleibt');
+  wahr(zuwachs(jonas, 'tumbet', 'ruhe') > 1, 'Tumbet: Ruhe steigt');
+  wahr(zuwachs(jonas, 'paamboli', 'satt') > zuwachs(jonas, 'ensaimada', 'satt'), 'Pa amb oli macht satter');
+  mia.zustand = 'aktiv'; mia.ziel = 'tafel'; mia.portion = 'ensaimada';
+  wahr(/Ensaïmada/.test(D.Gaeste.spruch(mia, st.rng)), 'Mia freut sich ueber Ensaïmada');
+});
+
+// ---------- Knoepfe, Touch und Vollbild (v0.3) ----------
+test('Knoepfe: Ton, Vollbild, Sprechen und Kochen im HTML, keine fremden Quellen', function () {
+  var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  ['ton-knopf', 'vollbild-knopf', 'knopf-sprechen', 'knopf-kochen'].forEach(function (id) {
+    wahr(new RegExp('<button id="' + id + '"[^>]*aria-label="').test(html), id + ' mit Beschriftung');
+  });
+  wahr(/>\s*Sprechen\s*</.test(html) && /<\/svg>\s*Kochen\s*</.test(html), 'Knoepfe sind beschriftet');
+  wahr(!/https?:\/\//.test(html.replace(/http:\/\/www\.w3\.org\/2000\/svg/g, '')), 'keine externen Adressen');
+  DATEIEN.forEach(function (n) { wahr(!/https?:\/\//.test(fs.readFileSync(path.join(__dirname, '..', 'js', n + '.js'), 'utf8')), n + ' ohne Netz'); });
+});
+test('Smoke: Taste M, Lautsprecher-Knopf, Touch-Knoepfe und Vollbild im Browser', function () {
+  function fakeCtx() { return new Proxy({}, { get: function (t, k) { if (k in t) return t[k]; if (k === 'measureText') return function (s) { return { width: String(s).length * 4 }; }; return function () {}; }, set: function (t, k, v) { t[k] = v; return true; } }); }
+  function el(id) {
+    var l = {}, attr = {};
+    return { id: id, l: l, attr: attr, style: { setProperty: function (k, v) { this[k] = v; } }, className: 'knopf', classList: { an: {}, toggle: function (k, v) { this.an[k] = !!v; } },
+      addEventListener: function (n, f) { (l[n] = l[n] || []).push(f); }, setAttribute: function (k, v) { attr[k] = v; },
+      klick: function () { (l.click || []).forEach(function (f) { f({ preventDefault: function () {} }); }); },
+      width: 320, height: 176, getContext: function () { return fakeCtx(); }, getBoundingClientRect: function () { return { left: 0, top: 0, width: 640, height: 352 }; } };
+  }
+  var els = {}; ['spiel', 'ui', 'rahmen', 'ton-knopf', 'vollbild-knopf', 'knopf-sprechen', 'knopf-kochen'].forEach(function (id) { els[id] = el(id); });
+  var voll = 0, queue = [], listener = {}, sp = fakeSpeicher();
+  var win = {
+    innerWidth: 640, innerHeight: 400, devicePixelRatio: 1, localStorage: sp, navigator: { maxTouchPoints: 5 },
+    matchMedia: function () { return { matches: true }; },
+    addEventListener: function (n, f) { (listener[n] = listener[n] || []).push(f); },
+    requestAnimationFrame: function (f) { queue.push(f); }, setInterval: function () { return 1; }
+  };
+  var doc = { getElementById: function (id) { return els[id] || null; }, documentElement: { requestFullscreen: function () { voll++; } }, addEventListener: function () {} };
+  var ctx = ladeKontext({ window: win, document: doc });
+  listener.load[0]();
+  var h = ctx.Dorf.Spiel.laufend, t = 0;
+  function frames(n) { for (var i = 0; i < n; i++) { var f = queue.shift(); t += 16.7; f(t); } }
+  frames(2);
+  gleich(els.rahmen.style['--s'], '2', 'Skalierung fuer die Knoepfe');
+  wahr(els.rahmen.classList.an.touch, 'Touch-Knoepfe sichtbar');
+  gleich(h.st.ton.stumm, false);
+  listener.keydown.forEach(function (f) { f({ code: 'KeyM', preventDefault: function () {} }); });
+  frames(1);
+  listener.keyup.forEach(function (f) { f({ code: 'KeyM', preventDefault: function () {} }); });
+  gleich(h.st.ton.stumm, true, 'M schaltet stumm'); gleich(sp.d['finca.stumm'], '1', 'gespeichert');
+  gleich(els['ton-knopf'].className, 'knopf aus', 'Knopf zeigt stumm');
+  els['ton-knopf'].klick();
+  gleich(h.st.ton.stumm, false, 'Lautsprecher-Knopf schaltet wieder an'); gleich(els['ton-knopf'].attr['aria-pressed'], 'false');
+  els['vollbild-knopf'].klick(); gleich(voll, 1, 'Vollbild angefragt');
+  els['knopf-kochen'].klick(); frames(1);
+  wahr(h.st.spieler.ziel, 'Kochknopf: Biel laeuft zum Herd');
+  frames(60 * 20);
+  wahr(h.st.menue, 'Kochmenue offen');
+  els['knopf-kochen'].klick(); frames(1);
+  wahr(h.st.kochen, 'Kochknopf waehlt');
+  els['knopf-sprechen'].klick(); frames(1);
+  wahr(h.st.blase, 'Sprechknopf wie Taste E');
+});
+test('Skalierung: kleines Handy bekommt krumme Skalierung statt winzig', function () {
+  function fakeCtx() { return new Proxy({}, { get: function (t, k) { if (k in t) return t[k]; return function () { return { width: 4 }; }; }, set: function (t, k, v) { t[k] = v; return true; } }); }
+  function cv() { return { width: 320, height: 176, style: {}, getContext: function () { return fakeCtx(); }, addEventListener: function () {}, getBoundingClientRect: function () { return { left: 0, top: 0, width: 1, height: 1 }; } }; }
+  var c = { spiel: cv(), ui: cv() }, listener = {};
+  var win = { innerWidth: 568, innerHeight: 320, devicePixelRatio: 2, addEventListener: function (n, f) { (listener[n] = listener[n] || []).push(f); }, requestAnimationFrame: function () {} };
+  var ctx = ladeKontext({ window: win, document: { getElementById: function (id) { return c[id] || null; } } });
+  listener.load[0]();
+  gleich(c.spiel.style.width, (320 * 1.77) + 'px');
 });
 
 // ---------- Ausfuehren ----------

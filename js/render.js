@@ -146,12 +146,26 @@
     // Tischlaeufer in Rosa
     r(c, sx + (links ? 2 : 0), sy + 6, K - (links ? 2 : 0) - (rechts ? 2 : 0), 2, '#ffd9e4');
     if (rechts) { kreis(c, sx + 8, sy + 7, 3, P.kontur); kreis(c, sx + 8, sy + 7, 2, '#ffd36e'); r(c, sx + 7, sy + 5, 2, 1, '#ff9a8a'); }
-    var essen = st ? st.essen : 0, ersteX = 5;
-    for (var i = 0; i < essen && i < TELLER.length; i++) {
+    var teller = st && st.teller ? st.teller : [], ersteX = 5;
+    for (var i = 0; i < teller.length && i < TELLER.length; i++) {
       var tx = TELLER[i][0] - (x - ersteX) * K;
       if (tx < 3 || tx > 13) continue;
-      kreis(c, sx + tx, sy + TELLER[i][1], 3, P.kontur); kreis(c, sx + tx, sy + TELLER[i][1], 2, '#ffffff');
-      rr(c, sx + tx - 2, sy + TELLER[i][1] - 2, 4, 3, '#f3c27a'); r(c, sx + tx - 1, sy + TELLER[i][1] - 2, 2, 1, '#ff7a6b');
+      zeichneTeller(c, teller[i], sx + tx, sy + TELLER[i][1]);
+    }
+  }
+  // Teller mit Gericht, Mitte cx,cy (klein, etwa 7x7)
+  function zeichneTeller(c, id, cx, cy) {
+    kreis(c, cx, cy, 3, P.kontur); kreis(c, cx, cy, 2, '#ffffff');
+    zeichneEssen(c, id, cx, cy);
+  }
+  function zeichneEssen(c, id, cx, cy) {
+    if (id === 'ensaimada') {
+      kreis(c, cx, cy - 1, 2, '#e8a865'); r(c, cx - 1, cy - 2, 2, 2, '#f8c98a'); r(c, cx, cy - 1, 1, 1, '#c98450');
+      r(c, cx - 2, cy - 2, 1, 1, '#ffffff'); r(c, cx + 1, cy - 3, 1, 1, '#ffffff'); r(c, cx + 1, cy, 1, 1, '#ffffff');
+    } else if (id === 'tumbet') {
+      rr(c, cx - 2, cy - 2, 5, 3, '#ff9a6b'); r(c, cx - 1, cy - 2, 1, 1, '#b48ae0'); r(c, cx + 1, cy - 1, 1, 1, '#8fd46b'); r(c, cx, cy - 2, 1, 1, '#ffd36e');
+    } else {
+      rr(c, cx - 2, cy - 2, 4, 3, '#f3c27a'); r(c, cx - 1, cy - 2, 2, 1, '#ff7a6b'); r(c, cx + 1, cy - 1, 1, 1, '#9fd86b');
     }
   }
   function zeichneTeppich(c, karte, x, y, sx, sy) {
@@ -363,6 +377,45 @@
     var anteil = 1 - st.kochen.rest / st.kochen.dauer;
     pille(c, sx - 4, sy - 22, 24, 6, '#ffffff');
     r(c, sx - 2, sy - 20, Math.round(20 * anteil), 2, '#ff9fb8');
+    zeichneTeller(c, st.kochen.gericht, sx + 26, sy - 19);
+  }
+
+  // Zeilen umbrechen (gemessen auf der UI-Ebene)
+  function umbruch(R, s, breite, groesse) {
+    var c = R.ui || R.ctx;
+    c.font = (groesse || 7) + 'px "Trebuchet MS", Verdana, sans-serif';
+    var woerter = String(s).split(' '), zeilen = [], z = '';
+    woerter.forEach(function (w) {
+      var probe = z ? z + ' ' + w : w;
+      if (z && c.measureText(probe).width > breite) { zeilen.push(z); z = w; } else z = probe;
+    });
+    if (z) zeilen.push(z);
+    return zeilen;
+  }
+
+  // Kochmenue: drei Karten mit Gericht, Name und Wirkung
+  function zeichneMenue(R, st) {
+    var c = R.ctx, M = Dorf.Spiel.MENUE, karten = Dorf.Spiel.menueKarten(), wahl = st.menue.wahl, z = st.menue.t || 0;
+    c.fillStyle = 'rgba(75,58,90,0.35)'; c.fillRect(0, 0, W, H);
+    pille(c, M.x, M.y, M.w, M.h, P.box);
+    pille(c, M.x + 70, M.y - 6, 100, 13, '#ffd1e0');
+    text(R, 'Was kochst du?', W / 2, M.y - 3, { align: 'center', fett: true, groesse: 8 });
+    karten.forEach(function (k, i) {
+      var G = Dorf.Gerichte.hole(k.id), aktiv = i === wahl, hop = aktiv ? Math.round(Math.abs(Math.sin(z * 4)) * 2) : 0;
+      pille(c, k.x, k.y - hop, k.w, k.h, aktiv ? '#ffe3ec' : '#fff4dc');
+      if (aktiv) { r(c, k.x + 2, k.y - hop + k.h - 4, k.w - 4, 2, '#ff9fb8'); herz(c, k.x + k.w - 10, k.y - hop + 4, '#ff7fa0'); }
+      kreis(c, k.x + 7, k.y - hop + 7, 4, P.kontur); kreis(c, k.x + 7, k.y - hop + 7, 3, aktiv ? '#ff9fb8' : '#e2d6f5');
+      text(R, String(i + 1), k.x + 7, k.y - hop + 4, { align: 'center', fett: true, groesse: 6, farbe: aktiv ? '#ffffff' : P.kontur });
+      // grosser Teller
+      c.save(); c.translate(k.x + k.w / 2, k.y - hop + 19); c.scale(3, 3);
+      zeichneTeller(c, k.id, 0, 0);
+      c.restore();
+      text(R, G.name, k.x + k.w / 2, k.y - hop + 33, { align: 'center', fett: true, groesse: 7 });
+      umbruch(R, G.wirkung, k.w - 8, 6).slice(0, 3).forEach(function (zeile, j) {
+        text(R, zeile, k.x + k.w / 2, k.y - hop + 43 + j * 7, { align: 'center', groesse: 6, farbe: '#7a5a9a' });
+      });
+    });
+    text(R, 'Tippen oder 1, 2, 3 · Pfeile und E · Esc: zurück', W / 2, M.y + M.h - 8, { align: 'center', groesse: 6, farbe: '#7a5a9a' });
   }
 
   // ---------- Text (scharf auf eigener UI-Ebene) ----------
@@ -428,14 +481,17 @@
     // HUD oben
     c.fillStyle = 'rgba(75,58,90,0.82)'; c.fillRect(0, 0, W, 11);
     text(R, 'Tag ' + st.uhr.tag + '   ' + Dorf.Uhr.text(st.uhr) + '   ' + Dorf.Uhr.phase(st.uhr), 4, 2, { farbe: '#fff4dc', fett: true });
-    if (st.essen > 0) {
-      kreis(c, 150, 5, 3, '#ffffff'); r(c, 148, 4, 4, 2, '#f3c27a');
-      text(R, '× ' + st.essen, 155, 2, { farbe: '#ffe7b0', fett: true });
+    var tl = st.teller || [];
+    if (tl.length > 0) {
+      zeichneTeller(c, tl[0], 116, 6);
+      text(R, '× ' + tl.length, 121, 2, { farbe: '#ffe7b0', fett: true });
     }
-    text(R, 'Finca ' + (Dorf.VERSION || '') + ' · Klick: laufen · E: sprechen', W - 4, 2, { farbe: '#e2d6f5', align: 'right' });
+    // rechts oben sitzen die Knoepfe fuer Ton und Vollbild
+    var hilfe = R.touch ? (Dorf.VERSION || '') : (Dorf.VERSION || '') + ' · E: sprechen · K: kochen · M: Ton';
+    text(R, hilfe, W - (R.touch ? 52 : 28), 2, { farbe: '#e2d6f5', align: 'right' });
 
     // Sprechblase (Dialogbox unten)
-    if (st.blase && !st.abend) {
+    if (st.blase && !st.abend && !st.menue) {
       var bf = { Biel: '#ffe0b8', Mia: '#ffd1e0', Jonas: '#c9f2e2' }[st.blase.sprecher] || '#ffe0b8';
       pille(c, 6, 140, W - 12, 32, P.box);
       pille(c, 10, 133, 46, 11, bf);
@@ -443,6 +499,7 @@
       text(R, st.blase.text, 14, 150, { groesse: 8 });
     }
 
+    if (st.menue && !st.abend) zeichneMenue(R, st);
     if (st.debug) zeichneDebug(R, st);
 
     // Abendszene
@@ -462,7 +519,7 @@
     c.fillStyle = 'rgba(40,30,55,0.78)'; c.fillRect(2, 14, 170, 62);
     var t = Dorf.Gaeste.tileVon(st.spieler), z = 16;
     text(R, 'FPS ' + Math.round(st.fps || 0) + '  Seed ' + st.rng.seed + '  ' + (Dorf.VERSION || ''), 5, z, { farbe: '#b6f5c8' }); z += 9;
-    text(R, 'Biel Kachel ' + t.x + ',' + t.y + '  Tafel ' + st.essen, 5, z, { farbe: '#b6f5c8' }); z += 9;
+    text(R, 'Biel Kachel ' + t.x + ',' + t.y + '  Tafel ' + (st.teller || []).join(','), 5, z, { farbe: '#b6f5c8' }); z += 9;
     st.gaeste.forEach(function (gs) {
       var b = gs.beduerfnisse;
       text(R, gs.name + ': Satt ' + b.satt.toFixed(0) + '  Spielen ' + b.spielen.toFixed(0) + '  Ruhe ' + (b.ruhe !== undefined ? b.ruhe.toFixed(0) : '-'), 5, z, { farbe: '#ffe7b0' }); z += 8;
@@ -470,5 +527,5 @@
     });
   }
 
-  Dorf.Render = { W: W, H: H, P: P, BIEL: BIEL, erstelle: erstelle, zeichne: zeichne, zeichnePerson: zeichnePerson };
+  Dorf.Render = { W: W, H: H, P: P, BIEL: BIEL, erstelle: erstelle, zeichne: zeichne, zeichnePerson: zeichnePerson, zeichneTeller: zeichneTeller, umbruch: umbruch };
 })(globalThis);
