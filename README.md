@@ -1,4 +1,4 @@
-# Finca v0.6
+# Finca v0.7
 
 A small browser game with a handheld look, written in pure JavaScript. There is no build, no npm and there are no external assets. Music and sounds are generated in code with WebAudio.
 
@@ -34,8 +34,13 @@ The game remembers where you were: day, clock time, hearts, basket, garden and t
 
 "Neu anfangen" (round arrow button) asks first and then starts again at day 1. The sound setting (on or off) has its own key and stays as it was.
 
+## Day length (from v0.7)
+A game day lasts at most 15 real minutes of active play. The normal pace is about 40 seconds per game hour, so a day without pauses takes about 11 minutes. If the clock falls behind (an open question, a slow device), it gently speeds up so the evening always arrives in time. The time keeps counting in the cooking menu and in the start over question, it is saved with the game, and "Neu anfangen" or reloading does not reset it. A hidden tab counts as a pause. About 90 seconds before the limit (or from 21:30 game time) dusk comes: the sky in the day arc turns to night, the moon rises, windows and lanterns switch on one by one with a soft chime, and then a circle closes around Biel before the "Bona nit" scene.
+
 ## For children who cannot read yet
 Everything important can be understood without reading:
+- The top left shows pictures instead of text: a small day arc with the sun (or the moon at night), a face for every guest with five hearts below (a gold ring when all five are full) and the basket with the harvest.
+- Every tap shows a small ring where the finger touched. Biel wears a straw hat and stands on a soft golden ring.
 - If nothing happens for a few seconds, a pulsing pink arrow with a small picture bubble shows the next useful step (speech bubble for a guest, the fruit for a plant, a pot for the stove, a carrot for Bruna), with a soft ring on the ground and a quiet "pling" at most every 20 seconds. Targets off screen get a round badge with an arrow at the edge. The hint waits longer once a child has done that action a few times, and disappears on the next tap.
 - In the cooking menu the dish that works best right now gets the arrow, dishes with missing ingredients look faded and cookable ones get a green check.
 - If an ingredient is missing, Biel shows a thought bubble with the missing fruit and a questioning "hmm"; the arrow then points to the right plant. Tapping an unripe plant makes it wiggle with a little sprout in the bubble.
@@ -104,9 +109,10 @@ Developer helpers: `?start=x,y` places Biel on a tile, `?debug=1` opens the debu
 ```
 node tests/run.js
 ```
-Uses only Node's built-in `vm` module. Nothing has to be installed. 74 tests, including a ten day soak test with random taps, keys, start over questions and a save and load every day.
+Uses only Node's built-in `vm` module. Nothing has to be installed. 85 tests, including a ten day soak test with random taps, keys, start over questions and a save and load every day.
 
 ## Version history
+- **v0.7** (23.10.2026): new look after a design review. Calmer pastel palette with darker, quieter ground and stronger character colors, outlines in the color of each object, silver green olive trees, a wooden frame around the garden bed, sparse courtyard stones and a stone ring around the well. Light is now multiplied with a color per time of day, and at dusk windows, five lanterns, the stove and a little lantern in Biel's hand glow. Text free HUD with day arc, guest faces and hearts. Biel with a straw hat and a ring under his feet, tap ring, rounded system font, round buttons with colored rims, a play triangle instead of a green cross on "Nein". Hard limit of 15 real minutes per game day with a visible dusk and a closing circle before "Bona nit".
 - **v0.6** (23.10.2026): polish and stability. Saved game in the browser (day, hearts, basket, clock, garden, table) with a format number, gentle "Neu anfangen" button with a picture question, sound setting kept. Picture hints for children who cannot read yet: pulsing arrow with an icon bubble after a short pause, thought bubble for missing ingredients, fruit flying into the basket, wiggling unripe plants, pulsing sun in the evening, new soft sounds. Error guard so the loop never freezes, evening tap lock, double tap filter, bigger touch buttons and a layout for small phones held sideways. Background drawn once and cached. Rounder Padrina with a pink hair band. Ten day soak test.
 - **v0.5** (23.10.2026): small garden bed with tomatoes and carrots plus an orange tree and olive trees, harvest by click, tap or E, plants grow back gently during the day and are all ripe again each morning. Dishes use ingredients but stay forgiving: Pa amb oli always works from a small basic stock, fresh ingredients give an extra plate. Feed Bruna carrots for a cute munching reaction and an extra heart for nearby guests. Third guest Padrina, a grandmother who loves the couch and Pa amb oli, with her own sayings; the daily goal now counts all three guests.
 - **v0.4** (23.10.2026): hearts for every guest and a gentle daily goal "Alle Gäste glücklich" with a soft celebration in the evening scene, no failing. Bruna the donkey on a small fenced meadow and a gecko on the house wall, pet them by click, tap or E for a heart and a little sound. Evening music variant and quiet crickets at night, crossfading with the day loop.

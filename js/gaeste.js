@@ -10,12 +10,12 @@
 
   var DEFS = {
     mia: { name: 'Mia', alter: 7, liebling: 'ensaimada', profil: { satt: 1.3, spielen: 1.4, ruhe: 0.6 }, start: { satt: 55, spielen: 45, ruhe: 85 },
-      aussehen: { kind: true, haut: '#f3c29b', haar: '#c98b4a', bart: null, zoepfe: true, hemd: '#ffb3c7', hemd2: '#f493ad', hose: '#ffb3c7', schuhe: '#ffffff', farbe: '#ff7fa0' } },
+      aussehen: { kind: true, haut: '#f3c29b', haar: '#e07a4a', haarGlanz: '#f0a070', bart: null, zoepfe: true, hemd: '#ff7fa6', hemd2: '#e45f8a', hose: '#ff7fa6', schuhe: '#ffffff', farbe: '#ff7fa0' } },
     jonas: { name: 'Jonas', alter: 41, liebling: 'tumbet', profil: { satt: 1.0, spielen: 0.8, ruhe: 1.2 }, start: { satt: 34, spielen: 70, ruhe: 50 },
-      aussehen: { kind: false, haut: '#eab48c', haar: '#9a6a3e', bart: null, hemd: '#aeeed6', hemd2: '#86d4b8', hose: '#9cb8ee', schuhe: '#5a4a44', farbe: '#4fb594' } },
+      aussehen: { kind: false, haut: '#eab48c', haar: '#9a6a3e', bart: null, hemd: '#4fc0b0', hemd2: '#33998e', hose: '#d9b77a', schuhe: '#5a4a44', farbe: '#4fb594' } },
     // ab v0.5: Padrina, die Oma. Liebt das Sofa, geht gemuetlich und mag Pa amb oli wie frueher
     padrina: { name: 'Padrina', alter: 78, liebling: 'paamboli', tempo: 28, profil: { satt: 0.9, spielen: 0.4, ruhe: 1.6 }, start: { satt: 50, spielen: 80, ruhe: 42 },
-      aussehen: { kind: false, haut: '#f0c4a4', haar: '#cfc8da', haarGlanz: '#f4f1f8', bart: null, dutt: true, brille: '#7a5a9a', hemd: '#a9d2ff', hemd2: '#88b6ef', hose: '#a9d2ff', schuhe: '#7a6a8a', farbe: '#a77fd6' } }
+      aussehen: { kind: false, haut: '#f0c4a4', haar: '#cfc8da', haarGlanz: '#f4f1f8', bart: null, dutt: true, brille: '#7a5a9a', hemd: '#b9a3f5', hemd2: '#8a6fc8', hose: '#5a4370', schuhe: '#7a6a8a', farbe: '#a77fd6' } }
   };
   var REIHE = ['mia', 'jonas', 'padrina'];
 

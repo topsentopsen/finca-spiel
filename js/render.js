@@ -3,19 +3,29 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var W = 320, H = 176, K = 16;
+  // ab v0.7: runde Systemschrift, wenn das Geraet eine hat (keine fremden Schriften)
+  var SCHRIFT = 'ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif';
 
-  // v0.2: kraeftigere Pastelltoene, weiche dunkle Lila-Kontur statt Fast-Schwarz
+  // v0.7: neue Palette nach dem Design Review. Boden ruhiger und dunkler, Figuren am kraeftigsten,
+  // Konturen in der Farbe des Gegenstands (Laub gruen, Holz braun, Stein grau-lila), nur Figuren mit Tinte.
   var P = {
-    kontur: '#4b3a5a', gras: '#b8eea0', gras2: '#97d883', gras3: '#d6f8be', weg: '#ffe4bb', weg2: '#f1c994',
-    pflaster: '#ffeed4', pflaster2: '#efd3ab', boden: '#f8d3a6', boden2: '#e6b483',
-    fliese1: '#fffaf0', fliese2: '#c6ecf7', wasser: '#8fe1f8', wasser2: '#e0f9ff', wasser3: '#68c4e8',
-    rand: '#fff4e3', rand2: '#eedcc0', mauerTop: '#f9e2bd', mauerFront: '#e8bd8f', mauerFuge: '#efcd9f',
-    dach: '#ffb2a2', dach2: '#f29486', putz: '#fff8ec', putz2: '#f1e3cd', fenster: '#a3d8ff',
-    holz: '#dc9e70', holz2: '#bb7d54', tuch: '#ffffff', herd: '#e2e7f3', herd2: '#adb5c8',
-    erde: '#d29e78', erde2: '#b3805b', spross: '#80d66b', blatt: '#ace38c', blatt2: '#88cc70', blatt3: '#d8f7ac', stamm: '#ab7550',
-    stein: '#f1e8f7', stein2: '#d2c5de', schatten: 'rgba(75,58,90,0.22)', box: '#fffaf3',
-    couch: '#cbb8ff', couch2: '#aa97ec', kissen: '#ffd1e0', teppich: '#ffc6d8', teppich2: '#ffe6ee',
-    topf: '#f6a383', topf2: '#d9805f', bett: '#c3e8ff', decke: '#ffd5e2', backe: '#ffadbb', augeHell: '#ffffff'
+    kontur: '#4a3560', konturTief: '#3a2a4e', konturGruen: '#3f6b4a', konturHolz: '#7a4a3a', konturStein: '#8a7c9c', konturDach: '#9a4a4a',
+    gras: '#a8d68f', gras2: '#8cc27a', gras3: '#c4e6a4', weg: '#dcb98e', weg2: '#c79f74',
+    pflaster: '#e8d3ae', pflaster2: '#d6bb90', boden: '#eab48c', boden2: '#d39470',
+    fliese1: '#f7efe2', fliese2: '#8fcbe3', wasser: '#7fd3ec', wasser2: '#e8fbff', wasser3: '#4fb0d6',
+    rand: '#f4e6d0', rand2: '#d9c2a0', mauerTop: '#f1d6ac', mauerFront: '#d9a878', mauerFuge: '#c39066',
+    dach: '#f08a6a', dach2: '#d2694f', putz: '#fff3e2', putz2: '#ecd6b8', fenster: '#9fd4f0', fensterNacht: '#ffd77a', fensterKern: '#fff1c2',
+    holz: '#c98b5e', holz2: '#a56c48', tuch: '#fffdf8', herd: '#dfe3ef', herd2: '#9aa3bb',
+    erde: '#b98463', erde2: '#9c6a50', spross: '#6cc75a', blatt: '#84c27a', blatt2: '#5f9e64', blatt3: '#b6e39a', stamm: '#9a6a4a',
+    olive1: '#c9d9b0', olive2: '#9fb98a', olive3: '#7c9a72',
+    stein: '#ece4f0', stein2: '#cfc2da', schatten: 'rgba(74,52,120,0.26)', box: '#fff8ee',
+    couch: '#b9a3f5', couch2: '#9580dc', kissen: '#ffc0d4', teppich: '#f7a9bf', teppich2: '#ffdbe6',
+    topf: '#ef9470', topf2: '#cf6e52', bett: '#b3dcf5', decke: '#ffc0d4', backe: '#ff9fb0', augeHell: '#ffffff',
+    // Oberflaeche
+    uiFlaeche: '#fff8ee', uiFlaeche2: '#fbe9d4', uiTinte: '#4a3560', uiTinteWeich: '#8a74a8',
+    herzVoll: '#ff5f8a', herzLicht: '#ffc2d3', herzLeer: '#f3e3ec', herzGold: '#ffd75e', hinweis: '#ffd75e',
+    akzentErnten: '#7ed492', akzentSprechen: '#5ec8b8', akzentKochen: '#ff8f8f',
+    laterne: '#ffd77a', glutWarm: '#ffb84d', herdGlut: '#ff8a4d', mond: '#fff1c2'
   };
 
   function erstelle(canvas, ui, doc) {
@@ -289,7 +299,7 @@
     var sp = st.spieler, n = d.bilder.length, w = 8 + n * 11, x = Math.round(sp.x - cx), y = Math.round(sp.y - cy) - 44;
     var auf = Math.min(1, d.t * 5), weg = Math.min(1, d.rest * 2);
     c.globalAlpha = Math.min(auf, weg);
-    var bx = Math.max(2, Math.min(W - w - 2, x + 2)), seitlich = y - 9 < 66 && bx < 78;
+    var bx = Math.max(2, Math.min(W - w - 2, x + 2)), seitlich = y - 9 < 42 && bx < 78;
     if (seitlich) { bx = Math.max(78, x + 14); y += 14; }   // nicht unter Ziel und Korb oben links, dann neben den Kopf
     if (seitlich) { kreis(c, x + 9, y + 8, 2, P.kontur); kreis(c, x + 9, y + 8, 1, P.box); kreis(c, x + 14, y + 3, 3, P.kontur); kreis(c, x + 14, y + 3, 2, P.box); }
     else { kreis(c, x + 3, y + 18, 2, P.kontur); kreis(c, x + 3, y + 18, 1, P.box); kreis(c, x + 6, y + 13, 3, P.kontur); kreis(c, x + 6, y + 13, 2, P.box); }
@@ -352,11 +362,11 @@
         r(c, sx + ((hs >> 3) % 12) + 1, sy + ((hs >> 8) % 12) + 2, 1, 1, P.weg2);
         break;
       case T.PFLASTER: case T.BRUNNEN: case T.TAFEL:
-        r(c, sx, sy, K, K, P.pflaster2);
-        var ver = (y % 2) ? 4 : 0;
-        rr(c, sx - ver, sy, 7, 7, P.pflaster); rr(c, sx + 8 - ver, sy, 7, 7, P.pflaster); rr(c, sx + 16 - ver, sy, 7, 7, P.pflaster);
-        rr(c, sx + 4 - ver, sy + 8, 7, 7, P.pflaster); rr(c, sx + 12 - ver, sy + 8, 7, 7, P.pflaster);
-        if (ver) rr(c, sx - 4, sy + 8, 7, 7, P.pflaster);
+        // ab v0.7: ruhiger Sandstein, nur hier und da ein Stein (vorher war alles voller Fugen)
+        r(c, sx, sy, K, K, P.pflaster);
+        var hp = ((x * 73856093) ^ (y * 19349663)) >>> 0, v = hp % 100;
+        if (v >= 55) { var ax = 2 + (hp >>> 8) % 8, ay = 2 + (hp >>> 12) % 9; rr(c, sx + ax, sy + ay, 5, 3, P.pflaster2); r(c, sx + ax + 1, sy + ay, 3, 1, P.rand); }
+        if (v >= 85) { var bx2 = 1 + (hp >>> 16) % 11, by2 = 1 + (hp >>> 20) % 11; rr(c, sx + bx2, sy + by2, 4, 3, P.pflaster2); r(c, sx + bx2 + 1, sy + by2, 2, 1, P.rand); }
         if (t === T.TAFEL) zeichneTafel(c, karte, x, y, sx, sy, st);
         break;
       case T.BODEN: case T.TEPPICH:
@@ -392,6 +402,11 @@
       case T.BEET:
         r(c, sx, sy, K, K, P.erde);
         for (var by = 2; by < K; by += 5) { r(c, sx, sy + by + 2, K, 1, P.erde2); rr(c, sx + 2 + (by % 4), sy + by - 1, 3, 3, P.spross); rr(c, sx + 9 + (by % 3), sy + by - 1, 3, 3, P.spross); }
+        // ab v0.7: Holzrahmen ums Beet, damit es wie ein Ort fuer Pflanzen aussieht
+        if (karte.tile(x, y - 1) !== T.BEET) r(c, sx, sy, K, 1, P.konturHolz);
+        if (karte.tile(x, y + 1) !== T.BEET) { r(c, sx, sy + 14, K, 1, P.holz); r(c, sx, sy + 15, K, 1, P.konturHolz); }
+        if (karte.tile(x - 1, y) !== T.BEET) r(c, sx, sy, 1, K, P.konturHolz);
+        if (karte.tile(x + 1, y) !== T.BEET) r(c, sx + 15, sy, 1, K, P.konturHolz);
         break;
       case T.TOR:
         r(c, sx, sy, K, K, P.weg);
@@ -533,35 +548,38 @@
   function zeichneOrangenbaum(c, sx, sy) {
     var cx = sx + 8, by = sy + 14;
     ellipse(c, cx, by, 7, 3, P.schatten);
-    rr(c, cx - 2, by - 8, 5, 9, P.kontur); r(c, cx - 1, by - 8, 3, 8, P.stamm);
-    kreis(c, cx, by - 17, 9, P.kontur); kreis(c, cx, by - 17, 8, '#5fbf6a'); kreis(c, cx - 2, by - 19, 5, '#7fd68a'); kreis(c, cx - 3, by - 21, 2, '#bff0b0');
+    rr(c, cx - 2, by - 8, 5, 9, P.konturHolz); r(c, cx - 1, by - 8, 3, 8, P.stamm);
+    kreis(c, cx, by - 17, 9, P.konturGruen); kreis(c, cx, by - 17, 8, P.blatt2); kreis(c, cx - 2, by - 19, 5, P.blatt); kreis(c, cx - 3, by - 21, 2, P.blatt3);
   }
   function zeichneBaum(c, sx, sy) {
     var cx = sx + 8, by = sy + 14;
     ellipse(c, cx, by, 8, 3, P.schatten);
-    rr(c, cx - 3, by - 9, 6, 10, P.kontur); r(c, cx - 2, by - 9, 4, 9, P.stamm);
-    kreis(c, cx - 5, by - 15, 7, P.kontur); kreis(c, cx + 5, by - 15, 7, P.kontur); kreis(c, cx, by - 21, 8, P.kontur);
-    kreis(c, cx - 5, by - 15, 6, P.blatt2); kreis(c, cx + 5, by - 15, 6, P.blatt2); kreis(c, cx, by - 21, 7, P.blatt);
-    kreis(c, cx - 3, by - 17, 4, P.blatt); kreis(c, cx - 2, by - 24, 3, P.blatt3);
-    r(c, cx + 3, by - 18, 2, 2, '#6f8f4a'); r(c, cx - 6, by - 13, 2, 2, '#6f8f4a'); r(c, cx + 2, by - 26, 2, 2, '#6f8f4a');
+    // Olivenbaum (ab v0.7 silbergruen, damit er sich vom Orangenbaum unterscheidet)
+    rr(c, cx - 3, by - 9, 6, 10, P.konturHolz); r(c, cx - 2, by - 9, 4, 9, P.stamm); r(c, cx - 2, by - 9, 1, 9, '#b98463');
+    kreis(c, cx - 5, by - 15, 7, P.konturGruen); kreis(c, cx + 5, by - 15, 7, P.konturGruen); kreis(c, cx, by - 21, 8, P.konturGruen);
+    kreis(c, cx - 5, by - 15, 6, P.olive3); kreis(c, cx + 5, by - 15, 6, P.olive3); kreis(c, cx, by - 21, 7, P.olive2);
+    kreis(c, cx - 3, by - 17, 4, P.olive2); kreis(c, cx - 2, by - 24, 3, P.olive1);
+    r(c, cx - 4, by - 20, 3, 2, P.olive1); r(c, cx + 2, by - 25, 3, 2, P.olive1);
   }
   function zeichneBrunnen(c, sx, sy, zeit) {
     ellipse(c, sx + 16, sy + 28, 15, 3, P.schatten);
     pille(c, sx + 2, sy + 6, 28, 22, P.stein);
     r(c, sx + 3, sy + 20, 26, 6, P.stein2);
-    r(c, sx + 3, sy + 20, 26, 1, P.kontur);
-    for (var i = 6; i < 28; i += 6) r(c, sx + 2 + i, sy + 21, 1, 5, P.kontur);
+    r(c, sx + 3, sy + 20, 26, 1, P.konturStein);
+    for (var i = 6; i < 28; i += 6) r(c, sx + 2 + i, sy + 21, 1, 5, P.konturStein);
     pille(c, sx + 6, sy + 9, 20, 10, P.wasser);
     r(c, sx + 9 + Math.floor((zeit * 4) % 10), sy + 12, 4, 1, P.wasser2);
-    r(c, sx + 4, sy - 6, 4, 16, P.kontur); r(c, sx + 5, sy - 5, 2, 14, P.holz);
-    r(c, sx + 24, sy - 6, 4, 16, P.kontur); r(c, sx + 25, sy - 5, 2, 14, P.holz);
+    r(c, sx + 4, sy - 6, 4, 16, P.konturStein); r(c, sx + 5, sy - 5, 2, 14, P.holz);
+    r(c, sx + 24, sy - 6, 4, 16, P.konturStein); r(c, sx + 25, sy - 5, 2, 14, P.holz);
     pille(c, sx + 1, sy - 10, 30, 6, P.dach);
-    r(c, sx + 16, sy - 4, 1, 7, P.kontur);
+    r(c, sx + 16, sy - 4, 1, 7, P.konturStein);
     box(c, sx + 13, sy + 2, 7, 6, '#b8c4e0');
   }
 
   // ---------- Figuren (v0.2: grosser Kopf, grosse Augen, runde Formen) ----------
-  var BIEL = { kind: false, haut: '#e8b08a', haar: '#3e2c26', haarGlanz: '#6e5246', bart: '#4a342a', hemd: '#fffaf0', hemd2: '#e6dece', hose: '#e2c896', schuhe: '#f4e6c0', sohle: '#c09a6a' };
+  // ab v0.7: Biel mit Strohhut und blauer Hose, damit die Kinder ihn sofort finden
+  var BIEL = { kind: false, haut: '#e8b08a', haar: '#3e2c26', haarGlanz: '#6e5246', bart: '#4a342a', hemd: '#f7f3ea', hemd2: '#d9d2c4', hose: '#5b6fa8', schuhe: '#c98b5e', sohle: '#7a4a3a',
+    hut: '#ffd35e', hut2: '#d9a83a', hutBand: '#ff6f6f' };
 
   function zeichnePerson(c, px, py, a, dir, frame) {
     var kind = a.kind, kopf = kind ? 10 : 11, koerper = kind ? 4 : 6, bein = kind ? 2 : 3, schuh = 2;
@@ -643,7 +661,13 @@
         q(7, kY + 8, 2, 1, '#d0706a');
       }
     }
-    return { oben: oy, hoehe: Hh };
+    if (a.hut) {
+      // Strohhut: Krone und breite Krempe, rotes Band
+      q(4, kY - 3, 8, 5, P.kontur); q(5, kY - 2, 6, 3, a.hut); q(5, kY - 2, 2, 1, '#fff0b0');
+      q(5, kY + 1, 6, 1, a.hutBand);
+      q(0, kY + 2, 16, 3, P.kontur); q(1, kY + 2, 14, 1, a.hut); q(2, kY + 3, 12, 1, a.hut2);
+    }
+    return { oben: a.hut ? oy - 3 : oy, hoehe: Hh };
   }
 
   function zeichneBlase(c, cx, topY, symbol, zeit) {
@@ -685,7 +709,7 @@
   // Zeilen umbrechen (gemessen auf der UI-Ebene)
   function umbruch(R, s, breite, groesse) {
     var c = R.ui || R.ctx;
-    c.font = (groesse || 7) + 'px "Trebuchet MS", Verdana, sans-serif';
+    c.font = (groesse || 7) + 'px ' + SCHRIFT;
     var woerter = String(s).split(' '), zeilen = [], z = '';
     woerter.forEach(function (w) {
       var probe = z ? z + ' ' + w : w;
@@ -746,6 +770,12 @@
   function kreuz(c, x, y, col) {
     for (var i = -3; i <= 3; i++) { r(c, x + i - 1, y + i - 1, 3, 3, col); r(c, x - i - 1, y + i - 1, 3, 3, col); }
   }
+  // Dreieck wie beim Abspielen: weiterspielen
+  function weiterDreieck(c, x, y, col) {
+    kreis(c, x, y, 8, P.kontur); kreis(c, x, y, 7, P.uiFlaeche);
+    for (var i = 0; i < 7; i++) { var hh = 13 - 2 * i; r(c, x - 3 + i, y - (hh - 1) / 2, 1, hh, P.kontur); }
+    for (var j = 0; j < 5; j++) { var h2 = 9 - 2 * j; r(c, x - 2 + j, y - (h2 - 1) / 2, 1, h2, col); }
+  }
   // Kreispfeil (Neu anfangen), Mitte (x, y)
   function kreispfeil(c, x, y, col) {
     kreis(c, x, y, 7, P.kontur); kreis(c, x, y, 6, col); kreis(c, x, y, 4, P.kontur); kreis(c, x, y, 3, P.box);
@@ -766,8 +796,9 @@
     [F.nein, F.ja].forEach(function (k, i) {
       var aktiv = f.wahl === i, hop = aktiv ? Math.round(Math.abs(Math.sin(t * 4)) * 2) : 0, y = k.y - hop;
       pille(c, k.x - 1, y - 1, k.w + 2, k.h + 2, aktiv ? P.kontur : '#d8cce6');
-      pille(c, k.x, y, k.w, k.h, i === 0 ? '#c9f2e2' : '#ffd1e0');
-      if (i === 0) kreuz(c, k.x + k.w / 2, y + 17, '#4f9a6a'); else kreispfeil(c, k.x + k.w / 2, y + 17, '#ff7fa0');
+      pille(c, k.x, y, k.w, k.h, i === 0 ? '#d4f3dc' : '#ffd1e0');
+      // ab v0.7: Nein heisst weiterspielen, darum ein gruenes Spielen Dreieck statt eines Kreuzes
+      if (i === 0) weiterDreieck(c, k.x + k.w / 2, y + 17, P.akzentErnten || '#7ed492'); else kreispfeil(c, k.x + k.w / 2, y + 17, '#ff7fa0');
       text(R, i === 0 ? 'Nein' : 'Ja, neu', k.x + k.w / 2, y + 31, { align: 'center', fett: true, groesse: 8 });
       if (aktiv) r(c, k.x + 6, y + k.h - 4, k.w - 12, 2, i === 0 ? '#6ccc8a' : '#ff9fb8');
     });
@@ -777,10 +808,178 @@
   function text(R, s, x, y, o) {
     o = o || {};
     var c = R.ui || R.ctx;
-    c.font = (o.fett ? 'bold ' : '') + (o.groesse || 7) + 'px "Trebuchet MS", Verdana, sans-serif';
+    c.font = (o.fett ? 'bold ' : '') + (o.groesse || 7) + 'px ' + SCHRIFT;
     c.textAlign = o.align || 'left'; c.textBaseline = 'top';
     if (o.schatten) { c.fillStyle = o.schatten; c.fillText(s, x + 0.5, y + 0.5); }
+    // ab v0.7: heller Rand um Schrift direkt auf dem Spielbild
+    if (o.rand && c.strokeText) { c.lineJoin = 'round'; c.lineWidth = o.randBreite || 1.6; c.strokeStyle = o.rand; c.strokeText(s, x, y); }
     c.fillStyle = o.farbe || P.kontur; c.fillText(s, x, y);
+  }
+
+  // ---------- Licht und Laternen (ab v0.7) ----------
+  var LATERNEN = [[17, 10], [11, 15], [28, 15], [11, 20], [28, 20]];
+  function lichtQuellen(R, karte) {
+    if (R.lichtFuer === karte && R.lichtQuellen) return R.lichtQuellen;
+    var T = Dorf.Karte.T, fenster = [], laternen = [];
+    for (var y = 0; y < karte.h; y++) for (var x = 0; x < karte.w; x++) {
+      var t = karte.tile(x, y);
+      if (t !== T.WAND) continue;
+      var front = !istWand(karte.tile(x, y + 1));
+      if (front && hash(x, y) % 3 === 0) fenster.push({ x: x * K + 8, y: y * K + 13 });
+    }
+    LATERNEN.forEach(function (p) {
+      var t = karte.tile(p[0], p[1]);
+      if (t === T.GRAS || t === T.WIESE || t === T.PFLASTER || t === T.WEG) laternen.push({ x: p[0] * K + 8, y: p[1] * K + 14 });
+    });
+    R.lichtFuer = karte; R.lichtQuellen = { fenster: fenster, laternen: laternen };
+    return R.lichtQuellen;
+  }
+  function zeichneLaterne(c, sx, sy, an) {
+    // Pfosten aus Holz mit kleinem Glaskasten, Fuss bei (sx, sy)
+    ellipse(c, sx, sy + 1, 4, 1, P.schatten);
+    r(c, sx - 1, sy - 15, 3, 16, P.konturHolz); r(c, sx, sy - 14, 1, 14, P.holz);
+    rr(c, sx - 3, sy - 22, 7, 8, P.konturHolz); r(c, sx - 2, sy - 21, 5, 6, an ? P.laterne : '#efe6da');
+    if (an) r(c, sx - 1, sy - 20, 2, 2, P.fensterKern);
+    r(c, sx - 3, sy - 23, 7, 1, P.konturHolz);
+  }
+  function glanz(c, x, y, rad, col, a) {
+    // stufige Lichtkreise (kein weicher Verlauf, passt zum Pixelbild)
+    c.globalAlpha = a * 0.09; kreis(c, x, y, rad, col);
+    c.globalAlpha = a * 0.11; kreis(c, x, y, Math.round(rad * 0.66), col);
+    c.globalAlpha = a * 0.15; kreis(c, x, y, Math.round(rad * 0.33), col);
+    c.globalAlpha = 1;
+  }
+  function zeichneLicht(R, st, cx, cy) {
+    var c = R.ctx, L = Dorf.Uhr.licht(st.uhr, st.spielzeit);
+    R.letztesLicht = L;
+    if (L.r + L.g + L.b < 765) {
+      var vorher = c.globalCompositeOperation;
+      c.globalCompositeOperation = 'multiply';
+      if (c.globalCompositeOperation === 'multiply') { c.fillStyle = 'rgb(' + L.r + ',' + L.g + ',' + L.b + ')'; c.fillRect(0, 0, W, H); }
+      else {
+        // altes Geraet ohne Multiplizieren: wie bis v0.6 eine durchsichtige Farbschicht
+        var tn = Dorf.Uhr.toenung(st.uhr);
+        if (tn.a > 0.001) { c.fillStyle = 'rgba(' + tn.r + ',' + tn.g + ',' + tn.b + ',' + Math.max(tn.a, L.daemmerung * 0.45).toFixed(3) + ')'; c.fillRect(0, 0, W, H); }
+      }
+      c.globalCompositeOperation = vorher || 'source-over';
+    }
+    var an = st.abend ? Dorf.Spiel.LAMPEN : (st.lampenAn || 0), q = lichtQuellen(R, st.karte), glut = st.abend ? 1 : L.glut;
+    R.letzteLampen = an;
+    if (glut <= 0.02 || an <= 0) { st.bielLaterne = false; return; }
+    function sicht(x, y, rad) { return x > -rad && x < W + rad && y > -rad && y < H + rad; }
+    var feuer = [];
+    // erst die Fenster, dann die Laternen
+    q.fenster.forEach(function (f) {
+      var sx = f.x - cx, sy = f.y - cy;
+      if (!sicht(sx, sy, 20)) return;
+      c.globalAlpha = Math.min(1, glut * 1.2); r(c, sx - 3, sy - 1, 6, 3, P.fensterNacht); r(c, sx - 3, sy - 1, 2, 1, P.fensterKern); c.globalAlpha = 1;
+      feuer.push([sx, sy, 20, '#ffc46b']);
+    });
+    q.laternen.forEach(function (l, i) {
+      if (i + 2 > an) return;
+      var sx = l.x - cx, sy = l.y - cy;
+      if (!sicht(sx, sy - 18, 26)) return;
+      r(c, sx - 2, sy - 21, 5, 6, P.laterne); r(c, sx - 1, sy - 20, 2, 2, P.fensterKern);
+      feuer.push([sx, sy - 18, 26, P.glutWarm]);
+    });
+    var hx = 5 * K + 8 - cx, hy = 2 * K + 8 - cy;
+    if (sicht(hx, hy, 24)) feuer.push([hx, hy, 24, P.herdGlut]);
+    // Biel nimmt ab dem spaeten Abend eine kleine Laterne mit
+    st.bielLaterne = glut > 0.6;
+    if (st.bielLaterne && st.spieler) {
+      var bx = Math.round(st.spieler.x - cx) + 7, by = Math.round(st.spieler.y - cy) - 8;
+      rr(c, bx - 2, by - 2, 5, 6, P.konturHolz); r(c, bx - 1, by - 1, 3, 4, P.laterne); r(c, bx, by - 4, 1, 2, P.konturHolz);
+      feuer.push([bx, by + 1, 30, P.laterne]);
+    }
+    var vorher2 = c.globalCompositeOperation;
+    c.globalCompositeOperation = 'lighter';
+    feuer.forEach(function (f) { glanz(c, f[0], f[1], f[2], f[3], glut); });
+    c.globalCompositeOperation = vorher2 || 'source-over';
+  }
+  // Steinkreis um den Brunnen
+  function zeichneBrunnenRing(c, karte, cx, cy) {
+    var mx = karte.brunnen.x * K + 16 - cx, my = karte.brunnen.y * K + 18 - cy;
+    for (var i = 0; i < 14; i++) {
+      var w = i / 14 * Math.PI * 2, x = Math.round(mx + Math.cos(w) * 24), y = Math.round(my + Math.sin(w) * 17);
+      rr(c, x - 2, y - 1, 5, 3, P.stein2); r(c, x - 1, y - 1, 3, 1, P.stein);
+    }
+  }
+
+  // ---------- HUD (ab v0.7: Tagesbogen, Gesichter mit Herzen, Korb; ohne Text fuer die Kinder) ----------
+  function himmel(L) {
+    var tag = [159, 212, 240], gold = [255, 179, 107], nacht = [74, 74, 154];
+    var s = L.sonne, n = L.mond, f;
+    var rosa = [255, 198, 220];
+    function mix(a, b, t) { return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; }
+    // am Nachmittag ueber Rosa zu Gold, damit es nicht grau wird
+    if (s < 0.75) f = tag; else { var t = Math.min(1, (s - 0.75) / 0.25); f = t < 0.5 ? mix(tag, rosa, t * 2) : mix(rosa, gold, t * 2 - 1); }
+    f = [f[0] + (nacht[0] - f[0]) * n, f[1] + (nacht[1] - f[1]) * n, f[2] + (nacht[2] - f[2]) * n];
+    return 'rgb(' + Math.round(f[0]) + ',' + Math.round(f[1]) + ',' + Math.round(f[2]) + ')';
+  }
+  function zeichneTagesbogen(c, st, L) {
+    var x = 2, y = 2, w = 42, h = 22;
+    pille(c, x, y, w, h, P.uiFlaeche);
+    c.save(); c.beginPath(); c.rect(x + 2, y + 2, w - 4, h - 4); c.clip();
+    r(c, x + 2, y + 2, w - 4, h - 4, himmel(L));
+    if (L.mond > 0) for (var s = 0; s < 6; s++) { var hs = hash(s, 11); c.globalAlpha = L.mond; r(c, x + 4 + hs % 34, y + 3 + (hs >> 6) % 9, 1, 1, '#fff6c8'); c.globalAlpha = 1; }
+    var mx = x + w / 2, my = y + h - 3;
+    if (L.sonne < 1) {
+      var ws = Math.PI * (1 - L.sonne), sx = Math.round(mx + Math.cos(ws) * 15), sy = Math.round(my - Math.sin(ws) * 13);
+      kreis(c, sx, sy, 4, '#ffb84d'); kreis(c, sx, sy, 3, '#ffe27a'); r(c, sx - 1, sy - 2, 2, 1, '#fff6c8');
+    }
+    if (L.mond > 0) {
+      var wm = Math.PI * (1 - 0.45 * L.mond), mxx = Math.round(mx + Math.cos(wm) * 15), myy = Math.round(my - Math.sin(wm) * 13);
+      kreis(c, mxx, myy, 3, P.mond); kreis(c, mxx + 2, myy - 1, 2, himmel(L));
+    }
+    // Huegel unten
+    ellipse(c, x + 10, y + h - 1, 12, 4, P.gras2); ellipse(c, x + 30, y + h, 14, 4, P.gras);
+    c.restore();
+  }
+  function zeichneGesicht(c, gs, cx, cy, n, hop) {
+    var voll = n >= 5;
+    if (voll) kreis(c, cx, cy - hop, 11, P.herzGold);
+    kreis(c, cx, cy - hop, 10, P.kontur); kreis(c, cx, cy - hop, 9, P.uiFlaeche2);
+    c.save(); c.beginPath(); c.rect(cx - 9, cy - hop - 9, 19, 19); c.clip();
+    var Hh = gs.aussehen.kind ? 18 : 22;
+    zeichnePerson(c, cx, cy - hop + Hh - 6, gs.aussehen, 'unten', 0);
+    c.restore();
+    for (var i = 0; i < 5; i++) {
+      var hx = cx - 14 + i * 6, hy = cy + 12;
+      if (i < n) { r(c, hx - 1, hy, 7, 4, voll ? '#c98a1a' : '#b8325c'); r(c, hx, hy + 3, 5, 2, voll ? '#c98a1a' : '#b8325c'); herz(c, hx, hy, voll ? P.herzGold : P.herzVoll); r(c, hx, hy, 1, 1, P.herzLicht); }
+      else herz(c, hx, hy, P.herzLeer);
+    }
+  }
+  function zeichneHud(R, st) {
+    var c = R.ctx, L = R.letztesLicht || Dorf.Uhr.licht(st.uhr, st.spielzeit), info = { tag: st.uhr.tag, gaeste: [], teller: (st.teller || []).length };
+    zeichneTagesbogen(c, st, L);
+    var spricht = st.blase && st.blase.sprecher;
+    st.gaeste.forEach(function (g, i) {
+      var n = Dorf.Glueck ? Dorf.Glueck.herzen(g) : 0, hop = spricht === g.name ? Math.round(Math.abs(Math.sin(st.zeit * 8)) * 2) : 0;
+      zeichneGesicht(c, g, 60 + i * 36, 11, n, hop);
+      info.gaeste.push({ name: g.name, herzen: n });
+    });
+    var tl = st.teller || [];
+    if (tl.length > 0) {
+      var tx = 60 + st.gaeste.length * 36 - 4;
+      pille(c, tx - 6, 4, 30, 14, P.uiFlaeche);
+      zeichneTeller(c, tl[0], tx + 2, 11);
+      text(R, '×' + tl.length, tx + 10, 7, { fett: true, groesse: 7 });
+    }
+    if (st.tagesziel && st.tagesziel.erreicht) for (var k = 0; k < 3; k++) { var ph = (st.zeit * 1.5 + k / 3) % 1; c.globalAlpha = 1 - ph; r(c, 50 + k * 36, 2 + Math.round(ph * 4), 1, 3, '#fff6c8'); r(c, 49 + k * 36, 3 + Math.round(ph * 4), 3, 1, '#fff6c8'); c.globalAlpha = 1; }
+    zeichneVorrat(R, st, 27);
+    R.letzteHud = info;
+  }
+  function zeichneTipps(c, st) {
+    (st.tipps || []).forEach(function (tp) {
+      var d = (Dorf.Spiel && Dorf.Spiel.TIPP_DAUER) || 0.3, f = Math.min(1, tp.t / d), rad = 3 + f * 7;
+      c.globalAlpha = 0.7 * (1 - f); c.strokeStyle = P.uiFlaeche; c.lineWidth = 1.5;
+      c.beginPath(); c.arc(tp.x, tp.y, rad, 0, Math.PI * 2); c.stroke(); c.globalAlpha = 1;
+    });
+  }
+  // Iris: am Tagesende schliesst sich ein Kreis um Biel
+  function zeichneIris(c, st, cx, cy, f) {
+    var mx = Math.round(st.spieler.x - cx), my = Math.round(st.spieler.y - cy) - 10, rad = Math.max(0, 210 * (1 - f * f));
+    c.fillStyle = P.konturTief; c.beginPath(); c.rect(0, 0, W, H); c.arc(mx, my, rad, 0, Math.PI * 2, true); c.fill('evenodd');
   }
 
   // ---------- Hauptzeichnen ----------
@@ -807,8 +1006,16 @@
       if (istMoebel(karte.tile(x, y))) (function (mx, my) { liste.push({ y: my * K + 14, f: function () { zeichneMoebel(c, karte, mx, my, mx * K - cx, my * K - cy); } }); })(x, y);
     }
     if (!hg) zeichneBlumen(c, karte, cx, cy, false);
+    zeichneBrunnenRing(c, karte, cx, cy);
     if (st.marker) zeichneMarker(c, st.marker, cx, cy);
     zeichneHinweisRing(c, st, cx, cy);
+    // ab v0.7: Ring unter Biel, damit die Kinder sofort sehen, wer sie selbst sind
+    var spr = st.spieler, rx = Math.round(spr.x - cx), ry = Math.round(spr.y - cy) + 1;
+    ellipse(c, rx, ry, 8, 3, P.herzGold); ellipse(c, rx, ry, 7, 2, 'rgba(255,248,238,0.75)');
+    lichtQuellen(R, karte).laternen.forEach(function (l, i) {
+      var sx = l.x - cx, sy = l.y - cy;
+      if (sx > -10 && sx < W + 10 && sy > -4 && sy < H + 26) liste.push({ y: l.y, f: function () { zeichneLaterne(c, sx, sy, false); } });
+    });
 
     // Objekte und Figuren nach Fuss-y sortiert
     karte.baeume.forEach(function (t) { var sx = t.x * K - cx, sy = t.y * K - cy; if (sx > -24 && sx < W + 24 && sy > -32 && sy < H + 32) liste.push({ y: t.y * K + 14, f: function () { if (t.art === 'orange') zeichneOrangenbaum(c, sx, sy); else zeichneBaum(c, sx, sy); var fr = st.garten && Dorf.Garten.an(st.garten, t.x, t.y); if (fr) zeichneBaumFruechte(c, fr, sx + wackeln(fr), sy, zeit); } }); });
@@ -849,21 +1056,12 @@
       for (var k2 = sp.pfadIndex; k2 < sp.pfad.length; k2++) { var n2 = sp.pfad[k2]; r(c, n2.x * K + 7 - cx, n2.y * K + 7 - cy, 2, 2, '#ffffff'); }
     }
 
-    // Tageslicht
-    var tn = Dorf.Uhr.toenung(st.uhr);
-    if (tn.a > 0.001) { c.fillStyle = 'rgba(' + tn.r + ',' + tn.g + ',' + tn.b + ',' + tn.a.toFixed(3) + ')'; c.fillRect(0, 0, W, H); }
+    // Tageslicht (ab v0.7: multipliziert, dazu leuchtende Fenster, Laternen, Herd und Biels Laterne)
+    zeichneLicht(R, st, cx, cy);
 
-    // HUD oben
-    c.fillStyle = 'rgba(75,58,90,0.82)'; c.fillRect(0, 0, W, 11);
-    text(R, 'Tag ' + st.uhr.tag + '   ' + Dorf.Uhr.text(st.uhr) + '   ' + Dorf.Uhr.phase(st.uhr), 4, 2, { farbe: '#fff4dc', fett: true });
-    var tl = st.teller || [];
-    if (tl.length > 0) {
-      zeichneTeller(c, tl[0], 116, 6);
-      text(R, '× ' + tl.length, 121, 2, { farbe: '#ffe7b0', fett: true });
-    }
-    // rechts oben sitzen die Knoepfe fuer Ton und Vollbild
+    // klein fuer die Eltern: Version und Tasten, rechts oben neben den Knoepfen
     var hilfe = R.touch ? (Dorf.VERSION || '') : (Dorf.VERSION || '') + ' · E: sprechen · K: kochen · M: Ton';
-    text(R, hilfe, W - (R.obenBreite || (R.touch ? 52 : 28)), 2, { farbe: '#e2d6f5', align: 'right' });
+    if (!st.abend) text(R, hilfe, W - (R.obenBreite || (R.touch ? 52 : 28)), 3, { farbe: P.uiTinteWeich, rand: 'rgba(255,248,238,0.85)', align: 'right', groesse: 6 });
 
     // Sprechblase (Dialogbox unten)
     if (st.blase && !st.abend && !st.menue) {
@@ -874,13 +1072,15 @@
       text(R, st.blase.text, 14, 150, { groesse: 8 });
     }
 
-    if (!st.abend && !st.menue && !st.frage && !st.debug && Dorf.Glueck) zeichneGlueck(R, st);
+    if (!st.abend && !st.menue && !st.frage && !st.debug && Dorf.Glueck) zeichneHud(R, st);
     if (!st.abend && !st.menue && !st.frage) zeichneDenken(c, st, cx, cy);
     if (st.menue && !st.abend) zeichneMenue(R, st);
     if (st.debug) zeichneDebug(R, st);
 
-    // Abendszene
-    if (st.abend) {
+    // Abendszene (ab v0.7 schliesst sich vorher ein Kreis um Biel)
+    var irisDauer = 1.2, irisSeit = st.abendZeit === undefined ? 99 : st.zeit - st.abendZeit;
+    if (st.abend && irisSeit < irisDauer) zeichneIris(c, st, cx, cy, irisSeit / irisDauer);
+    if (st.abend && irisSeit >= irisDauer) {
       c.fillStyle = 'rgba(58,44,96,0.6)'; c.fillRect(0, 0, W, H);
       for (var s = 0; s < 24; s++) { var hs = hash(s, 7); r(c, hs % W, 14 + (hs >> 9) % 60, 1, 1, '#fff6c8'); }
       kreis(c, 270, 34, 9, '#fff3c4'); kreis(c, 274, 31, 8, 'rgba(58,44,96,0.95)');
@@ -910,6 +1110,7 @@
     }
     if (st.frage) zeichneFrage(R, st);
     zeichneHinweis(c, st, cx, cy);
+    zeichneTipps(c, st);
   }
 
   function zeichneDebug(R, st) {

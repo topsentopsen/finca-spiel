@@ -197,12 +197,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.6', function () {
+test('Version: sichtbares Label ist v0.7', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.6');
+  gleich(D.VERSION, 'v0.7');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.6') >= 0, 'Titel enthaelt v0.6');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.6') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.7') >= 0, 'Titel enthaelt v0.7');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.7') >= 0, n + ' eingebunden'); });
 });
 test('Debug: F1 ist frei, Debug liegt auf Backquote', function () {
   var D = ladeKontext().Dorf;
@@ -794,7 +794,7 @@ test('Render: Wiese, Esel, Gecko, Herzen im HUD und Abendfeier zeichnen ohne Feh
   st.spieler.x = 30 * 16; st.spieler.y = 15 * 16; st.kamera.x = 360; st.kamera.y = 120;
   st.herzchen.push({ x: st.tiere.esel.x, y: st.tiere.esel.y, t: 0.3 });
   D.Render.zeichne(R, st);
-  wahr(texte.indexOf('Ziel: alle glücklich') >= 0, 'HUD mit Tagesziel');
+  wahr(R.letzteHud && R.letzteHud.gaeste.length === st.gaeste.length, 'HUD mit Gesichtern (ab v0.7 ohne Text)');
   st.gaeste.forEach(function (g) { g.glueck = D.Glueck.MAX; }); D.Glueck.pruefe(st);
   st.abend = true; texte.length = 0; D.Render.zeichne(R, st);
   wahr(texte.some(function (s) { return /Alle Gäste sind glücklich/.test(s); }), 'Abendfeier');
@@ -959,7 +959,9 @@ test('Drei Gaeste: Herzen im HUD, Korb, Menue mit Zutaten und Abend zeichnen ohn
   st.tiere.esel.mampft = 1;
   st.vorrat.tomate = 2;
   D.Render.zeichne(R, st);
-  ['Mia', 'Jonas', 'Padrina'].forEach(function (n) { wahr(texte.indexOf(n) >= 0, n + ' im HUD'); });
+  var namen = R.letzteHud.gaeste.map(function (g) { return g.name; });
+  ['Mia', 'Jonas', 'Padrina'].forEach(function (n) { wahr(namen.indexOf(n) >= 0, n + ' im HUD'); });
+  ['Mia', 'Jonas', 'Padrina'].forEach(function (n) { wahr(texte.indexOf(n) < 0, n + ' steht nicht als Text im HUD'); });
   wahr(texte.indexOf('2') >= 0, 'Korb zeigt Anzahl');
   D.Spiel.sage(st, 'Padrina', 'Bon dia, fillet!'); texte.length = 0; D.Render.zeichne(R, st);
   wahr(texte.indexOf('Padrina') >= 0);
@@ -1033,7 +1035,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.6'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.7'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -1281,6 +1283,155 @@ test('Dauerlauf: zehn Tage mit Zufallstipps, Tasten, Neu-Frage, Speichern und La
   }
   gleich(tage, 10, 'zehn Tage gespielt (' + schritte + ' Schritte, ' + neuStarts + ' mal neu angefangen)');
   wahr(schritte > 30000, 'genug Schritte');
+});
+
+
+// ---------- Harte Tagesgrenze 15 Minuten (v0.7) ----------
+var D = ladeKontext().Dorf;
+test('Tagesgrenze: normaler Tag ohne Pausen endet nach etwa 11 Minuten, nie ueber 15', function () {
+  var st = D.Spiel.erstelle({ seed: 3 }), sek = 0;
+  while (!st.abend && sek < 2000) { D.Spiel.schritt(st, 0.05); sek += 0.05; }
+  wahr(st.abend, 'Abend erreicht');
+  wahr(sek > 600 && sek < 700, 'Tag dauert ' + Math.round(sek) + ' s');
+});
+test('Tagesgrenze: offene Rueckfrage haelt die Uhr an, trotzdem nach 15 Minuten Bona nit', function () {
+  var st = D.Spiel.erstelle({ seed: 3 }), sek = 0, zu = false;
+  D.Spiel.frageAuf(st);
+  while (!st.abend && sek < 2000) {
+    // ein Kind laesst die Frage 10 Minuten offen, dann wird sie zu gemacht
+    if (!zu && sek >= 600) { st.frage = null; zu = true; }
+    if (st.frage) st.frage.t = 0;
+    D.Spiel.schritt(st, 0.05); sek += 0.05;
+  }
+  wahr(st.abend, 'Abend erreicht');
+  wahr(sek <= D.Uhr.TAG_LIMIT + 0.2 && sek > D.Uhr.TAG_LIMIT - 2, 'Ende bei ' + sek.toFixed(1) + ' s');
+  gleich(st.uhr.minute, D.Uhr.ENDE, 'Uhr steht am Ende');
+});
+test('Tagesgrenze: langsames Geraet (wenige Bilder pro Sekunde) bekommt keinen laengeren Tag', function () {
+  var st = D.Spiel.erstelle({ seed: 3 }), sek = 0;
+  // 8 Bilder pro Sekunde: Logik bekommt nur 0.05 s pro Bild, echt vergehen 0.125 s
+  while (!st.abend && sek < 3000) { D.Spiel.schritt(st, 0.05, 0.125); sek += 0.125; }
+  wahr(st.abend, 'Abend erreicht');
+  wahr(sek <= D.Uhr.TAG_LIMIT + 0.2, 'Ende bei ' + sek.toFixed(1) + ' s');
+  wahr(sek > D.Uhr.TAG_LIMIT - 5, 'Uhr wurde gleichmaessig schneller, nicht abrupt');
+});
+test('Tagesgrenze: Neu anfangen verlaengert den Tag nicht, neuer Tag hat wieder 15 Minuten', function () {
+  var st = D.Spiel.erstelle({ seed: 3 });
+  st.spielzeit = D.Uhr.TAG_LIMIT - 10;
+  D.Spiel.neuAnfangen(st);
+  gleich(st.uhr.minute, D.Uhr.START, 'wieder Morgen');
+  wahr(st.spielzeit >= D.Uhr.TAG_LIMIT - 10, 'Spielzeit bleibt');
+  var sek = 0;
+  while (!st.abend && sek < 100) { D.Spiel.schritt(st, 0.05); sek += 0.05; }
+  wahr(st.abend && sek <= 10.2, 'Abend nach ' + sek.toFixed(1) + ' s');
+  // Abend: Zeit zaehlt nicht weiter, Tippen startet einen neuen Tag mit vollem Budget
+  var z = st.spielzeit; D.Spiel.schritt(st, 0.25); gleich(st.spielzeit, z, 'abends keine Spielzeit');
+  st.naechsterTag = true; D.Spiel.schritt(st, 0.05);
+  wahr(!st.abend && st.uhr.tag === 2 && st.spielzeit < 1, 'Tag 2 mit frischer Zeit');
+});
+test('Tagesgrenze: Spielzeit wird gespeichert, Neuladen umgeht sie nicht, alte Staende werden geschaetzt', function () {
+  var S = D.Speicher, sp = fakeSpeicher(), st = D.Spiel.erstelle({ seed: 3 });
+  st.uhr.minute = 9 * 60; st.spielzeit = 800;
+  S.schreibe(sp, st);
+  var neu = D.Spiel.erstelle({ seed: 3 }); S.anwenden(neu, S.lade(sp));
+  gleich(neu.spielzeit, 800, 'Spielzeit geladen');
+  var d = S.daten(st); delete d.spielzeit; d.minute = 12 * 60;
+  var alt = D.Spiel.erstelle({ seed: 3 }); S.anwenden(alt, d);
+  gleich(alt.spielzeit, 240, 'aus 12:00 geschaetzt');
+  d.spielzeit = 99999; S.anwenden(alt, d); gleich(alt.spielzeit, D.Uhr.TAG_LIMIT, 'begrenzt');
+  d.abend = true; S.anwenden(alt, d); gleich(alt.spielzeit, 0, 'abends gespeichert: neuer Morgen mit voller Zeit');
+});
+test('Tagesgrenze: Daemmerung kommt 90 s vor Schluss oder ab 21:30, vorher nicht', function () {
+  var U = D.Uhr, u = U.erstelle();
+  u.minute = 12 * 60; gleich(U.daemmerung(u, 100), 0, 'Mittag');
+  wahr(U.daemmerung(u, U.TAG_LIMIT - 45) > 0.4 && U.daemmerung(u, U.TAG_LIMIT - 45) < 0.6, 'halb bei 45 s Rest');
+  gleich(U.daemmerung(u, U.TAG_LIMIT), 1, 'ganz am Ende');
+  u.minute = 21 * 60; gleich(U.daemmerung(u, 0), 0, '21:00');
+  u.minute = 22 * 60 + 15; wahr(U.daemmerung(u, 0) > 0.4, 'spaeter Abend');
+});
+test('Tagesgrenze: im Browser zaehlt echte Zeit, versteckter Tab pausiert', function () {
+  var b = starteFake({ suche: '?neu=1' });
+  var L = b.h.st;
+  // 30 Bilder zu je 200 ms (5 Bilder pro Sekunde): echt 6 s
+  b.frames(30, 200);
+  wahr(L.spielzeit > 5.5 && L.spielzeit < 6.5, 'echte Zeit ' + L.spielzeit.toFixed(2));
+  // Tab versteckt, 10 Minuten spaeter wieder da: zaehlt nicht
+  b.doc.hidden = true; b.docL.visibilitychange.forEach(function (f) { f(); });
+  b.frames(1, 600000);
+  b.doc.hidden = false; b.docL.visibilitychange.forEach(function (f) { f(); });
+  b.frames(1, 16.7);
+  wahr(L.spielzeit < 7.6, 'Pause zaehlt nicht: ' + L.spielzeit.toFixed(2));
+});
+
+// ---------- Neues Aussehen (v0.7) ----------
+function proxyR() {
+  var log = { texte: [], ops: [], fills: [] };
+  var ctx = new Proxy({}, { get: function (o, k) { if (k in o) return o[k]; return function () { if (k === 'fillText') log.texte.push(arguments[0]); if (k === 'fillRect') log.fills.push(o.fillStyle); return { addColorStop: function () {} }; }; },
+    set: function (o, k, v) { o[k] = v; if (k === 'globalCompositeOperation') log.ops.push(v); return true; } });
+  return { R: { ctx: ctx, ui: ctx, uiSkala: 1, uiCanvas: { width: 960, height: 528 } }, log: log };
+}
+test('Licht: mittags keine Toenung, abends multipliziert und Lampen gehen nacheinander an', function () {
+  var D = ladeKontext().Dorf, U = D.Uhr, uhr = U.erstelle();
+  uhr.minute = 12 * 60; var L = U.licht(uhr, 300);
+  gleich(L.r + L.g + L.b, 765, 'mittags weiss'); gleich(L.lampen, 0); wahr(L.glut === 0);
+  uhr.minute = 6 * 60; L = U.licht(uhr, 0); wahr(L.r < 255 && L.b > L.r, 'Morgen kuehl lila'); gleich(L.lampen, 0);
+  uhr.minute = 18 * 60; L = U.licht(uhr, 480); wahr(L.r > L.b, 'Nachmittag warm');
+  uhr.minute = 22 * 60; L = U.licht(uhr, 640); gleich(L.lampen, 1); gleich(L.glut, 1); wahr(L.mond > 0.5); gleich(L.sonne, 1, 'Sonne untergegangen');
+  // Daemmerung vor der 15 Minuten Grenze: auch um 14 Uhr wird es Nacht
+  uhr.minute = 14 * 60; L = U.licht(uhr, 900 - 10); wahr(L.daemmerung > 0.85); wahr(L.lampen > 0.85 && L.sonne > 0.95 && L.mond > 0.85, 'Sonne sinkt, Mond kommt, Lampen an');
+  wahr(L.b > L.r, 'Farbe Richtung Nacht');
+  // im Spiel: Lampen zaehlen hoch, jedes Mal ein Pling
+  var st = D.Spiel.erstelle({ seed: 1 }); st.uhr.minute = 18.9 * 60; st.spielzeit = 500;
+  var plings = 0, an = [];
+  for (var i = 0; i < 60 * 90 && !st.abend; i++) { D.Spiel.schritt(st, 1 / 60); st.toene.forEach(function (t) { if ((t.name || t) === 'licht') plings++; }); st.toene.length = 0; if (an[an.length - 1] !== st.lampenAn) an.push(st.lampenAn); }
+  gleich(st.lampenAn, D.Spiel.LAMPEN, 'alle an'); gleich(plings, D.Spiel.LAMPEN, 'ein Pling pro Lampe');
+  wahr(an.every(function (v, k) { return k === 0 || v === an[k - 1] + 1; }), 'eins nach dem anderen: ' + an.join(','));
+});
+test('Licht zeichnen: multiplizieren, Leuchten addieren, alte Geraete bekommen die Farbschicht', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 1 }), p = proxyR();
+  st.kamera.x = 160; st.kamera.y = 160; st.spieler.x = 18 * 16; st.spieler.y = 14 * 16;
+  st.uhr.minute = 21 * 60; st.spielzeit = 600; st.lampenAn = D.Spiel.LAMPEN;
+  D.Render.zeichne(p.R, st);
+  wahr(p.log.ops.indexOf('multiply') >= 0 && p.log.ops.indexOf('lighter') >= 0, 'multiply und lighter');
+  gleich(p.R.letzteLampen, D.Spiel.LAMPEN); wahr(st.bielLaterne, 'Biel hat abends eine Laterne');
+  wahr(p.R.lichtQuellen.fenster.length >= 4, 'Fenster gefunden'); gleich(p.R.lichtQuellen.laternen.length, 5, 'fuenf Laternen');
+  st.uhr.minute = 12 * 60; st.spielzeit = 200; st.lampenAn = 0; p.log.ops.length = 0; D.Render.zeichne(p.R, st);
+  wahr(p.log.ops.indexOf('multiply') < 0 && p.log.ops.indexOf('lighter') < 0, 'mittags kein Licht noetig'); wahr(!st.bielLaterne);
+  // Geraet ohne multiply: Wert bleibt alt, dann alte Farbschicht
+  var alt = proxyR(), c = alt.R.ctx;
+  var echt = new Proxy(c, { set: function (o, k, v) { if (k === 'globalCompositeOperation' && v !== 'source-over') return true; o[k] = v; return true; } });
+  alt.R.ctx = echt; st.uhr.minute = 21 * 60; st.spielzeit = 600;
+  D.Render.zeichne(alt.R, st);
+  wahr(alt.log.fills.some(function (f) { return /^rgba\(/.test(f); }), 'Farbschicht statt multiply');
+});
+test('HUD ohne Lesen: Tagesbogen, Gesichter mit Herzen, Korb, kein Uhrzeit Text, Tipp-Kreis', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 1 }), p = proxyR();
+  st.gaeste[0].glueck = D.Glueck.MAX; st.vorrat.tomate = 3;
+  D.Render.zeichne(p.R, st);
+  var hud = p.R.letzteHud;
+  gleich(hud.gaeste.length, 3); gleich(hud.gaeste[0].herzen, 5, 'Mia voll');
+  wahr(p.log.texte.every(function (t) { return !/\d\d:\d\d/.test(t) && !/^Tag \d/.test(t); }), 'keine Uhrzeit, kein Tag als Text');
+  wahr(p.log.texte.indexOf('3') >= 0, 'Korb zeigt Zahl');
+  // Tipp-Kreis bei jedem Tippen, verschwindet nach kurzer Zeit
+  D.Spiel.klickBild(st, 100, 100, true);
+  gleich(st.tipps.length, 1);
+  for (var i = 0; i < 30; i++) D.Spiel.schritt(st, 1 / 60);
+  gleich(st.tipps.length, 0, 'nach 0,5 s weg');
+  for (var k = 0; k < 9; k++) D.Spiel.klickBild(st, 10 + k, 10, false);
+  wahr(st.tipps.length <= 4, 'hoechstens vier gleichzeitig');
+});
+test('Tagesende: Kreis schliesst sich um Biel, danach Bona nit Bild, Neu-Frage ohne gruenes Kreuz', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 1 }), p = proxyR();
+  st.uhr.minute = D.Uhr.ENDE - 0.01; st.spielzeit = 899;
+  D.Spiel.schritt(st, 1 / 60);
+  wahr(st.abend, 'Abend'); p.log.texte.length = 0;
+  D.Spiel.schritt(st, 0.3); D.Render.zeichne(p.R, st);
+  wahr(p.log.texte.indexOf('Bona nit! Tag geschafft') < 0, 'erst der Kreis');
+  for (var i = 0; i < 70; i++) D.Spiel.schritt(st, 1 / 60);
+  p.log.texte.length = 0; D.Render.zeichne(p.R, st);
+  wahr(p.log.texte.indexOf('Bona nit! Tag geschafft') >= 0, 'dann die Abendszene');
+  var src = require('fs').readFileSync(require('path').join(__dirname, '..', 'js', 'render.js'), 'utf8');
+  wahr(!/kreuz\(c, k\.x/.test(src), 'Nein Knopf ohne Kreuz');
 });
 
 // ---------- Ausfuehren ----------

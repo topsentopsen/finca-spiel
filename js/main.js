@@ -3,8 +3,10 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.6';
+  var VERSION = 'v0.7';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
+  var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
+  var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
   var ABEND_SPERRE = 1.5;     // Sekunden nach Abendbeginn, in denen Tippen noch nicht zum naechsten Tag springt
   var SPEICHER_TAKT = 5;      // alle 5 Sekunden wird der Spielstand gesichert
   Dorf.VERSION = VERSION;
@@ -19,7 +21,7 @@
       marker: null, kochen: null, teller: [], menue: null, toene: [], schrittWeg: 0,
       herzchen: [], tagesziel: { erreicht: false, neu: false },
       // ab v0.6: Rueckfrage "Neu anfangen", fliegende Ernte, Gedankenblase von Biel, Hinweise ohne Lesen
-      seed: seed, frage: null, flieger: [], denk: null, wunsch: null, korbPuls: {}, gelernt: {},
+      spielzeit: 0, seed: seed, frage: null, flieger: [], denk: null, wunsch: null, korbPuls: {}, gelernt: {},
       hinweis: Dorf.Hinweise ? Dorf.Hinweise.erstelle() : null,
       eingabe: opts.eingabe || Dorf.Eingabe.erstelle(null),
       spieler: Dorf.Spieler.erstelle(karte.start.biel),
@@ -253,6 +255,7 @@
   function drin(k, x, y) { return x >= k.x && x < k.x + k.w && y >= k.y && y < k.y + k.h; }
   function klickBild(st, bx, by, zeiger) {
     if (!isFinite(bx) || !isFinite(by)) return 'nein';
+    st.tipps = (st.tipps || []).slice(-3); st.tipps.push({ x: bx, y: by, t: 0 });
     if (st.frage) {
       if (zeiger && st.frage.t < 0.3) return 'warte';
       if (drin(FRAGE.ja, bx, by)) { neuAnfangen(st); return 'neu'; }
@@ -278,12 +281,14 @@
   }
   // Alles auf Anfang: neuer erster Tag mit demselben Garten. Ton und Debug bleiben, wie sie sind.
   function neuAnfangen(st) {
-    var behalte = { eingabe: st.eingabe, ton: st.ton, debug: st.debug, speicher: st.speicher, fps: st.fps };
+    // die Spielzeit des Tages bleibt: Neu anfangen verlaengert den Tag nicht ueber 15 Minuten
+    var behalte = { eingabe: st.eingabe, ton: st.ton, debug: st.debug, speicher: st.speicher, fps: st.fps, spielzeit: st.spielzeit };
     var neu = erstelle({ seed: st.seed, eingabe: st.eingabe });
     Object.keys(st).forEach(function (k) { if (!(k in neu)) delete st[k]; });
     Object.keys(neu).forEach(function (k) { st[k] = neu[k]; });
     Object.keys(behalte).forEach(function (k) { if (behalte[k] !== undefined) st[k] = behalte[k]; });
     if (Dorf.Speicher && st.speicher) Dorf.Speicher.loesche(st.speicher);
+    st.speichernJetzt = true;
     st.herzchen.push({ x: st.spieler.x, y: st.spieler.y - 26, t: 0, farbe: '#ff7fa0' });
     klang(st, 'neu');
     return true;
@@ -326,18 +331,25 @@
     st.marker = null;
   }
 
-  function schritt(st, dt) {
+  // echt (ab v0.7): wirklich vergangene Sekunden, hoechstens 1 (laenger versteckter Tab zaehlt als Pause)
+  function schritt(st, dt, echt) {
     var e = st.eingabe;
     if (!(dt >= 0)) dt = 0;
     if (dt > 0.25) dt = 0.25;
+    if (!(echt >= 0)) echt = dt;
+    if (echt > 1) echt = 1;
     st.zeit += dt;
+    // Tipp-Kreise (ab v0.7) altern auch in Menue, Rueckfrage und Abend
+    if (st.tipps && st.tipps.length) { st.tipps.forEach(function (tp) { tp.t += dt; }); st.tipps = st.tipps.filter(function (tp) { return tp.t < TIPP_DAUER; }); }
+    // harte 15 Minuten Grenze: zaehlt auch, waehrend Menue oder Rueckfrage offen sind
+    if (!st.abend) st.spielzeit = (st.spielzeit || 0) + echt;
     if (e.neu('debug')) st.debug = !st.debug;
     if (Dorf.Hinweise) Dorf.Hinweise.update(st, dt, e.aktiv ? e.aktiv() : false);
     if (st.frage) { st.frage.t += dt; frageSchritt(st, e); return; }
     if (st.abend) {
       var gesperrt = st.abendZeit !== undefined && st.zeit - st.abendZeit < ABEND_SPERRE;
       if ((e.neu('weiter') && !gesperrt) || st.naechsterTag) {
-        st.abend = false; st.naechsterTag = false;
+        st.abend = false; st.naechsterTag = false; st.spielzeit = 0;
         Dorf.Uhr.neuerTag(st.uhr);
         st.gaeste.forEach(function (gs) { gs.beduerfnisse.satt = 60; if (gs.beduerfnisse.ruhe !== undefined) gs.beduerfnisse.ruhe = 80; });
         if (Dorf.Glueck) Dorf.Glueck.neuerTag(st);
@@ -348,7 +360,7 @@
       }
       return;
     }
-    var stunden = Dorf.Uhr.update(st.uhr, dt);
+    var stunden = Dorf.Uhr.update(st.uhr, dt, Dorf.Uhr.mindestMinuten(st.uhr, st.spielzeit, echt));
     st.gaeste.forEach(function (gs) { Dorf.Gaeste.update(gs, st, dt, stunden); });
     Dorf.Tiere.update(st.tiere, st.karte, dt);
     Dorf.Garten.update(st.garten, stunden);
@@ -408,6 +420,10 @@
       klang(st, 'feier');
     }
     if (st.blase) { st.blase.rest -= dt; if (st.blase.rest <= 0) st.blase = null; }
+    // ab v0.7: am Abend gehen die Lichter eins nach dem anderen an, jedes mit einem leisen Pling
+    var lz = Math.ceil(Dorf.Uhr.licht(st.uhr, st.spielzeit).lampen * LAMPEN - 1e-6);
+    if (lz > (st.lampenAn || 0)) klang(st, 'licht');
+    st.lampenAn = lz;
     if (Dorf.Uhr.vorbei(st.uhr)) {
       st.abend = true; st.abendZeit = st.zeit; st.blase = null; st.kochen = null; st.menue = null; Dorf.Spieler.stoppe(st.spieler); st.marker = null; st.wartetAuf = null;
       st.denk = null; st.speichernJetzt = true;
@@ -452,7 +468,7 @@
     if (debugAn) st.debug = true;
     // Entwicklerhilfe: ?uhr=20 stellt die Uhrzeit, ?abend=1 zeigt die Abendszene, ?herzen=1 macht alle gluecklich
     var mu = win.location && /[?&]uhr=(\d+)/.exec(win.location.search || '');
-    if (mu) st.uhr.minute = Math.max(Dorf.Uhr.START, Math.min(Dorf.Uhr.ENDE - 1, parseInt(mu[1], 10) * 60));
+    if (mu) { st.uhr.minute = Math.max(Dorf.Uhr.START, Math.min(Dorf.Uhr.ENDE - 1, parseInt(mu[1], 10) * 60)); st.spielzeit = Dorf.Uhr.schaetzeSpielzeit(st.uhr.minute); }
     if (win.location && /[?&]herzen=1/.test(win.location.search || '')) st.gaeste.forEach(function (gs) { gs.glueck = Dorf.Glueck.MAX - 5; });
     if (win.location && /[?&]abend=1/.test(win.location.search || '')) st.uhr.minute = Dorf.Uhr.ENDE;
     // ?korb=1 legt von allem drei Stueck in den Korb (zum Ausprobieren)
@@ -514,7 +530,7 @@
     var touchAn = !!((win.matchMedia && win.matchMedia('(pointer: coarse)').matches) || (win.navigator && win.navigator.maxTouchPoints > 0) || /[?&]touch=1/.test((win.location && win.location.search) || ''));
     function zeigeTouch() { R.touch = touchAn; if (rahmen && rahmen.classList) rahmen.classList.toggle('touch', touchAn); if (R.uiSkala) groesse(); }
     zeigeTouch();
-    if (doc.addEventListener) doc.addEventListener('visibilitychange', function () { if (ton) ton.pausiere(doc.hidden); if (doc.hidden) sichere(); });
+    if (doc.addEventListener) doc.addEventListener('visibilitychange', function () { if (ton) ton.pausiere(doc.hidden); if (doc.hidden) sichere(); last = null; });
     if (win.addEventListener) win.addEventListener('pagehide', function () { sichere(); });
 
     function groesse() {
@@ -554,14 +570,14 @@
       win.requestAnimationFrame(frame);
       if (!isFinite(t)) t = last === null ? 0 : last + 16.7;
       if (last === null) last = t;
-      var dt = Math.min(0.05, Math.max(0, (t - last) / 1000)); last = t;
+      var roh = Math.max(0, (t - last) / 1000), dt = Math.min(0.05, roh); last = t;
       var ok = true;
       try {
         if (dt > 0) st.fps = st.fps ? st.fps * 0.9 + 0.1 / dt : 1 / dt;
         if (st.eingabe.touch && !touchAn) { touchAn = true; zeigeTouch(); }
         if (ton && st.eingabe.neu('stumm')) { ton.entsperre(); ton.umschalten(); }
         st.eingabe.klicks().forEach(function (k) { klickBild(st, k.x, k.y, k.zeiger); });
-        schritt(st, dt);
+        schritt(st, dt, Math.min(1, roh));
       } catch (err) { ok = false; melde('Spiellogik', err); }
       try {
         if (ton) {
@@ -585,7 +601,7 @@
     return { st: st, R: R, fehler: fehler, sichere: sichere };
   }
 
-  Dorf.Spiel = { STANDARD_SEED: STANDARD_SEED, VERSION: VERSION, KOCHDAUER: KOCHDAUER, PORTIONEN: PORTIONEN, erstelle: erstelle, schritt: schritt, sage: sage, klick: klick, klickBild: klickBild, kochen: kochen, streichle: streichle, tierPlatz: tierPlatz, oeffneMenue: oeffneMenue, zumHerd: zumHerd, frageAuf: frageAuf, neuAnfangen: neuAnfangen, rette: rette, naechstesZiel: naechstesZiel, FRAGE: FRAGE, ABEND_SPERRE: ABEND_SPERRE, SPEICHER_TAKT: SPEICHER_TAKT, menueKarten: menueKarten, MENUE: MENUE, TAFEL_MAX: TAFEL_MAX, starte: starte };
+  Dorf.Spiel = { STANDARD_SEED: STANDARD_SEED, VERSION: VERSION, KOCHDAUER: KOCHDAUER, PORTIONEN: PORTIONEN, erstelle: erstelle, schritt: schritt, sage: sage, klick: klick, klickBild: klickBild, kochen: kochen, streichle: streichle, tierPlatz: tierPlatz, oeffneMenue: oeffneMenue, zumHerd: zumHerd, frageAuf: frageAuf, neuAnfangen: neuAnfangen, rette: rette, naechstesZiel: naechstesZiel, FRAGE: FRAGE, ABEND_SPERRE: ABEND_SPERRE, LAMPEN: LAMPEN, TIPP_DAUER: TIPP_DAUER, SPEICHER_TAKT: SPEICHER_TAKT, menueKarten: menueKarten, MENUE: MENUE, TAFEL_MAX: TAFEL_MAX, starte: starte };
 
   if (typeof g.document !== 'undefined' && typeof g.window !== 'undefined' && g.document.getElementById) {
     g.window.addEventListener('load', function () { Dorf.Spiel.laufend = starte(g.document, g.window); });

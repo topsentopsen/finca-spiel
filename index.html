@@ -3,26 +3,26 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Finca v0.6 (Prototyp)</title>
+<title>Finca v0.7 (Prototyp)</title>
 <style>
   html, body { margin: 0; height: 100%; background: #3a2e48; overflow: hidden; touch-action: manipulation; }
   /* ab v0.6: kein Markieren, keine Lupe beim langen Druecken, Platz fuer Notch und runde Ecken */
   body { display: flex; align-items: center; justify-content: center; box-sizing: border-box;
     -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
     padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
-  #rahmen { position: relative; line-height: 0; box-shadow: 0 0 0 4px #7a6494, 0 8px 30px rgba(0,0,0,.5); border-radius: 4px; }
+  #rahmen { position: relative; line-height: 0; box-shadow: 0 0 0 4px #b9a3f5, 0 8px 30px rgba(0,0,0,.45); border-radius: 6px; }
   canvas { display: block; }
   #spiel { image-rendering: pixelated; image-rendering: crisp-edges; }
   #ui { position: absolute; left: 0; top: 0; pointer-events: none; }
   #spiel { touch-action: none; cursor: pointer; -webkit-tap-highlight-color: transparent; }
   /* Knoepfe (ab v0.3): Groesse folgt der Spielskalierung --s, auf dem Handy mindestens fingergross */
   .knopf { position: absolute; border: 0; padding: 0; margin: 0; cursor: pointer; -webkit-tap-highlight-color: transparent;
-    touch-action: manipulation; font-family: "Trebuchet MS", Verdana, sans-serif; line-height: 1; }
+    touch-action: manipulation; font-family: ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif; line-height: 1; }
   .knopf svg { width: 100%; height: 100%; display: block; }
   .knopf:focus-visible { outline: 3px solid #ffd36e; outline-offset: 1px; }
   #oben { position: absolute; top: calc(var(--s, 3) * 1px); right: calc(var(--s, 3) * 2px); display: flex; gap: calc(var(--s, 3) * 2px); }
   #oben .knopf { position: relative; width: max(26px, calc(var(--s, 3) * 9px)); height: max(26px, calc(var(--s, 3) * 9px));
-    border-radius: 30%; background: #fff4dc; box-shadow: 0 0 0 2px #4b3a5a; }
+    border-radius: 50%; background: #fff8ee; box-shadow: 0 0 0 2px #4a3560, 0 2px 0 2px rgba(58,42,78,.28); }
   /* auf Handy und Tablet sind die Knoepfe oben groesser (ab v0.6) */
   #rahmen.touch #oben .knopf { width: max(36px, calc(var(--s, 3) * 11px)); height: max(36px, calc(var(--s, 3) * 11px)); }
   #neu-knopf { background: #ffe3ec; }
@@ -37,7 +37,12 @@
     font-size: max(12px, calc(var(--s, 3) * 5px)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; opacity: 0.93; }
   #touch .knopf svg { width: 46%; height: 46%; }
   #touch .knopf:active { transform: translateY(3px); box-shadow: 0 0 0 3px #4b3a5a, 0 1px 0 3px #4b3a5a; }
-  #knopf-sprechen { background: #c9f2e2; } #knopf-kochen { background: #ffd1e0; }
+  /* ab v0.7: helle Flaeche mit farbigem Rand, Farbe passt zur Handlung (Sprechen tuerkis, Kochen rosa) */
+  #touch .knopf { background: #fff8ee; }
+  #knopf-sprechen { box-shadow: 0 0 0 3px #4a3560, inset 0 0 0 5px #5ec8b8, 0 4px 0 3px #3fa597; }
+  #knopf-kochen { box-shadow: 0 0 0 3px #4a3560, inset 0 0 0 5px #ff8f8f, 0 4px 0 3px #e06a6a; }
+  #knopf-sprechen:active { box-shadow: 0 0 0 3px #4a3560, inset 0 0 0 5px #5ec8b8, 0 1px 0 3px #3fa597; }
+  #knopf-kochen:active { box-shadow: 0 0 0 3px #4a3560, inset 0 0 0 5px #ff8f8f, 0 1px 0 3px #e06a6a; }
   /* kleine Handys quer: Knoepfe nebeneinander, damit mehr vom Spiel frei bleibt */
   @media (max-height: 430px) {
     #rahmen.touch #touch { flex-direction: row; bottom: calc(var(--s, 3) * 44px); gap: calc(var(--s, 3) * 3px); }
@@ -83,22 +88,22 @@
   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" fill="#fff4dc" stroke="#7a6494" stroke-width="1.6"/><rect x="9" y="5" width="6" height="12" rx="1" fill="#c9f2e2"/><circle cx="12" cy="19.5" r="1" fill="#7a6494"/></svg>
   Tipp: Handy quer halten
 </div>
-<script src="js/rng.js?v=0.6"></script>
-<script src="js/karte.js?v=0.6"></script>
-<script src="js/pfad.js?v=0.6"></script>
-<script src="js/kamera.js?v=0.6"></script>
-<script src="js/eingabe.js?v=0.6"></script>
-<script src="js/uhr.js?v=0.6"></script>
-<script src="js/spieler.js?v=0.6"></script>
-<script src="js/gerichte.js?v=0.6"></script>
-<script src="js/garten.js?v=0.6"></script>
-<script src="js/glueck.js?v=0.6"></script>
-<script src="js/gaeste.js?v=0.6"></script>
-<script src="js/tiere.js?v=0.6"></script>
-<script src="js/speicher.js?v=0.6"></script>
-<script src="js/hinweise.js?v=0.6"></script>
-<script src="js/render.js?v=0.6"></script>
-<script src="js/ton.js?v=0.6"></script>
-<script src="js/main.js?v=0.6"></script>
+<script src="js/rng.js?v=0.7"></script>
+<script src="js/karte.js?v=0.7"></script>
+<script src="js/pfad.js?v=0.7"></script>
+<script src="js/kamera.js?v=0.7"></script>
+<script src="js/eingabe.js?v=0.7"></script>
+<script src="js/uhr.js?v=0.7"></script>
+<script src="js/spieler.js?v=0.7"></script>
+<script src="js/gerichte.js?v=0.7"></script>
+<script src="js/garten.js?v=0.7"></script>
+<script src="js/glueck.js?v=0.7"></script>
+<script src="js/gaeste.js?v=0.7"></script>
+<script src="js/tiere.js?v=0.7"></script>
+<script src="js/speicher.js?v=0.7"></script>
+<script src="js/hinweise.js?v=0.7"></script>
+<script src="js/render.js?v=0.7"></script>
+<script src="js/ton.js?v=0.7"></script>
+<script src="js/main.js?v=0.7"></script>
 </body>
 </html>

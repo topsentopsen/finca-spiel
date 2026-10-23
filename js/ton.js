@@ -270,6 +270,7 @@
       // ab v0.6: Hinweis-Ploeppchen, fragendes Hmm, Frucht landet im Korb, Neuanfang
       else if (name === 'tipp') { ton(1760, j, 0.12, 0.02, 'sine'); ton(2217.5, j + 0.1, 0.22, 0.016, 'sine'); }
       else if (name === 'hmm') { ton(392, j, 0.18, 0.03, 'triangle', 349.2); ton(349.2, j + 0.2, 0.26, 0.025, 'triangle', 392); }
+      else if (name === 'licht') { ton(1568, j, 0.5, 0.016); ton(2349.3, j + 0.07, 0.6, 0.011); }   // ab v0.7: eine Laterne geht an
       else if (name === 'plopp') ton(988, j, 0.08, 0.025, 'sine', 1480);
       else if (name === 'neu') { [783.99, 659.25, 523.25, 659.25, 783.99].forEach(function (f, i) { ton(f, j + i * 0.11, 0.5, 0.03); }); }
       else if (name === 'feier') { [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach(function (f, i) { ton(f, j + i * 0.16, 1.1, 0.04); }); }

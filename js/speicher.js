@@ -18,7 +18,7 @@
     var d = {
       format: FORMAT, version: Dorf.VERSION || '', tag: st.uhr.tag, minute: Math.round(st.uhr.minute * 10) / 10,
       abend: !!st.abend, ziel: !!st.tagesziel.erreicht, gaeste: {}, vorrat: {}, garten: [], teller: st.teller.slice(0, 6),
-      gelernt: st.gelernt || {}
+      gelernt: st.gelernt || {}, spielzeit: Math.round((st.spielzeit || 0) * 10) / 10
     };
     st.gaeste.forEach(function (gs) {
       var b = gs.beduerfnisse;
@@ -37,6 +37,8 @@
     var tag = Math.floor(zahl(d.tag, 1, 9999, 1)), minute = zahl(d.minute, U.START, U.ENDE, U.START);
     var neuerMorgen = !!d.abend || minute >= U.ENDE;
     st.uhr.tag = tag; st.uhr.minute = minute;
+    // ab v0.7: echte Spielzeit des Tages (alte Staende: aus der Uhrzeit geschaetzt), damit Neuladen den Tag nicht verlaengert
+    st.spielzeit = zahl(d.spielzeit, 0, U.TAG_LIMIT, U.schaetzeSpielzeit(minute));
     st.tagesziel.erreicht = !!d.ziel;
     if (d.gaeste && typeof d.gaeste === 'object') st.gaeste.forEach(function (gs) {
       var x = d.gaeste[gs.id]; if (!x || typeof x !== 'object') return;
@@ -54,7 +56,7 @@
     if (d.gelernt && typeof d.gelernt === 'object') Object.keys(d.gelernt).slice(0, 20).forEach(function (k) { st.gelernt[k] = Math.floor(zahl(d.gelernt[k], 0, 99, 0)); });
     // Abends gespeichert: beim naechsten Besuch beginnt gleich der neue Morgen
     if (neuerMorgen) {
-      U.neuerTag(st.uhr);
+      U.neuerTag(st.uhr); st.spielzeit = 0;
       st.gaeste.forEach(function (gs) { gs.beduerfnisse.satt = 60; if (gs.beduerfnisse.ruhe !== undefined) gs.beduerfnisse.ruhe = 80; });
       if (G) G.neuerTag(st);
       Dorf.Garten.neuerTag(st.garten);
