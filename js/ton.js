@@ -280,6 +280,12 @@
         if (!PL) return false;
         [0, 1, 2, 3].forEach(function (k) { var f = PL[0] * [1, 1.12, 0.94, 1.06][k]; ton(f, j + k * PL[1], PL[1] * 0.8, 0.018, 'triangle', f * 0.92); });
       }
+      // ab v0.9: es fehlt etwas (Bloop), Abendherzen zaehlen (Pling), Sticker, Umblaettern, Gaehnen
+      else if (name === 'bloop') ton(330, j, 0.16, 0.022, 'sine', 196);
+      else if (name === 'zaehl') ton(1318.5, j, 0.14, 0.014, 'sine', 1568);
+      else if (name === 'sticker') { ton(1046.5, j, 0.2, 0.025, 'triangle', 1568); ton(1568, j + 0.12, 0.35, 0.02); ton(2093, j + 0.22, 0.45, 0.014); }
+      else if (name === 'blaettern') { ton(1200, j, 0.09, 0.008, 'triangle', 600); ton(900, j + 0.05, 0.08, 0.006, 'triangle', 500); }
+      else if (name === 'gaehn') ton(392, j, 0.55, 0.012, 'triangle', 247);
       else if (name === 'neu') { [783.99, 659.25, 523.25, 659.25, 783.99].forEach(function (f, i) { ton(f, j + i * 0.11, 0.5, 0.03); }); }
       else if (name === 'feier') { [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach(function (f, i) { ton(f, j + i * 0.16, 1.1, 0.04); }); }
       else if (name === 'nacht') { ton(783.99, j, 1.0, 0.035); ton(659.25, j + 0.3, 1.0, 0.03); ton(523.25, j + 0.6, 1.4, 0.03); }

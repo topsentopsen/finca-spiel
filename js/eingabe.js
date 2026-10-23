@@ -11,7 +11,9 @@
     kochen: ['KeyK'], stumm: ['KeyM'], abbruch: ['Escape', 'Backspace'],
     wahl1: ['Digit1', 'Numpad1'], wahl2: ['Digit2', 'Numpad2'], wahl3: ['Digit3', 'Numpad3'],
     // Debug liegt ab v0.2 auf der Taste links neben der 1 (auf deutschen Tastaturen ^), kein Konflikt mit der Browser-Hilfe
-    debug: ['Backquote']
+    debug: ['Backquote'],
+    // ab v0.9: Bilderbuch mit Rezepten und Stickern
+    buch: ['KeyB']
   };
   var RELEVANT = {};
   Object.keys(AKTIONEN).forEach(function (a) { AKTIONEN[a].forEach(function (c) { RELEVANT[c] = true; }); });

@@ -32,8 +32,9 @@
 
   // Was ist jetzt der beste naechste Schritt? Weltkoordinaten (oder bildschirm: true fuer Menue und Abend)
   function waehle(st) {
-    if (st.frage) return null;
-    if (st.abend) return { art: 'weiter', bildschirm: true, x: 160, y: 136, bild: null };
+    if (st.frage || st.buch) return null;
+    if (st.abend) return { art: 'weiter', bildschirm: true, x: 160, y: 150, bild: null };
+    if (st.menue && st.menue.zu !== undefined) return null;   // Menue schliesst gleich (es fehlt etwas)
     if (st.menue) {
       var karten = Dorf.Spiel.menueKarten(), beste = 0;
       for (var i = 0; i < karten.length; i++) {

@@ -13,11 +13,13 @@
     // ab v0.5: Orangenbaum am Garten
     ORANGE: 25,
     // ab v0.8: kleiner Huehnerstall oberhalb vom Innenhof
-    STALL: 26
+    STALL: 26,
+    // ab v0.9: Pflanzkuebel mit Blumen als Deko im Hof, an der Arkade und am Tor
+    KUEBEL: 27
   };
   var BLOCK = {};
   [T.MAUER, T.WAND, T.WASSER, T.BRUNNEN, T.OLIVE, T.TAFEL, T.HERD, T.TOR,
-    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH, T.ZAUN, T.WIESE, T.ORANGE, T.STALL].forEach(function (t) { BLOCK[t] = true; });
+    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH, T.ZAUN, T.WIESE, T.ORANGE, T.STALL, T.KUEBEL].forEach(function (t) { BLOCK[t] = true; });
 
   var KACHEL = 16, BREITE = 40, HOEHE = 30;
 
@@ -114,6 +116,10 @@
       { art: 'orange', x: 10, y: 19, baum: true }, { art: 'olive', x: 10, y: 16, baum: true }, { art: 'olive', x: 2, y: 14, baum: true }
     ];
 
+    // Pflanzkuebel (v0.9): in den Hofecken, an der Arkade und links und rechts vom Tor, nie auf einem Weg
+    var KUEBEL = [[12, 12], [27, 12], [12, 20], [27, 20], [3, 11], [11, 11], [18, 28], [21, 28]];
+    KUEBEL.forEach(function (p) { set(p[0], p[1], T.KUEBEL); });
+
     // Blumen als Deko (Seed-Zufall, nur auf Gras)
     var blumen = [];
     var farben = ['#ffb3c7', '#ffe9a0', '#d8c2ff', '#ffffff', '#b8e8ff'];
@@ -123,6 +129,7 @@
     }
 
     var karte = {
+      kuebel: KUEBEL.map(function (p) { return { x: p[0], y: p[1] }; }),
       w: w, h: h, kachel: KACHEL, tiles: tiles, baeume: baeume, blumen: blumen, raeume: RAEUME,
       brunnen: { x: 19, y: 15 }, wiese: WIESE, garten: garten, huehner: HUEHNER, stall: STALL,
       // Gecko sitzt an der Hauswand rechts der Haustuer (Pixelbereich auf der Wandfront)

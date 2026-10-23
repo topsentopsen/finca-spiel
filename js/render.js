@@ -121,9 +121,9 @@
 
   // ---------- Kacheln ----------
   function istWand(t) { var T = Dorf.Karte.T; return t === T.MAUER || t === T.WAND; }
-  function istMoebel(t) { var T = Dorf.Karte.T; return t === T.COUCH || t === T.PFLANZE || t === T.ECKBANK || t === T.ANRICHTE || t === T.BETT || t === T.SESSEL || t === T.TISCH; }
+  function istMoebel(t) { var T = Dorf.Karte.T; return t === T.COUCH || t === T.KUEBEL || t === T.PFLANZE || t === T.ECKBANK || t === T.ANRICHTE || t === T.BETT || t === T.SESSEL || t === T.TISCH; }
   // Boden unter Moebeln: Kueche Fliesen, sonst Holz
-  function bodenUnter(karte, x, y) { var T = Dorf.Karte.T, k = karte.raeume.kueche; return (x >= k.x0 && x <= k.x1 && y >= k.y0 && y <= k.y1) ? T.FLIESE : T.BODEN; }
+  function bodenUnter(karte, x, y) { var T = Dorf.Karte.T, k = karte.raeume.kueche; if (karte.tile(x, y) === T.KUEBEL) return y >= 26 ? T.GRAS : T.PFLASTER; return (x >= k.x0 && x <= k.x1 && y >= k.y0 && y <= k.y1) ? T.FLIESE : T.BODEN; }
 
   // Holzzaun: Gras darunter, Pfosten an den Ecken, zwei Latten in Laufrichtung
   function zeichneZaun(c, karte, x, y, sx, sy, hs) {
@@ -418,9 +418,11 @@
     ellipse(c, rx, ry, ring + 2, 3, P.kontur); ellipse(c, rx, ry, ring + 1, 2, '#fff3a8');
     c.globalAlpha = 1;
   }
+  var RAND = { r: 11, x0: 22, y0: 38, hz: 0.9 };
   // Der Hinweis: huepfende Hand, Ring am Ziel und ein Bild, was dort passiert
-  function zeichneHinweis(c, st, cx, cy) {
+  function zeichneHinweis(c, st, cx, cy, R) {
     var h = st.hinweis;
+    if (R) R.letzterRand = null;
     if (!h || !h.ziel || !(h.alpha > 0)) return;
     var z = h.ziel, wx = z.x, wy = z.y;
     if (z.art === 'weiter') return;   // am Abend pulsiert stattdessen die Sonne (siehe Abendszene)
@@ -430,12 +432,20 @@
     c.globalAlpha = h.alpha;
     var drinnen = sx >= 12 && sx <= W - 12 && sy >= 26 && sy <= H - 6;
     if (!drinnen) {
-      // Ziel ausserhalb vom Bild: runder Wegweiser am Rand mit Pfeil in die Richtung
-      var kx = Math.max(14, Math.min(W - 14, sx)), ky = Math.max(30, Math.min(H - 14, sy)), dx = sx - kx, dy = sy - ky, d = Math.hypot(dx, dy) || 1;
-      var px = Math.round(kx + dx / d * 11), py = Math.round(ky + dy / d * 11), puls = Math.round((Math.sin(t * 5) + 1) * 1);
-      kreis(c, px, py, 3, P.kontur); kreis(c, px, py, 2, '#ff9fb8');
-      kreis(c, kx, ky, 9 + puls, P.kontur); kreis(c, kx, ky, 8 + puls, '#fff4dc');
+      // ab v0.9: Plakette am Bildrand mit Bild und spitzem Zeiger in die Richtung, wippt sanft.
+      // Sie weicht dem Korb unten links und dem Aktionsknopf unten rechts (Touch) aus.
+      var kx = Math.max(RAND.x0, Math.min(W - RAND.x0, sx)), ky = Math.max(RAND.y0, Math.min(H - RAND.x0, sy));
+      if (kx < 62 && ky > H - 34) { if (sy > H) kx = 74; else ky = H - 34; }
+      if (R && R.touch && kx > W - 40 && ky > H - 40) { if (sy > H) kx = W - 52; else ky = H - 42; }
+      var dx = sx - kx, dy = sy - ky, d = Math.hypot(dx, dy) || 1;
+      ky += Math.round(Math.sin(t * Math.PI * 2 * RAND.hz) * 2);
+      for (var j = 0; j < 3; j++) {
+        var pd = RAND.r + 1 + j * 3, pr = 3 - j, px = Math.round(kx + dx / d * pd), py = Math.round(ky + dy / d * pd);
+        kreis(c, px, py, pr + 1, P.kontur); kreis(c, px, py, pr, '#ff9fb8');
+      }
+      kreis(c, kx, ky, RAND.r + 1, P.kontur); kreis(c, kx, ky, RAND.r, '#fff4dc'); kreis(c, kx, ky, RAND.r - 2, '#ffe9f0');
       zeichneSymbol(c, z.bild || 'reden', kx, ky);
+      if (R) R.letzterRand = { x: kx, y: ky, bild: z.bild || 'reden' };
       c.globalAlpha = 1; return;
     }
     var hop = Math.round(Math.abs(Math.sin(t * 4.5)) * 4);
@@ -573,6 +583,16 @@
         break;
     }
   }
+  // ab v0.9: Bougainvillea haengt ueber die Dachkante auf die Hauswand
+  function zeichneBougainvillea(c, sx, sy, hs) {
+    var B = ['#e0509a', '#ff7fc0', '#c93f8a'];
+    r(c, sx + 1, sy + 8, 14, 2, '#4f9a5a'); r(c, sx + 5, sy + 10, 1, 3, '#4f9a5a'); r(c, sx + 11, sy + 10, 1, 4, '#4f9a5a');
+    [[2, 7], [6, 6], [10, 7], [13, 6], [4, 10], [9, 11], [11, 13], [5, 13]].forEach(function (q, i) {
+      if (i > 5 && (hs >> i) % 2) return;
+      r(c, sx + q[0], sy + q[1], 3, 2, B[i % 3]); r(c, sx + q[0], sy + q[1], 1, 1, '#ffd1e8');
+    });
+    r(c, sx + 8, sy + 9, 2, 1, '#6cc070');
+  }
   function zeichneWand(c, karte, x, y, sx, sy, t) {
     var T = Dorf.Karte.T, mauer = t === T.MAUER;
     var top = mauer ? P.mauerTop : P.dach, fuge = mauer ? P.mauerFuge : P.dach2;
@@ -585,7 +605,12 @@
       r(c, sx, sy + 10, K, 6, mauer ? P.mauerFront : P.putz);
       r(c, sx, sy + 10, K, 2, P.kontur);
       r(c, sx, sy + 15, K, 1, mauer ? P.kontur : P.putz2);
-      if (!mauer && hash(x, y) % 3 === 0) { rr(c, sx + 4, sy + 11, 8, 5, P.kontur); r(c, sx + 5, sy + 12, 6, 3, P.fenster); r(c, sx + 5, sy + 12, 2, 1, '#ffffff'); }
+      if (!mauer && hash(x, y) % 3 === 0) {
+        // ab v0.9: gruene Fensterlaeden links und rechts
+        r(c, sx + 1, sy + 11, 3, 5, P.kontur); r(c, sx + 12, sy + 11, 3, 5, P.kontur);
+        r(c, sx + 2, sy + 12, 1, 3, '#7cc7b4'); r(c, sx + 13, sy + 12, 1, 3, '#7cc7b4');
+        rr(c, sx + 4, sy + 11, 8, 5, P.kontur); r(c, sx + 5, sy + 12, 6, 3, P.fenster); r(c, sx + 5, sy + 12, 2, 1, '#ffffff');
+      } else if (!mauer && hash(x, y) % 3 === 1) zeichneBougainvillea(c, sx, sy, hash(x, y));
     }
     if (!istWand(karte.tile(x - 1, y))) r(c, sx, sy, 2, K, P.kontur);
     if (!istWand(karte.tile(x + 1, y))) r(c, sx + 14, sy, 2, K, P.kontur);
@@ -614,6 +639,13 @@
   function zeichneTeller(c, id, cx, cy) {
     kreis(c, cx, cy, 3, P.kontur); kreis(c, cx, cy, 2, '#ffffff');
     zeichneEssen(c, id, cx, cy);
+  }
+  // grosser Teller (Karten, Buch, Abend): runder Rand in echter Groesse, nur das Essen wird vergroessert
+  function grosserTeller(c, id, cx, cy, s) {
+    var rad = Math.round(s * 3.4);
+    ellipse(c, cx, cy + rad - 1, rad, Math.max(1, Math.round(s * 0.7)), 'rgba(75,58,90,0.18)');
+    kreis(c, cx, cy, rad + 1, P.kontur); kreis(c, cx, cy, rad, '#ffffff'); kreis(c, cx, cy, Math.round(rad * 0.72), '#f4ede6');
+    c.save(); c.translate(cx, cy); c.scale(s, s); zeichneEssen(c, id, 0, 0); c.restore();
   }
   function zeichneEssen(c, id, cx, cy) {
     if (id === 'ensaimada') {
@@ -662,6 +694,15 @@
         pille(c, sx + 1, sy - 1, 14, 15, P.couch2);
         r(c, sx + 4, sy + 6, 8, 6, P.couch); r(c, sx + 4, sy + 6, 8, 1, P.kontur);
         pille(c, sx + 5, sy + 1, 6, 5, P.kissen);
+        break;
+      case T.KUEBEL:
+        // ab v0.9: Terrakotta-Kuebel mit Bougainvillea oder Geranien
+        pille(c, sx + 3, sy + 7, 10, 8, '#e0855a'); r(c, sx + 4, sy + 9, 8, 1, '#f3a77c'); r(c, sx + 4, sy + 12, 8, 1, '#c0673f');
+        kreis(c, sx + 8, sy + 2, 6, P.kontur); kreis(c, sx + 4, sy + 5, 4, P.kontur); kreis(c, sx + 12, sy + 5, 4, P.kontur);
+        kreis(c, sx + 8, sy + 2, 5, '#6cc070'); kreis(c, sx + 4, sy + 5, 3, '#5aa860'); kreis(c, sx + 12, sy + 5, 3, '#5aa860');
+        var bf = hash(x, y) % 2 ? ['#e0509a', '#ff7fc0'] : ['#ff8a5c', '#ffc36b'];
+        [[5, 0], [9, -2], [12, 3], [7, 3], [2, 4], [10, 6], [4, 7]].forEach(function (q, i) { r(c, sx + q[0], sy + q[1], 2, 2, bf[i % 2]); });
+        r(c, sx + 9, sy - 1, 1, 1, '#ffffff'); r(c, sx + 5, sy, 1, 1, '#ffe0f0');
         break;
       case T.PFLANZE:
         pille(c, sx + 4, sy + 8, 8, 7, P.topf); r(c, sx + 5, sy + 12, 6, 1, P.topf2);
@@ -846,15 +887,38 @@
     return { oben: oben, hoehe: Hh, mundX: ox + 8, mundY: oy + ey + 3 };
   }
 
-  function zeichneBlase(c, cx, topY, symbol, zeit) {
-    var by = topY - 9 + Math.round(Math.sin((zeit || 0) * 3) * 1);
-    kreis(c, cx, by, 7, P.kontur); kreis(c, cx, by, 6, P.box);
-    r(c, cx - 2, by + 7, 2, 2, P.kontur); r(c, cx - 4, by + 9, 1, 1, P.kontur);
+  // ab v0.9: Gedankenwolke (lila Rand, wippt langsam um 2 Pixel), kleine Kringel fuehren zum Kopf
+  var WOLKE = { fuell: '#f4efff', rand: '#9580dc', takt: 1.8, alle: 20, dauer: 5 };
+  function zeichneWolke(c, x, y) {
+    var teile = [[-6, 1, 4], [-2, -2, 5], [3, -2, 5], [7, 1, 4], [0, 2, 5]];
+    teile.forEach(function (t) { kreis(c, x + t[0], y + t[1], t[2] + 1, WOLKE.rand); });
+    teile.forEach(function (t) { kreis(c, x + t[0], y + t[1], t[2], WOLKE.fuell); });
+  }
+  function zeichneBlase(c, cx, topY, symbol, zeit, alpha) {
+    var by = topY - 13 + Math.round(Math.sin((zeit || 0) * Math.PI * 2 / WOLKE.takt) * 2);
+    c.globalAlpha = alpha === undefined ? 1 : alpha;
+    kreis(c, cx - 4, topY - 2, 2, WOLKE.rand); r(c, cx - 4, topY - 2, 1, 1, WOLKE.fuell);
+    kreis(c, cx - 2, by + 8, 2, WOLKE.rand); kreis(c, cx - 2, by + 8, 1, WOLKE.fuell);
+    zeichneWolke(c, cx, by);
     if (symbol === 'teller') { kreis(c, cx, by, 3, P.kontur); kreis(c, cx, by, 2, '#ffffff'); r(c, cx - 1, by - 1, 2, 2, '#ffb36b'); }
     else if (symbol === 'ball') { kreis(c, cx, by, 3, P.kontur); kreis(c, cx, by, 2, '#ff8a8a'); r(c, cx - 2, by, 5, 1, '#ffffff'); }
     else if (symbol === 'herz') herz(c, cx - 2, by - 2, '#ff7fa0');
     else if (symbol === 'kissen') { pille(c, cx - 4, by - 3, 9, 6, P.kissen); }
     else if (symbol === 'zzz') { r(c, cx - 3, by - 3, 3, 1, '#8f7fd9'); r(c, cx - 2, by - 2, 1, 1, '#8f7fd9'); r(c, cx - 3, by - 1, 3, 1, '#8f7fd9'); r(c, cx + 1, by, 3, 1, '#8f7fd9'); r(c, cx + 2, by + 1, 1, 1, '#8f7fd9'); r(c, cx + 1, by + 2, 3, 1, '#8f7fd9'); }
+    c.globalAlpha = 1;
+  }
+  // Wann zeigt ein Gast seine Wolke? Alle 20 Sekunden fuer 5 Sekunden (versetzt), und immer, wenn der Hinweis auf ihn zeigt
+  function wolkeAlpha(st, gs, i) {
+    var h = st.hinweis;
+    if (h && h.ziel && h.ziel.gast === gs && h.alpha > 0) return 1;
+    var ph = ((st.zeit || 0) + i * 6.7) % WOLKE.alle;
+    return ph < WOLKE.dauer ? Math.min(1, ph * 3, (WOLKE.dauer - ph) * 3) : 0;
+  }
+  // Gaehnen: Mund auf, Hand davor ist zu klein, also nur ein runder Mund und zwei Traenchen-Pixel
+  function zeichneGaehnen(c, mx, my, g) {
+    var h = 1 + Math.round(g * 2);
+    rr(c, mx - 2, my - 1, 4, h + 2, P.kontur); r(c, mx - 1, my, 2, h, '#c0506a');
+    if (g > 0.6) { r(c, mx - 5, my - 4, 1, 1, '#bfe6ff'); r(c, mx + 4, my - 4, 1, 1, '#bfe6ff'); }
   }
 
   // Zielmarkierung beim Klicken: huepfendes Herz mit Ring
@@ -895,52 +959,83 @@
     return zeilen;
   }
 
-  // Kochmenue: drei Karten mit Gericht, Name und Wirkung
+  // ab v0.9: Farben der Teller-Untergruende, gestrichelte Umrisse fuer Fehlendes
+  var PLATTE = { paamboli: '#ffe1c9', ensaimada: '#fff0c2', tumbet: '#ffd6cf' };
+  var FEHLT = '#9c7b93';
+  function gestrichelt(c, x, y, rad, col) {
+    var n = Math.max(12, Math.round(rad * 4));
+    for (var a = 0; a < n; a++) if (a % 4 < 2) { var w = a / n * Math.PI * 2; r(c, Math.round(x + Math.cos(w) * rad), Math.round(y + Math.sin(w) * rad), 1, 1, col || FEHLT); }
+  }
+  // Fehlende Zutat: gestrichelter Umriss mit ganz blasser Fuellung
+  function zutatFehlt(c, x, y) { kreis(c, x, y, 4, '#efe3ec'); gestrichelt(c, x, y, 5); }
+  // Ei im eigenen goldenen Fach, damit es auf der hellen Karte gut zu sehen ist
+  function eiFach(c, x, y, da) {
+    rr(c, x - 6, y - 6, 13, 13, '#9a6428'); rr(c, x - 5, y - 5, 11, 11, da ? '#ffcf6b' : '#f2dca8');
+    kreis(c, x, y, 4, da ? '#e0892e' : '#d9c08e');   // dunkles Nest, damit das helle Ei heraussticht
+    if (!da) c.globalAlpha = (c.globalAlpha || 1) * 0.6;
+    zeichneEi(c, x, y);
+    c.globalAlpha = 1;
+    if (da) { r(c, x + 4, y - 5, 1, 1, '#ffffff'); r(c, x + 3, y - 4, 3, 1, '#ffffff'); r(c, x + 4, y - 3, 1, 1, '#ffffff'); }
+  }
+  // kleines Buch (Rezepte und Sticker), Mitte (x, y)
+  function buchBild(c, x, y) {
+    rr(c, x - 9, y - 6, 18, 13, P.kontur); r(c, x - 8, y - 5, 7, 11, '#fff4dc'); r(c, x + 1, y - 5, 7, 11, '#fff4dc'); r(c, x - 1, y - 5, 2, 11, '#d08aa8');
+    herz(c, x - 7, y - 3, '#ff7fa0'); r(c, x + 3, y - 2, 3, 1, '#ffc23d'); r(c, x + 4, y - 3, 1, 3, '#ffc23d');
+  }
+  function liebhaber(st, id) { var g = null; (st.gaeste || []).forEach(function (gs) { if (gs.liebling === id && !g) g = gs; }); return g; }
+
+  // Kochmenue (ab v0.9 Bildkarten): Teller auf farbigem Grund, wer es am liebsten mag, Zutaten als Bilder
   function zeichneMenue(R, st) {
     var c = R.ctx, M = Dorf.Spiel.MENUE, karten = Dorf.Spiel.menueKarten(), wahl = st.menue.wahl, z = st.menue.t || 0;
+    var wk = st.menue.wackel, WK = (Dorf.Spiel && Dorf.Spiel.WACKEL) || 0.5, MB = Dorf.Spiel.MENUE_BUCH, info = { karten: [] };
     c.fillStyle = 'rgba(75,58,90,0.35)'; c.fillRect(0, 0, W, H);
     pille(c, M.x, M.y, M.w, M.h, P.box);
     pille(c, M.x + 70, M.y - 6, 100, 13, '#ffd1e0');
-    text(R, 'Was kochst du?', W / 2, M.y - 3, { align: 'center', fett: true, groesse: 8 });
+    zeichneSymbol(c, 'topf', M.x + 82, M.y);
+    text(R, 'Was kochst du?', W / 2 + 6, M.y - 3, { align: 'center', fett: true, groesse: 8 });
+    if (MB) { pille(c, MB.x, MB.y, MB.w, MB.h, '#e6f7f3'); buchBild(c, MB.x + MB.w / 2, MB.y + MB.h / 2); }
     karten.forEach(function (k, i) {
       var G = Dorf.Gerichte.hole(k.id), aktiv = i === wahl, hop = aktiv ? Math.round(Math.abs(Math.sin(z * 4)) * 2) : 0;
-      pille(c, k.x, k.y - hop, k.w, k.h, aktiv ? '#ffe3ec' : '#fff4dc');
-      if (aktiv) { r(c, k.x + 2, k.y - hop + k.h - 4, k.w - 4, 2, '#ff9fb8'); herz(c, k.x + k.w - 10, k.y - hop + 4, '#ff7fa0'); }
-      kreis(c, k.x + 7, k.y - hop + 7, 4, P.kontur); kreis(c, k.x + 7, k.y - hop + 7, 3, aktiv ? '#ff9fb8' : '#e2d6f5');
-      text(R, String(i + 1), k.x + 7, k.y - hop + 4, { align: 'center', fett: true, groesse: 6, farbe: aktiv ? '#ffffff' : P.kontur });
-      // grosser Teller (blass, wenn Zutaten fehlen, mit gruenem Haken, wenn alles im Korb ist)
-      var pr = Dorf.Garten && st.vorrat ? Dorf.Garten.pruefe(st.vorrat, G) : { ok: true, frisch: false };
+      var dx = 0;
+      if (wk && wk.id === k.id && wk.t < WK) dx = Math.round(Math.sin(wk.t * 40) * 4 * (1 - wk.t / WK));
+      var x = k.x + dx, y = k.y - hop, mx = x + k.w / 2;
+      pille(c, x, y, k.w, k.h, aktiv ? '#ffe3ec' : '#fff4dc');
+      if (aktiv) r(c, x + 2, y + k.h - 4, k.w - 4, 2, '#ff9fb8');
+      kreis(c, x + 7, y + 7, 4, P.kontur); kreis(c, x + 7, y + 7, 3, aktiv ? '#ff9fb8' : '#e2d6f5');
+      text(R, String(i + 1), x + 7, y + 4, { align: 'center', fett: true, groesse: 6, farbe: aktiv ? '#ffffff' : P.kontur });
+      var pr = Dorf.Garten && st.vorrat ? Dorf.Garten.pruefe(st.vorrat, G) : { ok: true, frisch: false, fehlt: {} };
+      // grosser Teller auf farbigem Grund, blass, wenn etwas fehlt
+      kreis(c, mx, y + 20, 14, P.kontur); kreis(c, mx, y + 20, 13, PLATTE[k.id] || '#fff0c2');
       if (!pr.ok) c.globalAlpha = 0.5;
-      c.save(); c.translate(k.x + k.w / 2, k.y - hop + 19); c.scale(3, 3);
-      zeichneTeller(c, k.id, 0, 0);
-      c.restore();
+      grosserTeller(c, k.id, mx, y + 20, 3);
       c.globalAlpha = 1;
-      if (pr.ok && (pr.frisch || !G.immer)) haken(c, k.x + k.w / 2 + 13, k.y - hop + 25);
-      text(R, G.name, k.x + k.w / 2, k.y - hop + 33, { align: 'center', fett: true, groesse: 7 });
-      umbruch(R, G.wirkung, k.w - 8, 6).slice(0, 2).forEach(function (zeile, j) {
-        text(R, zeile, k.x + k.w / 2, k.y - hop + 42 + j * 7, { align: 'center', groesse: 6, farbe: '#7a5a9a' });
+      if (pr.ok && (pr.frisch || !G.immer)) haken(c, mx + 14, y + 29);
+      // wer es am liebsten isst: kleines Gesicht mit Herz oben rechts
+      var fan = liebhaber(st, k.id);
+      if (fan) { zeichneGesicht(c, fan, x + k.w - 11, y + 11, 0, 0, { skala: 0.7, ohneHerzen: true, zeit: st.zeit }); herz(c, x + k.w - 7, y + 17, '#ff7fa0'); }
+      text(R, G.name, mx, y + 36, { align: 'center', fett: true, groesse: 7 });
+      // Zutaten als Bilder: jede Einheit einzeln, fehlende gestrichelt; das Ei im goldenen Fach
+      var teile = [], fehlt = [];
+      Object.keys(G.zutaten || {}).forEach(function (art) {
+        var hat = (st.vorrat && st.vorrat[art]) || 0;
+        for (var j = 0; j < G.zutaten[art]; j++) { var da = G.immer ? true : hat > j; if (G.immer && hat <= j) da = 'blass'; teile.push({ art: art, da: da }); if (!da) fehlt.push(art); }
       });
-      // Zutaten aus dem Garten: gruen wenn genug im Korb, sonst blass mit Hinweis
-      if (Dorf.Garten && st.vorrat) {
-        var zp = Dorf.Garten.pruefe(st.vorrat, G), za = Object.keys(G.zutaten || {}), zy = k.y - hop + 61;
-        var zx = k.x + 6;
-        za.forEach(function (art) {
-          var fehlt = !!zp.fehlt[art];
-          zeichneZutat(c, art, zx + 2, zy, fehlt);
-          text(R, String(G.zutaten[art]), zx + 6, zy - 3, { groesse: 6, fett: true, farbe: fehlt ? '#c9a3c0' : '#4f9a6a' });
-          zx += 14;
-        });
-        if (G.bonus && G.bonus.ei) {
-          // Ei ist nie Pflicht: blass mit Plus, wenn keins im Korb ist; leuchtet, wenn eins mitkommt
-          r(c, zx - 1, zy - 1, 3, 1, zp.bonus ? '#4f9a6a' : '#c9a3c0'); r(c, zx, zy - 2, 1, 3, zp.bonus ? '#4f9a6a' : '#c9a3c0');
-          zeichneZutat(c, 'ei', zx + 6, zy, !zp.bonus);
-          zx += 14;
-        }
-        var hinweis = G.immer ? (zp.frisch ? '+1 frisch' : 'geht immer') : (zp.ok ? 'alles da' : 'ernten');
-        text(R, hinweis, k.x + k.w - 5, zy - 3, { align: 'right', groesse: 6, fett: true, farbe: (zp.ok && (zp.frisch || !G.immer)) ? '#4f9a6a' : '#b07aa8' });
+      var ei = !!(G.bonus && G.bonus.ei), breite = teile.length * 11 + (ei ? 19 : 0), zx = Math.round(mx - breite / 2 + 5), zy = y + 54;
+      teile.forEach(function (tz) {
+        if (tz.da === true) zeichneZutat(c, tz.art, zx, zy, false);
+        else if (tz.da === 'blass') zeichneZutat(c, tz.art, zx, zy, true);
+        else zutatFehlt(c, zx, zy);
+        zx += 11;
+      });
+      if (ei) {
+        var plus = pr.bonus ? '#4f9a6a' : '#b49ab0';
+        r(c, zx - 3, zy, 5, 1, plus); r(c, zx - 1, zy - 2, 1, 5, plus);
+        eiFach(c, zx + 9, zy, !!pr.bonus);
       }
+      info.karten.push({ id: k.id, ok: !!pr.ok, frisch: !!pr.frisch, bonus: !!pr.bonus, ei: ei, fehlt: fehlt, fan: fan ? fan.name : null, dx: dx });
     });
-    text(R, 'Tippen oder 1, 2, 3 · Pfeile und E · Esc: zurück', W / 2, M.y + M.h - 8, { align: 'center', groesse: 6, farbe: '#7a5a9a' });
+    text(R, 'Tippen oder 1, 2, 3 · Pfeile und E · B: Buch · Esc: zurück', W / 2, M.y + M.h - 8, { align: 'center', groesse: 6, farbe: '#7a5a9a' });
+    R.letzteMenue = info;
   }
 
   // gruener Haken im Kreis, Mitte (x, y)
@@ -1131,6 +1226,7 @@
     zeichnePerson(c, cx, cy - hop + m.hoehe - 1 - Math.round(m.kopf / 2) + 2, gs.aussehen, 'unten', 0, { ruhig: true, zeit: o.zeit });
     c.restore();
     c.restore();
+    if (o.ohneHerzen) return;
     for (var i = 0; i < 5; i++) {
       var hx = cx - 14 + i * 6, hy = cy + 12;
       if (i < n) { r(c, hx - 1, hy, 7, 4, voll ? '#c98a1a' : '#b8325c'); r(c, hx, hy + 3, 5, 2, voll ? '#c98a1a' : '#b8325c'); herz(c, hx, hy, voll ? P.herzGold : P.herzVoll); r(c, hx, hy, 1, 1, P.herzLicht); }
@@ -1171,6 +1267,209 @@
   function zeichneIris(c, st, cx, cy, f) {
     var mx = Math.round(st.spieler.x - cx), my = Math.round(st.spieler.y - cy) - 10, rad = Math.max(0, 210 * (1 - f * f));
     c.fillStyle = P.konturTief; c.beginPath(); c.rect(0, 0, W, H); c.arc(mx, my, rad, 0, Math.PI * 2, true); c.fill('evenodd');
+  }
+
+  // ---------- Sticker, Bilderbuch und Abendszene (ab v0.9) ----------
+  // runder Sticker mit weissem Rand, Mitte (x, y); fehlt er, nur ein gestrichelter Kreis mit ganz blassem Bild
+  function zeichneSticker(c, s, x, y, rad, da) {
+    if (!s) return;
+    if (da) {
+      kreis(c, x, y + 1, rad + 1, 'rgba(75,58,90,0.25)');
+      kreis(c, x, y, rad + 1, P.kontur); kreis(c, x, y, rad, '#ffffff'); kreis(c, x, y, rad - 2, s.farbe);
+      c.save(); c.translate(x, y); c.scale(2, 2); zeichneSymbol(c, s.bild, 0, 0); c.restore();
+      r(c, x - Math.round(rad * 0.5), y - Math.round(rad * 0.6), 2, 1, 'rgba(255,255,255,0.8)');
+    } else {
+      kreis(c, x, y, rad, '#f8eff4'); gestrichelt(c, x, y, rad);
+      c.globalAlpha = 0.16; c.save(); c.translate(x, y); c.scale(2, 2); zeichneSymbol(c, s.bild, 0, 0); c.restore(); c.globalAlpha = 1;
+    }
+  }
+  function stickerVon(id) { return Dorf.Sticker ? Dorf.Sticker.hole(id) : null; }
+  function kleinesDreieck(c, x, y, d, col) { for (var i = 0; i < 4; i++) r(c, x + (d > 0 ? i : -i), y - 3 + i, 1, 7 - 2 * i, col); }
+
+  // Bilderbuch: links und rechts eine Seite, Reiter oben (Topf = Rezepte, Stern = Sticker), X zum Zumachen
+  function zeichneBuch(R, st) {
+    var c = R.ctx, B = Dorf.Spiel.BUCH, b = st.buch, seite = b.seite, ALB = Dorf.Spiel.ALBUM_SEITE, N = Dorf.Spiel.BUCH_SEITEN;
+    var info = { seite: seite, album: seite === ALB, sticker: [], rezept: null };
+    c.fillStyle = 'rgba(58,44,80,0.5)'; c.fillRect(0, 0, W, H);
+    var sx = b.stups > 0 ? Math.round(Math.sin(b.stups * 40) * 2 * (b.richtung || 1)) : 0;
+    B.reiter.forEach(function (rt) {
+      var an = rt.seite === ALB ? seite === ALB : seite !== ALB;
+      pille(c, rt.x + sx, rt.y - (an ? 2 : 0), rt.w, rt.h + 4, an ? '#ffe3ec' : '#e6dcef');
+      if (rt.seite === ALB) muster(c, rt.x + sx + rt.w / 2, rt.y + 6 - (an ? 2 : 0), BILD.stern[0], BILD.stern[1]);
+      else zeichneSymbol(c, 'topf', rt.x + sx + rt.w / 2, rt.y + 7 - (an ? 2 : 0));
+    });
+    var x0 = B.x + sx, mx = x0 + B.w / 2, ph = B.h - 6, pw = B.w / 2 - 4;
+    rr(c, x0 - 2, B.y - 2, B.w + 4, B.h + 4, P.kontur); rr(c, x0 - 1, B.y - 1, B.w + 2, B.h + 2, '#c8789a');
+    rr(c, x0 + 3, B.y + 3, pw, ph, '#fff8ec'); rr(c, mx + 1, B.y + 3, pw, ph, '#fff8ec');
+    r(c, mx - 1, B.y + 2, 2, B.h - 4, '#b0607e'); r(c, mx - 3, B.y + 3, 2, ph, '#f1e4d4'); r(c, mx + 1, B.y + 3, 2, ph, '#f1e4d4');
+    if (seite === ALB) {
+      // Album: 12 runde Sticker, die fehlenden gestrichelt; der neueste leuchtet
+      var liste = Dorf.Sticker ? Dorf.Sticker.LISTE : [], album = st.album || {}, neu = st.neuerSticker, beste = 0;
+      if (!neu) liste.forEach(function (s) { if (album[s.id] > beste) { beste = album[s.id]; neu = s.id; } });
+      var sp = [x0 + 36, x0 + 98, x0 + 170, x0 + 232], zl = [B.y + 32, B.y + 72, B.y + 112];
+      liste.forEach(function (s, i) {
+        var x = sp[i % 4], y = zl[Math.floor(i / 4)], da = !!album[s.id];
+        if (da && s.id === neu) { c.globalAlpha = 0.45 + 0.25 * Math.sin(st.zeit * Math.PI * 2); kreis(c, x, y, 18, '#fff3a8'); c.globalAlpha = 1; }
+        zeichneSticker(c, s, x, y, 14, da);
+        info.sticker.push({ id: s.id, da: da, neu: da && s.id === neu });
+      });
+    } else {
+      var G = Dorf.Gerichte.hole(Dorf.Gerichte.REIHE[seite]) || Dorf.Gerichte.hole('paamboli'), id = G.id, lx = x0 + 68, rx = mx + 66;
+      info.rezept = id;
+      // links: grosser Teller auf farbigem Grund, darunter wer es am liebsten isst
+      text(R, G.name, lx, B.y + 8, { align: 'center', fett: true, groesse: 8 });
+      kreis(c, lx, B.y + 58, 31, P.kontur); kreis(c, lx, B.y + 58, 30, PLATTE[id] || '#fff0c2');
+      grosserTeller(c, id, lx, B.y + 58, 6);
+      var fan = liebhaber(st, id);
+      if (fan) {
+        zeichneGesicht(c, fan, lx - 12, B.y + 114, 0, 0, { ohneHerzen: true, zeit: st.zeit });
+        c.save(); c.translate(lx + 8, B.y + 110); c.scale(2, 2); herz(c, 0, 0, '#ff7fa0'); c.restore();
+      }
+      // rechts: Zutaten, Pfeil nach unten, so viele Teller gibt es; darunter das Ei als Extra
+      var teile = [];
+      Object.keys(G.zutaten || {}).forEach(function (art) { for (var j = 0; j < G.zutaten[art]; j++) teile.push(art); });
+      var zx = rx - (teile.length - 1) * 11;
+      teile.forEach(function (art, j) {
+        c.save(); c.translate(zx + j * 22, B.y + 24); c.scale(2, 2); zeichneZutat(c, art, 0, 0, false); c.restore();
+        if (j < teile.length - 1) { r(c, zx + j * 22 + 9, B.y + 24, 5, 1, P.kontur); r(c, zx + j * 22 + 11, B.y + 22, 1, 5, P.kontur); }
+      });
+      r(c, rx - 1, B.y + 40, 3, 9, '#d08aa8'); for (var a = 0; a < 4; a++) r(c, rx - 4 + a, B.y + 49 + a, 9 - 2 * a, 1, '#d08aa8');
+      var n = G.portionen || 2, tx = rx - (n - 1) * 8;
+      for (var t = 0; t < n; t++) { grosserTeller(c, id, tx + t * 16, B.y + 66, 2); }
+      if (G.bonus && G.bonus.ei) {
+        var ey = B.y + 104;
+        c.save(); c.translate(rx - 30, ey); c.scale(2, 2); eiFach(c, 0, 0, true); c.restore();
+        for (var k = 0; k < 10; k++) r(c, rx - 14 + k, ey, 1, 1, P.kontur);
+        kleinesDreieck(c, rx - 3, ey, 1, P.kontur);
+        r(c, rx + 6, ey, 5, 1, '#4f9a6a'); r(c, rx + 8, ey - 2, 1, 5, '#4f9a6a');
+        grosserTeller(c, id, rx + 24, ey, 2);
+      } else if (G.immer) {
+        // geht immer: Brot aus der Speisekammer, frische Zutaten geben einen Teller mehr
+        var fy = B.y + 104;
+        glitzer(c, rx - 30, fy - 6, st.zeit, 0);
+        c.save(); c.translate(rx - 30, fy); c.scale(2, 2); zeichneZutat(c, 'tomate', 0, 0, false); c.restore();
+        kleinesDreieck(c, rx - 3, fy, 1, P.kontur);
+        r(c, rx + 6, fy, 5, 1, '#4f9a6a'); r(c, rx + 8, fy - 2, 1, 5, '#4f9a6a');
+        grosserTeller(c, id, rx + 24, fy, 2);
+      }
+    }
+    // Seitenpunkte und kleine Blaetter-Pfeile unten in den Ecken
+    for (var p = 0; p < N; p++) { rr(c, mx - (N - 1) * 5 + p * 10 + (p >= ALB ? 4 : 0) - 2, B.y + B.h - 10, 5, 5, p === seite ? '#ff7fa0' : '#e2d6f5'); }
+    if (seite > 0) kleinesDreieck(c, x0 + 14, B.y + B.h - 10, -1, '#d08aa8');
+    if (seite < N - 1) kleinesDreieck(c, x0 + B.w - 14, B.y + B.h - 10, 1, '#d08aa8');
+    // Umblaettern: eine Seite klappt ueber den Ruecken
+    if (b.blatt > 0) {
+      var f = 1 - b.blatt / 0.25, breite = Math.round(pw * Math.abs(1 - 2 * f)), rechts = (f < 0.5) === (b.richtung > 0);
+      var bx = rechts ? mx + 1 : mx - 1 - breite;
+      if (breite > 1) { rr(c, bx, B.y + 3, breite, ph, '#f6ead8'); r(c, rechts ? bx + breite - 1 : bx, B.y + 3, 1, ph, '#e0cdb6'); }
+    }
+    var Z = B.zu; pille(c, Z.x, Z.y, Z.w, Z.h, '#ffd1e0'); kreuz(c, Z.x + Z.w / 2, Z.y + Z.h / 2, '#b8325c');
+    return info;
+  }
+
+  // Abend "Bona nit": Nachthimmel, Lichterkette, die Gaeste an der langen Tafel zaehlen ihre Herzen hoch,
+  // Bruna schlaeft, danach ploppt der Sticker auf und fliegt zum Buch-Knopf. Die Sonne unten startet den naechsten Tag.
+  function zeichneAbendSzene(R, st, seit) {
+    var c = R.ctx, A = (Dorf.Spiel && Dorf.Spiel.ABEND) || { herzStart: 1.5, herzTakt: 0.26, versatz: 0.2, sticker: 3.3 }, zeit = st.zeit;
+    var info = { herzen: [], sticker: null, bereit: false, sterne: 20 };
+    var band = ['#2b2150', '#33285c', '#3c3068', '#463874'];
+    for (var i = 0; i < 4; i++) r(c, 0, i * 24, W, 24, band[i]);
+    r(c, 0, 96, W, H - 96, '#5a4a7e'); r(c, 0, 96, W, 1, '#6d5c92');
+    for (var p = 0; p < 14; p++) { var hp = hash(p, 5); rr(c, hp % W, 112 + (hp >> 8) % 60, 6, 3, '#655489'); }
+    // Sterne, langsam funkelnd (unter 2 Hz)
+    for (var s = 0; s < 20; s++) {
+      var hs = hash(s, 7), stx = 50 + hs % (W - 60), sty = 4 + (hs >> 9) % 80, f = 0.3 + (hs % 4) * 0.3;
+      var hell = Math.sin(zeit * Math.PI * 2 * f + s) > 0.35;
+      r(c, stx, sty, 1, 1, '#fff6c8');
+      if (hell) { r(c, stx - 1, sty, 3, 1, 'rgba(255,246,200,0.7)'); r(c, stx, sty - 1, 1, 3, 'rgba(255,246,200,0.7)'); }
+    }
+    // Mond
+    c.globalAlpha = 0.18; kreis(c, 278, 56, 16, '#fff3c4'); c.globalAlpha = 1;
+    kreis(c, 278, 56, 10, P.kontur); kreis(c, 278, 56, 9, '#fff3c4'); kreis(c, 275, 53, 2, '#f1e2a8'); kreis(c, 282, 59, 2, '#f1e2a8'); r(c, 280, 51, 2, 2, '#f1e2a8');
+    // Hauswand links mit Fenster, Gecko schlaeft an der Wand
+    r(c, 0, 30, 44, 90, '#3a2e58'); r(c, 0, 26, 48, 6, '#4b3b6c'); r(c, 0, 32, 44, 1, '#2a2040');
+    rr(c, 10, 52, 16, 14, P.kontur); r(c, 11, 53, 14, 12, '#ffd98a'); r(c, 17, 53, 2, 12, P.kontur); r(c, 11, 58, 14, 1, P.kontur);
+    r(c, 7, 52, 3, 14, '#4f8f82'); r(c, 26, 52, 3, 14, '#4f8f82');
+    zeichneBougainvillea(c, 22, 22, 3); zeichneBougainvillea(c, 4, 22, 6);
+    muster(c, 30, 86, BILD.gecko[0], BILD.gecko[1]);
+    // Lichterkette als Bogen von der Hauswand zum Pfosten rechts
+    r(c, 305, 22, 2, 94, '#2a2040');
+    var lx0 = 44, lx1 = 306;
+    for (var x = lx0; x <= lx1; x += 2) { var u = (x - (lx0 + lx1) / 2) / ((lx1 - lx0) / 2); r(c, x, Math.round(22 + 8 * (1 - u * u)), 2, 1, '#2a2040'); }
+    var lampen = ['#ffd36e', '#ff9fbf', '#9fe0ff', '#c6f59a'];
+    for (var lk = 0, lxx = lx0 + 12; lxx < lx1 - 4; lxx += 22, lk++) {
+      var uu = (lxx - (lx0 + lx1) / 2) / ((lx1 - lx0) / 2), ly = Math.round(22 + 8 * (1 - uu * uu)) + 3;
+      c.globalAlpha = 0.25; kreis(c, lxx, ly, 5, lampen[lk % 4]); c.globalAlpha = 1;
+      kreis(c, lxx, ly, 2, lampen[lk % 4]); r(c, lxx, ly - 3, 1, 1, '#2a2040');
+    }
+    // Gaeste hinter der langen Tafel, darueber zaehlen ihre Herzen hoch
+    var PL = [100, 160, 220], geschafft = st.tagesziel && st.tagesziel.erreicht;
+    st.gaeste.forEach(function (gs, gi) {
+      var gx = PL[gi % 3] + (gi >= 3 ? 12 : 0), n = Dorf.Glueck ? Dorf.Glueck.herzen(gs) : 0;
+      var k = Dorf.Spiel && Dorf.Spiel.abendHerzen ? Dorf.Spiel.abendHerzen(st, gi, seit) : n;
+      var zuletzt = k > 0 ? A.herzStart + gi * A.versatz + (k - 1) * A.herzTakt : -9, frisch = k > 0 && seit - zuletzt < 0.22;
+      var hop = frisch ? 2 : 0;
+      var m = masse(gs.aussehen), fuss = 104;
+      zeichnePerson(c, gx, fuss - hop, gs.aussehen, 'unten', 0, { zeit: zeit, ruhig: true });
+      var kopf = fuss - m.hoehe - 10, voll = k >= 5;
+      for (var h = 0; h < 5; h++) {
+        var hx = gx - 14 + h * 6, hy = kopf - (frisch && h === k - 1 ? 2 : 0);
+        if (h < k) { r(c, hx - 1, hy, 7, 4, voll ? '#c98a1a' : '#b8325c'); r(c, hx, hy + 3, 5, 2, voll ? '#c98a1a' : '#b8325c'); herz(c, hx, hy, voll ? P.herzGold : P.herzVoll); r(c, hx, hy, 1, 1, P.herzLicht); }
+        else herz(c, hx, hy, P.herzLeer);
+      }
+      info.herzen.push({ name: gs.name, gezeigt: k, ziel: n });
+    });
+    // Tafel mit Tischtuch, Tellern und zwei Kerzen
+    rr(c, 58, 95, 204, 13, P.kontur); r(c, 59, 96, 202, 8, '#fff4dc'); r(c, 59, 104, 202, 2, '#e8d6b8');
+    for (var tz = 64; tz < 258; tz += 12) r(c, tz, 96, 6, 8, '#ffe6ee');
+    r(c, 66, 108, 3, 12, P.kontur); r(c, 251, 108, 3, 12, P.kontur);
+    st.gaeste.forEach(function (gs, gi) { grosserTeller(c, gs.liebling || 'paamboli', PL[gi % 3] + (gi >= 3 ? 12 : 0), 100, 1.2); });
+    [130, 190].forEach(function (kx, ki) {
+      r(c, kx, 88, 3, 8, P.kontur); r(c, kx + 1, 89, 1, 7, '#fff8ee');
+      c.globalAlpha = 0.22; kreis(c, kx + 1, 85, 5, '#ffe9a0'); c.globalAlpha = 1;
+      var fl = Math.sin(zeit * 3 + ki) > 0 ? 0 : 1;
+      r(c, kx, 84 + fl, 3, 3, '#ffb340'); r(c, kx + 1, 83 + fl, 1, 3, '#fff3a8');
+    });
+    // Biel steht links, Bruna liegt rechts und schlaeft
+    zeichnePerson(c, 46, 130, BIEL, 'unten', 0, { zeit: zeit, ruhig: true });
+    c.save(); c.beginPath(); c.rect(0, 0, W, 136); c.clip();
+    zeichneEsel(c, { dir: 'links', frame: 0, freude: 0 }, 282, 141, zeit);
+    c.restore();
+    var zb = Math.round(Math.sin(zeit * Math.PI * 2 / 1.8) * 2);
+    muster(c, 270, 108 + zb, BILD.zzz[0].map(function (z) { return z.replace(/k/g, 'z'); }), { z: '#cfc4ff' });
+    // geschafft: ein paar Herzen steigen auf (hoechstens zehn)
+    if (geschafft) for (var hz = 0; hz < 10; hz++) {
+      var hh = hash(hz, 3), hy2 = 150 - ((seit * 12 + (hh % 140)) % 150);
+      c.globalAlpha = Math.min(1, hy2 / 40); herz(c, 60 + (hh >> 5) % 200 + Math.round(Math.sin(seit * 2 + hz) * 3), Math.round(hy2), ['#ff9fbf', '#ffc6dc', '#fff0a8'][hz % 3]); c.globalAlpha = 1;
+    }
+    // Sticker: ploppt auf, glitzert und fliegt dann zum Buch-Knopf oben rechts
+    var sk = stickerVon(st.neuerSticker);
+    if (sk && seit >= A.sticker) {
+      var dt = seit - A.sticker, flugAb = A.sticker + 1, flugDauer = 0.7;
+      var bw = R.knopfBreite || 9, zielX = W - (R.obenBreite || 33) + 2 + bw / 2, zielY = 8;
+      if (seit < flugAb + flugDauer) {
+        var gr = dt < 0.35 ? 1 + 0.25 * Math.sin(dt / 0.35 * Math.PI) : 1, px = 160, py = 46;
+        if (seit >= flugAb) { var fl = sanft((seit - flugAb) / flugDauer); px = 160 + (zielX - 160) * fl; py = 46 + (zielY - 46) * fl; gr = 1 - 0.7 * fl; }
+        if (dt < 1) for (var g8 = 0; g8 < 8; g8++) {
+          var w8 = g8 * Math.PI / 4 + dt, d8 = 18 + dt * 10; c.globalAlpha = 1 - dt;
+          r(c, Math.round(160 + Math.cos(w8) * d8), Math.round(46 + Math.sin(w8) * d8), 2, 2, g8 % 2 ? '#fff3a8' : '#ffffff'); c.globalAlpha = 1;
+        }
+        c.save(); c.translate(Math.round(px), Math.round(py)); c.scale(gr, gr); zeichneSticker(c, sk, 0, 0, 15, true); c.restore();
+        info.sticker = { id: sk.id, phase: seit >= flugAb ? 'flug' : 'da', x: Math.round(px), y: Math.round(py) };
+      } else info.sticker = { id: sk.id, phase: 'album' };
+    }
+    text(R, 'Bona nit!', W / 2, 4, { align: 'center', fett: true, groesse: 12, farbe: '#fff3c4', rand: 'rgba(43,33,80,0.9)', randBreite: 2 });
+    // Sonne unten: ohne Lesen sehen, dass ein neuer Morgen wartet; pulsiert erst, wenn es weitergehen darf
+    var bereit = seit >= ((Dorf.Spiel && Dorf.Spiel.ABEND_SPERRE) || 0) || st.abendZeit === undefined;
+    info.bereit = bereit;
+    c.globalAlpha = bereit ? 1 : 0.4;
+    var winkt = bereit && st.hinweis && st.hinweis.ziel && st.hinweis.ziel.art === 'weiter' ? (st.hinweis.alpha || 0) : 0;
+    if (winkt > 0) { c.globalAlpha = winkt * 0.8; kreis(c, W / 2, 150, 13 + Math.round(Math.abs(Math.sin(seit * 3)) * 4), '#ffd36e'); c.globalAlpha = 1; }
+    kreis(c, W / 2, 150, 11 + (bereit ? Math.round((Math.sin(seit * 4) + 1)) : 0), P.kontur);
+    kreis(c, W / 2, 150, 10 + (bereit ? Math.round((Math.sin(seit * 4) + 1)) : 0), '#fff4dc');
+    zeichneSymbol(c, 'sonne', W / 2, 150);
+    c.globalAlpha = 1;
+    return info;
   }
 
   // ---------- Hauptzeichnen ----------
@@ -1217,12 +1516,15 @@
     });
     liste.push({ y: (karte.brunnen.y + 1) * K + 12, f: function () { zeichneBrunnen(c, karte.brunnen.x * K - cx, karte.brunnen.y * K - cy, zeit); } });
     var redner = st.blase && !st.abend && !st.menue ? st.blase.sprecher : null;
-    st.gaeste.forEach(function (gs) {
+    R.letzteWolken = [];
+    st.gaeste.forEach(function (gs, gi) {
       var sitzt = Dorf.Gaeste.sitzt(gs), off = sitzt ? 14 : 0;
       liste.push({ y: gs.y - (sitzt ? 12 : 0), f: function () {
         var info = zeichnePerson(c, gs.x - cx, gs.y - off - cy, gs.aussehen, gs.dir, gs.frame, { zeit: zeit, hop: huepfer(st, gs.name, gs.hop) });
-        var sym = Dorf.Gaeste.symbol(gs);
-        if (sym && redner !== gs.name) zeichneBlase(c, Math.round(gs.x - cx) + 5, info.oben, sym, zeit);
+        var gae = Dorf.Spiel && Dorf.Spiel.gaehnen ? Dorf.Spiel.gaehnen(st, gi) : 0;
+        if (gae > 0.15 && gs.dir === 'unten') zeichneGaehnen(c, Math.round(info.mundX), Math.round(info.mundY), gae);
+        var sym = Dorf.Gaeste.symbol(gs), wa = sym && redner !== gs.name ? wolkeAlpha(st, gs, gi) : 0;
+        if (wa > 0) { zeichneBlase(c, Math.round(gs.x - cx) + 5, info.oben, sym, zeit, wa); R.letzteWolken.push({ name: gs.name, symbol: sym, alpha: wa }); }
       } });
     });
     if (karte.stall) { var stx = karte.stall.x * K - cx, sty = karte.stall.y * K - cy; if (stx > -40 && stx < W + 8 && sty > -24 && sty < H + 24) liste.push({ y: karte.stall.y * K + 14, f: function () { zeichneStall(c, stx, sty); } }); }
@@ -1258,51 +1560,27 @@
 
     // klein fuer die Eltern: Version und Tasten, rechts oben neben den Knoepfen
     var hilfe = R.touch ? (Dorf.VERSION || '') : (Dorf.VERSION || '') + ' · E: Aktion · K: kochen · M: Ton';
-    if (!st.abend) text(R, hilfe, W - (R.obenBreite || (R.touch ? 52 : 28)), 3, { farbe: P.uiTinteWeich, rand: 'rgba(255,248,238,0.85)', align: 'right', groesse: 6 });
+    if (!st.abend && !st.buch) text(R, hilfe, W - (R.obenBreite || (R.touch ? 52 : 28)), 3, { farbe: P.uiTinteWeich, rand: 'rgba(255,248,238,0.85)', align: 'right', groesse: 6 });
 
     // ab v0.8: Sprechblase mit Bildern ueber dem Kopf (kein Name, kein Text fuer die Kinder)
     R.letzteBlase = null;
-    if (st.blase && !st.abend && !st.menue && !st.frage) R.letzteBlase = zeichneSprechblase(c, st, cx, cy);
+    if (st.blase && !st.abend && !st.menue && !st.frage && !st.buch) R.letzteBlase = zeichneSprechblase(c, st, cx, cy);
 
-    if (!st.abend && !st.menue && !st.frage && !st.debug && Dorf.Glueck) zeichneHud(R, st);
+    if (!st.abend && !st.menue && !st.frage && !st.buch && !st.debug && Dorf.Glueck) zeichneHud(R, st);
     if (!st.abend && !st.frage) { zeichneFlieger(c, st, cx, cy); zeichneHerzFlug(c, st, cx, cy); }
-    if (!st.abend && !st.menue && !st.frage) zeichneDenken(c, st, cx, cy);
+    if (!st.abend && !st.menue && !st.frage && !st.buch) zeichneDenken(c, st, cx, cy);
     if (st.menue && !st.abend) zeichneMenue(R, st);
     if (st.debug) zeichneDebug(R, st);
 
-    // Abendszene (ab v0.7 schliesst sich vorher ein Kreis um Biel)
-    var irisDauer = 1.2, irisSeit = st.abendZeit === undefined ? 99 : st.zeit - st.abendZeit;
+    // Abendszene (ab v0.7 schliesst sich vorher ein Kreis um Biel, ab v0.9 ein Bild statt Text)
+    var irisDauer = (Dorf.Spiel && Dorf.Spiel.ABEND && Dorf.Spiel.ABEND.iris) || 1.2, irisSeit = st.abendZeit === undefined ? 99 : st.zeit - st.abendZeit;
+    R.letzteAbend = null;
     if (st.abend && irisSeit < irisDauer) zeichneIris(c, st, cx, cy, irisSeit / irisDauer);
-    if (st.abend && irisSeit >= irisDauer) {
-      c.fillStyle = 'rgba(58,44,96,0.6)'; c.fillRect(0, 0, W, H);
-      for (var s = 0; s < 24; s++) { var hs = hash(s, 7); r(c, hs % W, 14 + (hs >> 9) % 60, 1, 1, '#fff6c8'); }
-      kreis(c, 270, 34, 9, '#fff3c4'); kreis(c, 274, 31, 8, 'rgba(58,44,96,0.95)');
-      var geschafft = st.tagesziel && st.tagesziel.erreicht, seit = st.zeit - (st.abendZeit || 0);
-      if (geschafft) for (var hz = 0; hz < 10; hz++) {
-        var hh = hash(hz, 3), hy = 150 - ((seit * 12 + (hh % 140)) % 150);
-        c.globalAlpha = Math.min(1, hy / 40); herz(c, 20 + (hh >> 5) % 280 + Math.round(Math.sin(seit * 2 + hz) * 3), Math.round(hy), ['#ff9fbf', '#ffc6dc', '#fff0a8'][hz % 3]); c.globalAlpha = 1;
-      }
-      pille(c, 44, 46, 232, 84, P.box);
-      text(R, 'Bona nit! Tag geschafft', W / 2, 52, { align: 'center', fett: true, groesse: 12 });
-      text(R, '(Gute Nacht!) Tag ' + st.uhr.tag + ' auf der Finca ist vorbei.', W / 2, 68, { align: 'center' });
-      text(R, geschafft ? 'Juhu! Alle Gäste sind glücklich ♥' : 'Schöner Tag! Morgen sammeln wir weiter Herzen.', W / 2, 79, { align: 'center', fett: geschafft, farbe: geschafft ? '#d0507e' : P.kontur });
-      st.gaeste.forEach(function (g, i) {
-        var gx = W / 2 - st.gaeste.length * 40 + i * 80 + 6;
-        text(R, g.name, gx + 16, 90, { align: 'center', groesse: 7 });
-        herzReihe(c, g, gx + 1, 99);
-      });
-      text(R, 'Enter, Leertaste oder Tippen: nächster Tag', W / 2, 112, { align: 'center', farbe: '#7a5a9a' });
-      // ohne Lesen: die Sonne unten zeigt, dass ein neuer Morgen wartet
-      var bereit = seit >= ((Dorf.Spiel && Dorf.Spiel.ABEND_SPERRE) || 0) || st.abendZeit === undefined;
-      c.globalAlpha = bereit ? 1 : 0.4;
-      var winkt = bereit && st.hinweis && st.hinweis.ziel && st.hinweis.ziel.art === 'weiter' ? (st.hinweis.alpha || 0) : 0;
-      if (winkt > 0) { c.globalAlpha = winkt * 0.8; kreis(c, W / 2, 147, 13 + Math.round(Math.abs(Math.sin(seit * 3)) * 4), '#ffd36e'); c.globalAlpha = 1; }
-      kreis(c, W / 2, 147, 10 + (bereit ? Math.round((Math.sin(seit * 4) + 1)) : 0), '#fff4dc');
-      zeichneSymbol(c, 'sonne', W / 2, 147);
-      c.globalAlpha = 1;
-    }
+    if (st.abend && irisSeit >= irisDauer) R.letzteAbend = zeichneAbendSzene(R, st, st.abendZeit === undefined ? 99 : irisSeit);
+    R.letztesBuch = null;
+    if (st.buch) R.letztesBuch = zeichneBuch(R, st);
     if (st.frage) zeichneFrage(R, st);
-    zeichneHinweis(c, st, cx, cy);
+    if (!st.buch) zeichneHinweis(c, st, cx, cy, R);
     zeichneTipps(c, st);
   }
 

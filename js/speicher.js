@@ -18,7 +18,8 @@
     var d = {
       format: FORMAT, version: Dorf.VERSION || '', tag: st.uhr.tag, minute: Math.round(st.uhr.minute * 10) / 10,
       abend: !!st.abend, ziel: !!st.tagesziel.erreicht, gaeste: {}, vorrat: {}, garten: [], teller: st.teller.slice(0, 6),
-      gelernt: st.gelernt || {}, spielzeit: Math.round((st.spielzeit || 0) * 10) / 10
+      gelernt: st.gelernt || {}, spielzeit: Math.round((st.spielzeit || 0) * 10) / 10,
+      heute: st.heute || {}   // ab v0.9: was heute geklappt hat (fuer den Sticker am Abend)
     };
     st.gaeste.forEach(function (gs) {
       var b = gs.beduerfnisse;
@@ -54,9 +55,11 @@
     if (Array.isArray(d.teller)) st.teller = d.teller.filter(function (id) { return !!Dorf.Gerichte.hole(id) && Dorf.Gerichte.REIHE.indexOf(id) >= 0; }).slice(0, 6);
     st.gelernt = {};
     if (d.gelernt && typeof d.gelernt === 'object') Object.keys(d.gelernt).slice(0, 20).forEach(function (k) { st.gelernt[k] = Math.floor(zahl(d.gelernt[k], 0, 99, 0)); });
+    st.heute = {};
+    if (d.heute && typeof d.heute === 'object') Object.keys(d.heute).slice(0, 20).forEach(function (k) { if (/^[a-z_]{1,20}$/.test(k) && d.heute[k]) st.heute[k] = 1; });
     // Abends gespeichert: beim naechsten Besuch beginnt gleich der neue Morgen
     if (neuerMorgen) {
-      U.neuerTag(st.uhr); st.spielzeit = 0;
+      U.neuerTag(st.uhr); st.spielzeit = 0; st.heute = {};
       st.gaeste.forEach(function (gs) { gs.beduerfnisse.satt = 60; if (gs.beduerfnisse.ruhe !== undefined) gs.beduerfnisse.ruhe = 80; });
       if (G) G.neuerTag(st);
       Dorf.Garten.neuerTag(st.garten);

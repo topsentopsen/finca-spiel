@@ -1,4 +1,4 @@
-# Finca v0.8
+# Finca v0.9
 
 A small browser game with a handheld look, written in pure JavaScript. There is no build, no npm and there are no external assets. Music and sounds are generated in code with WebAudio.
 
@@ -26,6 +26,7 @@ Optional: `index.html?seed=12345` uses a different seed for flowers and guest de
 | Action button | One big round button on phones and tablets (bottom right). Its picture shows what it will do right now (egg, talk, pet, harvest, cook) and it does exactly that, same as E |
 | Click / tap a hen or an egg | Walk there and collect the egg into the basket |
 | Read aloud button (top right) | Only shown if the browser has a German voice. Short calm lines are read aloud; off when the sound is off, pressing it while muted turns the sound back on (saved in the browser) |
+| B or book button (top right) | Open or close the picture book: recipe pages and the sticker album. Tap the right half or press the right arrow to turn forward, the left half or left arrow to turn back; the pot tab jumps to the recipes, the star tab to the album; the X, Esc, B or a tap next to the book closes it. The book button in the cooking menu opens the recipe of the selected dish |
 | Enter / Space / tap | Close the dialog; after "Bona nit!" start the next day |
 | Backquote (the key left of 1) | Toggle the debug overlay (FPS, seed, needs, paths) |
 
@@ -47,7 +48,11 @@ Everything important can be understood without reading:
 - In the cooking menu the dish that works best right now gets the arrow, dishes with missing ingredients look faded and cookable ones get a green check.
 - If an ingredient is missing, Biel shows a thought bubble with the missing fruit and a questioning "hmm"; the arrow then points to the right plant. Tapping an unripe plant makes it wiggle with a little sprout in the bubble.
 - Harvested fruit flies in an arc into the basket, the basket slot hops and goes "plopp".
-- In the evening a golden sun pulses where to tap for the next day. Right after the evening starts, taps are ignored for 1.5 seconds so the moment is not skipped by accident.
+- In the evening a golden sun pulses where to tap for the next day. Right after the evening starts, taps are ignored for 4 seconds so the hearts and the sticker can be seen first.
+- From v0.9 the cooking cards are pure pictures: the dish on a colored plate, the face of the guest who loves it, the ingredients (missing ones as a dashed circle) and the egg in its own golden slot. If something is missing the card wiggles with a soft "bloop" and the menu closes by itself, so the hint arrow can show the way to the right plant.
+- From v0.9 "Bona nit" is a picture scene: a starry sky with the moon, string lights, the guests at a long table with their favorite dish. Their hearts count up one by one with a soft pling, then the sticker of the day pops up and flies into the book button. Only the words "Bona nit!" are written.
+- The picture book shows each recipe as ingredients, an arrow and the plates you get, the egg bonus as an extra plate, and who loves the dish. The album has twelve round stickers (sun, donkey, egg, tomato, the three dishes, heart, hen, gecko, moon, star); missing ones are dashed outlines, the newest one glows, a dot on the book button shows a new sticker. The album is saved separately (`finca.album`) and stays when starting over.
+- Guests show small thought clouds with a picture of what they want now and then (always when the hint points at them), and tired guests yawn now and then (at dusk everyone does), with a very quiet yawn sound.
 
 ## Touch and stability
 - Bigger buttons on phones. A second finger or a quick double tap (within 280 ms at the same spot) does not count. Taps next to a guest, animal, plant or the stove still hit it.
@@ -88,7 +93,7 @@ The table holds at most 6 plates. Guests take their favorite dish when it is the
 Developer helpers: `?start=x,y` places Biel on a tile, `?debug=1` opens the debug overlay, `?touch=1` shows the touch buttons on a desktop, `?menue=1` opens the cooking menu right away, `?uhr=20` sets the clock to 20:00, `?abend=1` jumps to the evening scene, `?herzen=1` makes all guests almost happy, `?korb=1` puts three of every ingredient in the basket, `?neu=1` deletes the saved game. With any developer helper except `?neu=1` the saved game is neither loaded nor overwritten.
 
 ## Structure
-- `index.html` loads the scripts in this order: rng, karte, pfad, kamera, eingabe, uhr, spieler, gerichte, garten, glueck, gaeste, tiere, speicher, hinweise, render, ton, main. Everything hangs on `globalThis.Dorf`.
+- `index.html` loads the scripts in this order: rng, karte, pfad, kamera, eingabe, uhr, spieler, gerichte, garten, glueck, gaeste, tiere, speicher, sticker, hinweise, vorlesen, render, ton, main. Everything hangs on `globalThis.Dorf`.
 - `js/rng.js` – mulberry32
 - `js/karte.js` – 40x30 Finca map with kitchen, living room and guest house, furniture, collision, target locations
 - `js/pfad.js` – A* (4 directions)
@@ -102,6 +107,7 @@ Developer helpers: `?start=x,y` places Biel on a tile, `?debug=1` opens the debu
 - `js/gaeste.js` – Mia (7), Jonas (41) and Padrina (78) with the needs Satt, Spielen and Ruhe
 - `js/tiere.js` – Bruna the donkey on her fenced meadow and the gecko on the house wall (own random generator)
 - `js/speicher.js` – saved game in localStorage with format number, checking and clamping all values
+- `js/sticker.js` – the twelve stickers, which one is earned today (one per day, things done today first), album saving
 - `js/hinweise.js` – picture hints for children who cannot read yet (what to do next, when to show it)
 - `js/render.js` – drawing (cached background, tiles, sprites, HUD, hints, dialog, debug)
 - `js/ton.js` – WebAudio music (plucked guitar-like loop in A minor, 66 BPM, Karplus-Strong) and soft sound effects, evening variant with crossfade, crickets at night, mute toggle
@@ -112,9 +118,10 @@ Developer helpers: `?start=x,y` places Biel on a tile, `?debug=1` opens the debu
 ```
 node tests/run.js
 ```
-Uses only Node's built-in `vm` module. Nothing has to be installed. 96 tests, including a ten day soak test with random taps, keys, start over questions and a save and load every day.
+Uses only Node's built-in `vm` module. Nothing has to be installed. 105 tests, including a ten day soak test with random taps, keys, start over questions and a save and load every day.
 
 ## Version history
+- **v0.9** (23.10.2026): "Bona nit" as a picture scene with a starry sky, string lights and the guests at the long table, hearts counting up, then the sticker of the day. Cooking cards and a picture recipe book without reading, the egg in a golden slot, a wiggle and bloop when something is missing. A small sticker album to look at. Decoration: bougainvillea on the walls, shutters at some windows, flower planters in the courtyard, at the arcade and the gate. Thought clouds over the guests and yawning when tired. Round hint badges at the screen edge that avoid the basket and the touch button. Own small favicon drawn inline. The 15 minute day limit stays and is tested again with book and menu use.
 - **v0.8** (23.10.2026): redrawn figures with their own shapes (Mia small with pigtails, Jonas broad with glasses, Padrina with a bun, skirt and walking stick, Biel with a straw hat), a small hop while talking. Speech bubbles show only pictures, no names and no text, and pop in next to the speaker; the speaker's face at the top glows. One context button on touch devices whose picture shows the fitting action. Hearts fly from the guest up to their face before they count, and the basket in the bottom left visibly fills with the harvested items. Hens with a little coop lay eggs; an egg is a new ingredient that is never required: in Ensaïmada and Tumbet it adds one extra plate. Optional read aloud with the browser's own German voice. The 15 minute day limit stays and is tested again with hens, eggs and flying hearts.
 - **v0.7** (23.10.2026): new look after a design review. Calmer pastel palette with darker, quieter ground and stronger character colors, outlines in the color of each object, silver green olive trees, a wooden frame around the garden bed, sparse courtyard stones and a stone ring around the well. Light is now multiplied with a color per time of day, and at dusk windows, five lanterns, the stove and a little lantern in Biel's hand glow. Text free HUD with day arc, guest faces and hearts. Biel with a straw hat and a ring under his feet, tap ring, rounded system font, round buttons with colored rims, a play triangle instead of a green cross on "Nein". Hard limit of 15 real minutes per game day with a visible dusk and a closing circle before "Bona nit".
 - **v0.6** (23.10.2026): polish and stability. Saved game in the browser (day, hearts, basket, clock, garden, table) with a format number, gentle "Neu anfangen" button with a picture question, sound setting kept. Picture hints for children who cannot read yet: pulsing arrow with an icon bubble after a short pause, thought bubble for missing ingredients, fruit flying into the basket, wiggling unripe plants, pulsing sun in the evening, new soft sounds. Error guard so the loop never freezes, evening tap lock, double tap filter, bigger touch buttons and a layout for small phones held sideways. Background drawn once and cached. Rounder Padrina with a pink hair band. Ten day soak test.

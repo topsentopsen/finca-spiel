@@ -3,15 +3,19 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.8';
+  var VERSION = 'v0.9';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
   var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
-  var ABEND_SPERRE = 1.5;     // Sekunden nach Abendbeginn, in denen Tippen noch nicht zum naechsten Tag springt
+  var ABEND_SPERRE = 4;       // Sekunden nach Abendbeginn, in denen Tippen noch nicht zum naechsten Tag springt (ab v0.9: erst Herzen und Sticker zeigen)
+  // ab v0.9: Ablauf der Abendszene "Bona nit" in Sekunden ab Abendbeginn. Jeder Gast zaehlt seine Herzen hoch (0,26 s pro Herz),
+  // die Gaeste leicht versetzt. Danach ploppt der neue Sticker auf, dann erscheint die Sonne fuer den neuen Morgen.
+  var ABEND = { iris: 1.2, herzStart: 1.5, herzTakt: 0.26, versatz: 0.2, sticker: 3.3 };
   var SPEICHER_TAKT = 5;      // alle 5 Sekunden wird der Spielstand gesichert
   var FLUG_KORB = 0.6;        // ab v0.8: so lange fliegt eine Frucht oder ein Ei in den Korb unten links
   var AKTION_PULS = 3;        // der grosse Knopf pulsiert nur bei den ersten drei Malen
   var AKTION_NAME = { reden: 'Reden', streicheln: 'Streicheln', fuettern: 'Füttern', ernten: 'Ernten', sammeln: 'Ei aufheben', kochen: 'Kochen', weiter: 'Neuer Tag' };
+  var WACKEL = 0.5, MENUE_ZU = 0.9;   // ab v0.9: Karte mit fehlenden Zutaten wackelt, danach geht das Menue zu
   Dorf.VERSION = VERSION;
 
   function erstelle(opts) {
@@ -27,6 +31,8 @@
       spielzeit: 0, seed: seed, frage: null, flieger: [], denk: null, wunsch: null, korbPuls: {}, gelernt: {},
       // ab v0.8: Herzen fliegen zum Bild des Gastes oben, Bild huepft kurz, Sprechblasen zaehlen mit (fuers Vorlesen)
       herzFlug: [], chipPuls: {}, blasenNr: 0, aktionGenutzt: 0,
+      // ab v0.9: Bilderbuch (Rezepte und Sticker), Album, Tageslog fuer den Sticker am Abend
+      buch: null, buchSeite: 0, album: {}, albumNeu: false, heute: {}, neuerSticker: null, abendZaehler: 0,
       hinweis: Dorf.Hinweise ? Dorf.Hinweise.erstelle() : null,
       eingabe: opts.eingabe || Dorf.Eingabe.erstelle(null),
       spieler: Dorf.Spieler.erstelle(karte.start.biel),
@@ -51,6 +57,7 @@
   function klang(st, name) { st.toene.push(name); if (st.toene.length > 32) st.toene.shift(); }
 
   function lerne(st, art) { if (Dorf.Hinweise) Dorf.Hinweise.lerne(st, art); }
+  function merke(st, tat) { if (Dorf.Sticker) Dorf.Sticker.merke(st, tat); }
   // Gedankenblase ueber Biel mit kleinen Bildern (fuer Kinder, die noch nicht lesen)
   function denke(st, bilder, dauer) { st.denk = { bilder: bilder.slice(0, 4), rest: dauer || 3, t: 0 }; klang(st, 'hmm'); }
 
@@ -96,6 +103,7 @@
   function klick(st, wx, wy) {
     if (!isFinite(wx) || !isFinite(wy)) return 'nein';
     if (st.frage) { st.frage = null; return 'nein'; }
+    if (st.buch) { schliesseBuch(st); return 'zurueck'; }
     if (st.abend) {
       // gerade erst Abend: Dauertippen soll den schoenen Abend nicht sofort wegklicken
       if (st.abendZeit !== undefined && st.zeit - st.abendZeit < ABEND_SPERRE) return 'warte';
@@ -172,6 +180,7 @@
     if (Math.abs(dx) > Math.abs(dy)) sp.dir = dx < 0 ? 'links' : 'rechts'; else sp.dir = dy < 0 ? 'oben' : 'unten';
     if (tier.art === 'esel' && st.vorrat && st.vorrat.karotte > 0) return fuettere(st, tier);
     Dorf.Tiere.streichle(tier, sp);
+    merke(st, tier.art === 'esel' ? 'esel' : (tier.art === 'huhn' ? 'huhn' : 'gecko'));
     st.herzchen.push({ x: tier.x, y: tier.y - (tier.art === 'esel' ? 22 : (tier.art === 'huhn' ? 14 : 8)), t: 0, farbe: '#ff7fa0' });
     klang(st, tier.art === 'esel' ? 'esel' : (tier.art === 'huhn' ? 'gack' : 'gecko'));
     sage(st, 'Biel', Dorf.Tiere.spruch(tier), 3.5, Dorf.Tiere.BILDER[tier.art] || ['herz']);
@@ -181,7 +190,7 @@
 
   // Bruna bekommt eine Karotte aus dem Korb: sie mampft, zwei Herzen steigen auf, Gaeste in der Naehe freuen sich sehr
   function fuettere(st, tier) {
-    st.vorrat.karotte--; lerne(st, 'fuettern');
+    st.vorrat.karotte--; lerne(st, 'fuettern'); merke(st, 'esel');
     Dorf.Tiere.fuettere(tier, st.spieler);
     st.herzchen.push({ x: tier.x - 5, y: tier.y - 22, t: 0, farbe: '#ff7fa0' });
     st.herzchen.push({ x: tier.x + 6, y: tier.y - 26, t: -0.25, farbe: '#ffb3d1' });
@@ -205,7 +214,7 @@
     // Die Frucht fliegt im Bogen in Biels Korb, die Pflanze wackelt
     for (var f = 0; f < n; f++) st.flieger.push({ art: p.art, x: q.x + (f ? 4 : 0), y: q.y - (p.baum ? 22 : 8), t: -0.12 * f, dauer: FLUG_KORB });
     p.wackel = 0.5;
-    klang(st, 'ernte'); lerne(st, 'ernten');
+    klang(st, 'ernte'); lerne(st, 'ernten'); merke(st, 'ernte');
     if (st.wunsch === p.art) st.wunsch = null;
     sage(st, 'Biel', (n === 1 ? 'Eine ' + A.name : n + ' ' + A.mehrzahl) + '! (' + A.wort + ')' + (p.art === 'karotte' ? ' Die mag Bruna.' : ''), 2.5, [p.art, 'korb']);
     return n;
@@ -219,7 +228,7 @@
     if (!Dorf.Tiere.nimmEi(st.tiere, ei)) return 0;
     st.vorrat.ei = (st.vorrat.ei || 0) + 1;
     st.flieger.push({ art: 'ei', x: ei.x, y: ei.y - 4, t: 0, dauer: FLUG_KORB });
-    klang(st, 'ernte'); lerne(st, 'sammeln');
+    klang(st, 'ernte'); lerne(st, 'sammeln'); merke(st, 'ei');
     sage(st, 'Biel', 'Ein Ei! (ou) Das kommt in den Korb.', 2.5, ['ei', 'korb']);
     return 1;
   }
@@ -240,7 +249,7 @@
   }
   function schliesseMenue(st) { st.menue = null; }
   function kochen(st, id) {
-    var G = Dorf.Gerichte.hole(id || 'paamboli');
+    var G = Dorf.Gerichte.hole(id || 'paamboli'), warOffen = st.menue;
     st.menue = null;
     if (!G) return false;
     if (st.kochen) { sage(st, 'Biel', 'Gleich fertig, es brutzelt schon.', 2.5, ['topf', 'sanduhr']); return false; }
@@ -254,6 +263,9 @@
       sage(st, 'Biel', 'Für ' + G.name + ' hole ich noch ' + Dorf.Garten.fehltText(z.fehlt) + ' aus dem Garten.', 4, bilder.concat(['frage']).slice(0, 3));
       denke(st, bilder, 4);
       st.wunsch = Object.keys(z.fehlt)[0] || null;
+      // ab v0.9: war das Menue offen, bleibt es kurz da, die Karte wackelt (die fehlenden Zutaten sind gestrichelt), dann geht es zu
+      if (warOffen) { st.menue = warOffen; warOffen.wahl = st.letzteWahl; warOffen.wackel = { id: G.id, t: 0 }; warOffen.zu = MENUE_ZU; }
+      klang(st, 'bloop');
       return false;
     }
     // ab v0.8: ein Ei ist nie Pflicht. Liegt eins im Korb, kommt es mit hinein und es gibt einen Teller mehr.
@@ -262,7 +274,7 @@
     st.kochen = { rest: G.dauer, dauer: G.dauer, gericht: G.id, frisch: z.frisch && !!G.immer, ei: mitEi };
     sage(st, 'Biel', 'Ich mache ' + G.name + ' (' + G.info + ')' + (st.kochen.frisch ? ' mit frischer Tomate und Olive!' : (mitEi ? ' mit einem frischen Ei!' : '.')), 3.5,
       ['gericht:' + G.id, 'topf'].concat(mitEi ? ['ei'] : []));
-    klang(st, 'kochen'); lerne(st, 'kochen');
+    klang(st, 'kochen'); lerne(st, 'kochen'); merke(st, 'koch_' + G.id);
     return true;
   }
   // Kochknopf oder Taste K: am Herd das Menue oeffnen, sonst zum Herd laufen
@@ -284,8 +296,55 @@
   // Klick in Bildschirmkoordinaten (0..320, 0..176): Menue bedienen oder in die Welt umrechnen
   // Rueckfrage "Neu anfangen?": zwei grosse Bildknoepfe, Nein (X) ist vorausgewaehlt
   var FRAGE = { x: 60, y: 26, w: 200, h: 110, nein: { x: 78, y: 78, w: 76, h: 48 }, ja: { x: 166, y: 78, w: 76, h: 48 } };
-  function frageAuf(st) { if (st.frage) return; st.frage = { wahl: 0, t: 0 }; st.menue = null; Dorf.Spieler.stoppe(st.spieler); st.marker = null; klang(st, 'menue'); }
+  function frageAuf(st) { if (st.frage) return; st.frage = { wahl: 0, t: 0 }; st.menue = null; st.buch = null; Dorf.Spieler.stoppe(st.spieler); st.marker = null; klang(st, 'menue'); }
   function drin(k, x, y) { return x >= k.x && x < k.x + k.w && y >= k.y && y < k.y + k.h; }
+
+  // ---------- Bilderbuch (ab v0.9) ----------
+  // Seiten 0 bis 2: ein Rezept pro Gericht (Zutaten + Zutaten = Gericht, wer es liebt, Ei als Extra). Seite 3: das Sticker Album.
+  // Bedienen ohne Lesen: linke Haelfte tippen = zurueck blaettern, rechte Haelfte = weiter, X oder daneben = zu. Zwei Reiter oben: Topf und Stern.
+  var BUCH = { x: 26, y: 26, w: 268, h: 140, zu: { x: 276, y: 18, w: 24, h: 22 },
+    reiter: [{ x: 46, y: 14, w: 34, h: 16, seite: 0 }, { x: 84, y: 14, w: 34, h: 16, seite: 3 }] };
+  var BUCH_SEITEN = 4, ALBUM_SEITE = 3;
+  // Buchknopf im Kochmenue (oben rechts am Rand der Tafel)
+  var MENUE_BUCH = { x: 252, y: 20, w: 30, h: 22 };
+  function oeffneBuch(st, seite) {
+    if (st.frage) return false;
+    if (seite === undefined) seite = st.albumNeu ? ALBUM_SEITE : (st.buchSeite || 0);
+    seite = Math.max(0, Math.min(BUCH_SEITEN - 1, seite | 0));
+    st.buch = { seite: seite, t: 0, blatt: 0, richtung: 0, stups: 0 };
+    if (seite === ALBUM_SEITE) st.albumNeu = false;
+    Dorf.Spieler.stoppe(st.spieler); st.marker = null;
+    klang(st, 'blaettern');
+    return true;
+  }
+  function schliesseBuch(st) { if (st.buch) st.buchSeite = st.buch.seite; st.buch = null; }
+  function blaettere(st, d) {
+    var b = st.buch, neu = b.seite + d;
+    if (neu < 0 || neu >= BUCH_SEITEN) { b.stups = 0.3; b.richtung = d; klang(st, 'menue'); return false; }   // Ende: Buch stupst nur kurz
+    b.seite = neu; b.blatt = 0.25; b.richtung = d;
+    if (neu === ALBUM_SEITE) st.albumNeu = false;
+    klang(st, 'blaettern');
+    return true;
+  }
+  function buchKlick(st, bx, by, zeiger) {
+    var b = st.buch;
+    if (zeiger && b.t < 0.2) return 'warte';
+    if (drin(BUCH.zu, bx, by)) { schliesseBuch(st); return 'zurueck'; }
+    for (var i = 0; i < BUCH.reiter.length; i++) {
+      var rt = BUCH.reiter[i];
+      if (drin(rt, bx, by)) { if (b.seite !== rt.seite) { b.richtung = rt.seite > b.seite ? 1 : -1; b.seite = rt.seite; b.blatt = 0.25; if (rt.seite === ALBUM_SEITE) st.albumNeu = false; klang(st, 'blaettern'); } return 'seite'; }
+    }
+    if (!drin(BUCH, bx, by)) { schliesseBuch(st); return 'zurueck'; }
+    blaettere(st, bx < BUCH.x + BUCH.w / 2 ? -1 : 1);
+    return 'blaettern';
+  }
+  function buchSchritt(st, e, dt) {
+    var b = st.buch;
+    b.t += dt; if (b.blatt > 0) b.blatt = Math.max(0, b.blatt - dt); if (b.stups > 0) b.stups = Math.max(0, b.stups - dt);
+    if (e.neu('links') || e.neu('hoch')) blaettere(st, -1);
+    else if (e.neu('rechts') || e.neu('runter')) blaettere(st, 1);
+    if (e.neu('abbruch') || e.neu('buch') || (b.t > 0.2 && (e.neu('weiter') || e.neu('sprechen')))) schliesseBuch(st);
+  }
   function klickBild(st, bx, by, zeiger) {
     if (!isFinite(bx) || !isFinite(by)) return 'nein';
     st.tipps = (st.tipps || []).slice(-3); st.tipps.push({ x: bx, y: by, t: 0 });
@@ -294,8 +353,10 @@
       if (drin(FRAGE.ja, bx, by)) { neuAnfangen(st); return 'neu'; }
       st.frage = null; return 'nein';
     }
+    if (st.buch) return buchKlick(st, bx, by, zeiger);
     if (st.menue && !st.abend) {
       if (zeiger && st.menue.t < 0.25) return 'warte';     // der Finger vom Tipp auf den Herd zaehlt nicht als Wahl
+      if (drin(MENUE_BUCH, bx, by)) { oeffneBuch(st, st.menue.wahl); return 'buch'; }
       var karten = menueKarten();
       for (var i = 0; i < karten.length; i++) {
         var k = karten[i];
@@ -315,7 +376,8 @@
   // Alles auf Anfang: neuer erster Tag mit demselben Garten. Ton und Debug bleiben, wie sie sind.
   function neuAnfangen(st) {
     // die Spielzeit des Tages bleibt: Neu anfangen verlaengert den Tag nicht ueber 15 Minuten
-    var behalte = { eingabe: st.eingabe, ton: st.ton, debug: st.debug, speicher: st.speicher, fps: st.fps, spielzeit: st.spielzeit };
+    // ab v0.9: das Sticker Album gehoert dem Kind und bleibt auch beim Neuanfang
+    var behalte = { eingabe: st.eingabe, ton: st.ton, debug: st.debug, speicher: st.speicher, fps: st.fps, spielzeit: st.spielzeit, album: st.album, albumNeu: st.albumNeu, vorlesen: st.vorlesen };
     var neu = erstelle({ seed: st.seed, eingabe: st.eingabe });
     Object.keys(st).forEach(function (k) { if (!(k in neu)) delete st[k]; });
     Object.keys(neu).forEach(function (k) { st[k] = neu[k]; });
@@ -327,8 +389,12 @@
     return true;
   }
 
-  function menueSchritt(st, e) {
+  function menueSchritt(st, e, dt) {
     var m = st.menue, n = Dorf.Gerichte.REIHE.length, alt = m.wahl;
+    // ab v0.9: nach dem Wackeln (Zutaten fehlen) geht das Menue von selbst zu, die Hand zeigt dann zur Pflanze
+    if (m.wackel) { m.wackel.t += dt || 0; if (m.wackel.t >= WACKEL) m.wackel = null; }
+    if (m.zu !== undefined) { m.zu -= dt || 0; if (m.zu <= 0) { schliesseMenue(st); return; } }
+    if (e.neu('buch')) { oeffneBuch(st, m.wahl); return; }
     if (e.neu('links') || e.neu('hoch')) m.wahl = (m.wahl + n - 1) % n;
     if (e.neu('rechts') || e.neu('runter')) m.wahl = (m.wahl + 1) % n;
     if (m.wahl !== alt) klang(st, 'menue');
@@ -368,7 +434,7 @@
   // ab v0.8: Was macht der eine grosse Knopf (und Taste E) gerade? Gleiche Reihenfolge wie vorher bei E:
   // Gast in der Naehe, dann Tier (beim Huhn zuerst das Ei), dann reife Pflanze, dann Ei, dann Herd. null = es gibt gerade nichts zu tun.
   function kontext(st) {
-    if (st.frage) return null;
+    if (st.frage || st.buch) return null;
     if (st.abend) return { art: 'weiter' };
     if (st.menue) return { art: 'kochen' };
     var sp = st.spieler, naechster = null, best = 28;
@@ -410,8 +476,19 @@
     if (e.neu('debug')) st.debug = !st.debug;
     if (Dorf.Hinweise) Dorf.Hinweise.update(st, dt, e.aktiv ? e.aktiv() : false);
     if (st.frage) { st.frage.t += dt; frageSchritt(st, e); return; }
+    // ab v0.9: Bilderbuch auf und zu (Taste B), es geht auch am Abend
+    var buchJetzt = !!st.buch;
+    if (buchJetzt) buchSchritt(st, e, dt);
+    else if (e.neu('buch') && !st.menue) oeffneBuch(st);
     if (st.abend) {
-      var gesperrt = st.abendZeit !== undefined && st.zeit - st.abendZeit < ABEND_SPERRE;
+      var seit = st.abendZeit === undefined ? 99 : st.zeit - st.abendZeit;
+      var gesperrt = st.abendZeit !== undefined && seit < ABEND_SPERRE;
+      // Herzen zaehlen hoch: bei jedem neuen Herz ein leises Pling, dann der Sticker
+      var gezaehlt = 0; st.gaeste.forEach(function (gs, i) { gezaehlt += abendHerzen(st, i, seit); });
+      if (gezaehlt > (st.abendZaehler || 0)) { st.abendZaehler = gezaehlt; klang(st, 'zaehl'); }
+      if (st.neuerSticker && seit >= ABEND.sticker && !st.stickerGezeigt) { st.stickerGezeigt = true; klang(st, 'sticker'); }
+      if (st.blase) { st.blase.t = (st.blase.t || 0) + dt; st.blase.rest -= dt; if (st.blase.rest <= 0) st.blase = null; }
+      if (buchJetzt || st.buch) { st.naechsterTag = false; return; }
       if ((e.neu('weiter') && !gesperrt) || st.naechsterTag) {
         st.abend = false; st.naechsterTag = false; st.spielzeit = 0;
         Dorf.Uhr.neuerTag(st.uhr);
@@ -421,6 +498,8 @@
         Dorf.Tiere.neuerTag(st.tiere, st.karte);
         st.herzchen.length = 0; st.flieger.length = 0; st.herzFlug.length = 0; st.denk = null; st.wunsch = null; st.teller.length = Math.min(st.teller.length, TAFEL_MAX);
         lerne(st, 'weiter'); st.speichernJetzt = true;
+        if (Dorf.Sticker) Dorf.Sticker.neuerTag(st);
+        st.abendZaehler = 0; st.stickerGezeigt = false; st.blase = null;
         sage(st, 'Biel', 'Bon dia! (Guten Morgen!) Tag ' + st.uhr.tag + ' beginnt.', 4, ['sonne', 'lachen']);
       }
       return;
@@ -453,8 +532,9 @@
       if (st.spieler.ziel) st.wartetAuf = null;
       else if (!wt.ziel || st.wartetAuf.rest <= 0) { st.wartetAuf = null; if (Dorf.Tiere.nah(wt, st.spieler)) streichle(st, wt); else { wt.lockt = false; sage(st, 'Biel', wt.name + ' ist gerade lieber am anderen Ende der Wiese.', 3, ['esel', 'frage']); } }
     }
-    var menueOffen = !!st.menue;
-    if (menueOffen) { st.menue.t += dt; menueSchritt(st, e); }
+    var menueOffen = !!st.menue || buchJetzt || !!st.buch;
+    if (!menueOffen) gaehnTon(st);
+    if (st.menue && !buchJetzt && !st.buch) { st.menue.t += dt; menueSchritt(st, e, dt); }
     var hatteZiel = !!st.spieler.ziel, vx = st.spieler.x, vy = st.spieler.y;
     var angekommen = menueOffen ? null : Dorf.Spieler.update(st.spieler, e, st.karte, dt);
     if (menueOffen) { st.spieler.laeuft = false; st.spieler.frame = 0; }
@@ -490,15 +570,46 @@
     if (lz > (st.lampenAn || 0)) klang(st, 'licht');
     st.lampenAn = lz;
     if (Dorf.Uhr.vorbei(st.uhr)) {
-      st.abend = true; st.abendZeit = st.zeit; st.blase = null; st.kochen = null; st.menue = null; Dorf.Spieler.stoppe(st.spieler); st.marker = null; st.wartetAuf = null;
-      st.denk = null; st.speichernJetzt = true;
+      st.abend = true; st.abendZeit = st.zeit; st.blase = null; st.kochen = null; st.menue = null; st.buch = null; Dorf.Spieler.stoppe(st.spieler); st.marker = null; st.wartetAuf = null;
+      st.denk = null; st.speichernJetzt = true; st.abendZaehler = 0; st.stickerGezeigt = false;
+      // ab v0.9: Sticker fuer heute ins Album (wird in der Abendszene gezeigt)
+      if (st.tagesziel.erreicht) merke(st, 'ziel');
+      if (Dorf.Sticker) Dorf.Sticker.vergib(st);
       klang(st, st.tagesziel.erreicht ? 'feier' : 'nacht');
+      // nur zum Vorlesen (am Abend ist keine Sprechblase zu sehen)
+      sage(st, 'Biel', 'Bona nit! Gute Nacht.' + (st.neuerSticker ? ' Für heute gibt es einen Sticker.' : ''), 4, ['mond']);
     }
+  }
+
+  // ab v0.9: wie viele Herzen zeigt Gast i in der Abendszene nach seit Sekunden? (zaehlt hoch bis zu seinen Herzen)
+  // ab v0.9: muede Gaeste gaehnen ab und zu (wenig Ruhe oder Daemmerung). 0 = Mund zu, 1 = ganz offen
+  var GAEHN = { takt: 14, dauer: 1.6, ruhe: 35, daemmer: 0.2, tonAbstand: 30 };
+  function gaehnen(st, i) {
+    var gs = st.gaeste && st.gaeste[i];
+    if (!gs || st.abend || gs.dir === 'oben') return 0;
+    if (gs.zustand === 'aktiv' && gs.ziel === 'couch') return 0;   // schlaeft schon
+    var b = gs.beduerfnisse || {}, muede = (b.ruhe !== undefined && b.ruhe < GAEHN.ruhe) || Dorf.Uhr.daemmerung(st.uhr, st.spielzeit) > GAEHN.daemmer;
+    if (!muede) return 0;
+    var p = ((st.zeit || 0) + i * 4.3) % GAEHN.takt;
+    return p < GAEHN.dauer ? Math.sin(p / GAEHN.dauer * Math.PI) : 0;
+  }
+  function gaehnTon(st) {
+    if (st.zeit - (st.gaehnZeit === undefined ? -999 : st.gaehnZeit) < GAEHN.tonAbstand) return;
+    for (var i = 0; i < st.gaeste.length; i++) {
+      var gs = st.gaeste[i], sx = gs.x - st.kamera.x, sy = gs.y - st.kamera.y;
+      if (gaehnen(st, i) > 0.5 && sx > 0 && sx < 320 && sy > 0 && sy < 176) { st.gaehnZeit = st.zeit; klang(st, 'gaehn'); return; }
+    }
+  }
+  function abendHerzen(st, i, seit) {
+    var gs = st.gaeste[i]; if (!gs) return 0;
+    var n = Dorf.Glueck ? Dorf.Glueck.herzen(gs) : 0, ab = ABEND.herzStart + i * ABEND.versatz;
+    if (seit < ab) return 0;
+    return Math.max(0, Math.min(n, Math.floor((seit - ab) / ABEND.herzTakt) + 1));
   }
 
   // Notfall-Aufraeumen nach einem Fehler: alles Vorlaeufige weg, Figuren zurueck auf sichere Plaetze.
   function rette(st) {
-    st.menue = null; st.frage = null; st.blase = null; st.marker = null; st.wartetAuf = null; st.denk = null; st.kochen = null;
+    st.menue = null; st.frage = null; st.buch = null; st.blase = null; st.marker = null; st.wartetAuf = null; st.denk = null; st.kochen = null;
     st.flieger = []; st.herzchen = []; st.herzFlug = []; st.chipPuls = {}; st.toene = []; st.naechsterTag = false;
     if (st.spieler) {
       Dorf.Spieler.stoppe(st.spieler);
@@ -558,8 +669,16 @@
         st.herzchen.push({ x: st.spieler.x, y: st.spieler.y - 26, t: 0, farbe: '#ff7fa0' });
       }
     }
+    // ab v0.9: Sticker Album (eigener Schluessel). Entwicklerhilfe ?album=5 klebt die ersten 5 Sticker ein (nur zum Ansehen, wird nicht gespeichert).
+    if (speicher && darfSpeichern && Dorf.Sticker) st.album = Dorf.Sticker.lade(speicher);
+    var ma = /[?&]album=(\d+)/.exec(such);
+    if (ma && Dorf.Sticker) { darfSpeichern = false; st.album = {}; Dorf.Sticker.LISTE.slice(0, parseInt(ma[1], 10)).forEach(function (x) { st.album[x.id] = 1; }); }
+    if (/[?&]buch=(\d)/.test(such)) oeffneBuch(st, parseInt(/[?&]buch=(\d)/.exec(such)[1], 10));
     var speicherUhr = 0;
-    function sichere() { if (speicher && darfSpeichern) Dorf.Speicher.schreibe(speicher, st); speicherUhr = 0; st.speichernJetzt = false; }
+    function sichere() {
+      if (speicher && darfSpeichern) { Dorf.Speicher.schreibe(speicher, st); if (Dorf.Sticker && st.albumAendern) { Dorf.Sticker.schreibe(speicher, st.album); st.albumAendern = false; } }
+      speicherUhr = 0; st.speichernJetzt = false;
+    }
 
     // Ton-Knopf (Lautsprecher), Vollbild-Knopf und grosse Knoepfe fuer Handy und Tablet
     var tonKnopf = doc.getElementById('ton-knopf'), vollKnopf = doc.getElementById('vollbild-knopf');
@@ -637,6 +756,16 @@
     if (ton) { var tonAlt = ton.beiAenderung; ton.beiAenderung = function () { if (tonAlt) tonAlt(); if (ton.stumm && vorlesen) vorlesen.stopp(); zeigeVorlesen(); }; }
     var neuKnopf = doc.getElementById('neu-knopf');
     knopf(neuKnopf, function () { if (st.frage) st.frage = null; else frageAuf(st); });
+    // ab v0.9: Bilderbuch-Knopf (Rezepte und Sticker). Ein Punkt am Knopf zeigt einen neuen Sticker an.
+    var buchKnopf = doc.getElementById('buch-knopf'), buchPunkt = null;
+    knopf(buchKnopf, function () { if (ton) ton.entsperre(); if (st.buch) schliesseBuch(st); else { st.menue = null; oeffneBuch(st); } });
+    function zeigeBuch() {
+      if (!buchKnopf) return;
+      var p = !!st.albumNeu && !st.buch;
+      if (p === buchPunkt) return;
+      buchPunkt = p; buchKnopf.className = 'knopf' + (p ? ' neu' : '');
+      if (buchKnopf.setAttribute) buchKnopf.setAttribute('aria-label', p ? 'Bilderbuch, neuer Sticker' : 'Bilderbuch');
+    }
     var touchAn = !!((win.matchMedia && win.matchMedia('(pointer: coarse)').matches) || (win.navigator && win.navigator.maxTouchPoints > 0) || /[?&]touch=1/.test((win.location && win.location.search) || ''));
     function zeigeTouch() { R.touch = touchAn; if (rahmen && rahmen.classList) rahmen.classList.toggle('touch', touchAn); if (R.uiSkala) groesse(); }
     zeigeTouch();
@@ -661,7 +790,8 @@
       if (rahmen && rahmen.style && rahmen.style.setProperty) rahmen.style.setProperty('--s', String(s));
       if (ui) { ui.width = Math.round(Dorf.Render.W * s * dpr); ui.height = Math.round(Dorf.Render.H * s * dpr); ui.style.width = cw; ui.style.height = ch; R.uiSkala = s * dpr; }
       // Platz der Knoepfe oben rechts in internen Pixeln, damit der Hilfetext nicht darunter liegt
-      var bw = R.touch ? Math.max(36 / s, 11) : Math.max(26 / s, 9), anzahl = ((vollKnopf && vollGeht) ? 3 : 2) + (neuKnopf ? 1 : 0) + (vorlesenKnopf && vorlesen && vorlesen.verfuegbar ? 1 : 0);
+      var bw = R.touch ? Math.max(36 / s, 11) : Math.max(26 / s, 9), anzahl = ((vollKnopf && vollGeht) ? 3 : 2) + (neuKnopf ? 1 : 0) + (buchKnopf ? 1 : 0) + (vorlesenKnopf && vorlesen && vorlesen.verfuegbar ? 1 : 0);
+      R.knopfBreite = bw;
       R.obenBreite = Math.ceil(anzahl * bw + (anzahl - 1) * 2 + 2 + 3);
       R.knopfAnzahl = anzahl;
     }
@@ -710,7 +840,7 @@
           if (!gelesen && ton && !stumm && !(vorlesen && vorlesen.spricht)) ton.spiele('plapper_' + String(st.blase.sprecher || 'biel').toLowerCase());
         }
         if (st.abend && vorlesen && vorlesen.spricht && !st.blase) vorlesen.stopp();
-        zeigeAktion();
+        zeigeAktion(); zeigeBuch();
       } catch (err) { ok = false; melde('Vorlesen', err); }
       try { Dorf.Render.zeichne(R, st); } catch (err) { ok = false; melde('Zeichnen', err); }
       try { st.eingabe.ende(); } catch (err) { ok = false; }
@@ -723,7 +853,7 @@
     return { st: st, R: R, fehler: fehler, sichere: sichere, vorlesen: vorlesen, ton: ton };
   }
 
-  Dorf.Spiel = { STANDARD_SEED: STANDARD_SEED, VERSION: VERSION, KOCHDAUER: KOCHDAUER, PORTIONEN: PORTIONEN, erstelle: erstelle, schritt: schritt, sage: sage, klick: klick, klickBild: klickBild, kochen: kochen, streichle: streichle, tierPlatz: tierPlatz, oeffneMenue: oeffneMenue, zumHerd: zumHerd, frageAuf: frageAuf, neuAnfangen: neuAnfangen, rette: rette, naechstesZiel: naechstesZiel, kontext: kontext, tueKontext: tueKontext, sammle: sammle, FLUG_KORB: FLUG_KORB, AKTION_PULS: AKTION_PULS, AKTION_NAME: AKTION_NAME, FRAGE: FRAGE, ABEND_SPERRE: ABEND_SPERRE, LAMPEN: LAMPEN, TIPP_DAUER: TIPP_DAUER, SPEICHER_TAKT: SPEICHER_TAKT, menueKarten: menueKarten, MENUE: MENUE, TAFEL_MAX: TAFEL_MAX, starte: starte };
+  Dorf.Spiel = { STANDARD_SEED: STANDARD_SEED, VERSION: VERSION, KOCHDAUER: KOCHDAUER, PORTIONEN: PORTIONEN, erstelle: erstelle, schritt: schritt, sage: sage, klick: klick, klickBild: klickBild, kochen: kochen, streichle: streichle, tierPlatz: tierPlatz, oeffneMenue: oeffneMenue, zumHerd: zumHerd, frageAuf: frageAuf, neuAnfangen: neuAnfangen, rette: rette, naechstesZiel: naechstesZiel, kontext: kontext, tueKontext: tueKontext, sammle: sammle, FLUG_KORB: FLUG_KORB, AKTION_PULS: AKTION_PULS, AKTION_NAME: AKTION_NAME, FRAGE: FRAGE, ABEND_SPERRE: ABEND_SPERRE, LAMPEN: LAMPEN, TIPP_DAUER: TIPP_DAUER, SPEICHER_TAKT: SPEICHER_TAKT, menueKarten: menueKarten, MENUE: MENUE, TAFEL_MAX: TAFEL_MAX, starte: starte, ABEND: ABEND, abendHerzen: abendHerzen, BUCH: BUCH, BUCH_SEITEN: BUCH_SEITEN, ALBUM_SEITE: ALBUM_SEITE, MENUE_BUCH: MENUE_BUCH, oeffneBuch: oeffneBuch, schliesseBuch: schliesseBuch, blaettere: blaettere, WACKEL: WACKEL, MENUE_ZU: MENUE_ZU, gaehnen: gaehnen, GAEHN: GAEHN };
 
   if (typeof g.document !== 'undefined' && typeof g.window !== 'undefined' && g.document.getElementById) {
     g.window.addEventListener('load', function () { Dorf.Spiel.laufend = starte(g.document, g.window); });
