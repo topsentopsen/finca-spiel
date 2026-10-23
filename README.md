@@ -1,4 +1,4 @@
-# Finca v0.5
+# Finca v0.6
 
 A small browser game with a handheld look, written in pure JavaScript. There is no build, no npm and there are no external assets. Music and sounds are generated in code with WebAudio.
 
@@ -20,6 +20,7 @@ Optional: `index.html?seed=12345` uses a different seed for flowers and guest de
 | E | Talk to a nearby guest, pet or feed a nearby animal, harvest a nearby plant, open the cooking menu at the stove, or close the dialog |
 | K | Cook: walk to the stove and open the cooking menu (press again to confirm) |
 | In the cooking menu | 1, 2, 3 or tap a card to cook; arrow keys and E / Enter to choose; Esc or tap outside to go back |
+| Round arrow button (top right) | Start over: a friendly question with two big picture buttons, "Nein" is preselected (arrows and Enter, or Esc to close) |
 | M or speaker button (top right) | Music and sounds on or off (saved in the browser) |
 | Fullscreen button (top right) | Fullscreen on or off |
 | Sprechen / Kochen buttons | Big round buttons on phones and tablets, same as E and K |
@@ -27,6 +28,25 @@ Optional: `index.html?seed=12345` uses a different seed for flowers and guest de
 | Backquote (the key left of 1) | Toggle the debug overlay (FPS, seed, needs, paths) |
 
 Music starts softly after the first click, tap or key press (browsers do not allow sound before that).
+
+## Saved game and starting over
+The game remembers where you were: day, clock time, hearts, basket, garden and the plates on the table are stored in the browser (localStorage, key `finca.spielstand`, with a format number so later versions can recognize old saves). It saves every 5 seconds, in the evening, at the new morning and when the tab is hidden. If you leave in the evening, the next visit starts directly with the next morning. Broken or unknown data is simply ignored and a fresh day starts. If the browser blocks storage (private window), the game still runs, it just does not remember.
+
+"Neu anfangen" (round arrow button) asks first and then starts again at day 1. The sound setting (on or off) has its own key and stays as it was.
+
+## For children who cannot read yet
+Everything important can be understood without reading:
+- If nothing happens for a few seconds, a pulsing pink arrow with a small picture bubble shows the next useful step (speech bubble for a guest, the fruit for a plant, a pot for the stove, a carrot for Bruna), with a soft ring on the ground and a quiet "pling" at most every 20 seconds. Targets off screen get a round badge with an arrow at the edge. The hint waits longer once a child has done that action a few times, and disappears on the next tap.
+- In the cooking menu the dish that works best right now gets the arrow, dishes with missing ingredients look faded and cookable ones get a green check.
+- If an ingredient is missing, Biel shows a thought bubble with the missing fruit and a questioning "hmm"; the arrow then points to the right plant. Tapping an unripe plant makes it wiggle with a little sprout in the bubble.
+- Harvested fruit flies in an arc into the basket, the basket slot hops and goes "plopp".
+- In the evening a golden sun pulses where to tap for the next day. Right after the evening starts, taps are ignored for 1.5 seconds so the moment is not skipped by accident.
+
+## Touch and stability
+- Bigger buttons on phones. A second finger or a quick double tap (within 280 ms at the same spot) does not count. Taps next to a guest, animal, plant or the stove still hit it.
+- Small phones held sideways get the Sprechen and Kochen buttons in a row at the bottom right, safe areas (notch) are respected, the "turn your phone" hint is an animated picture.
+- An error guard keeps the loop running: if something goes wrong in a frame, the game cleans up (closes menus, puts Biel back on a free spot) and continues.
+- The static background (map and flowers) is drawn once into an offscreen canvas and copied each frame, only water and the table are redrawn live. This cuts drawing time per frame by about 40 percent.
 
 ## Dishes
 | Dish | Plates | Cooking time | Effect at the table |
@@ -58,10 +78,10 @@ In the evening the music changes to a sparser, warmer lullaby variant of the sam
 
 The table holds at most 6 plates. Guests take their favorite dish when it is there.
 
-Developer helpers: `?start=x,y` places Biel on a tile, `?debug=1` opens the debug overlay, `?touch=1` shows the touch buttons on a desktop, `?menue=1` opens the cooking menu right away, `?uhr=20` sets the clock to 20:00, `?abend=1` jumps to the evening scene, `?herzen=1` makes all guests almost happy, `?korb=1` puts three of every ingredient in the basket.
+Developer helpers: `?start=x,y` places Biel on a tile, `?debug=1` opens the debug overlay, `?touch=1` shows the touch buttons on a desktop, `?menue=1` opens the cooking menu right away, `?uhr=20` sets the clock to 20:00, `?abend=1` jumps to the evening scene, `?herzen=1` makes all guests almost happy, `?korb=1` puts three of every ingredient in the basket, `?neu=1` deletes the saved game. With any developer helper except `?neu=1` the saved game is neither loaded nor overwritten.
 
 ## Structure
-- `index.html` loads the scripts in this order: rng, karte, pfad, kamera, eingabe, uhr, spieler, gerichte, garten, glueck, gaeste, tiere, render, ton, main. Everything hangs on `globalThis.Dorf`.
+- `index.html` loads the scripts in this order: rng, karte, pfad, kamera, eingabe, uhr, spieler, gerichte, garten, glueck, gaeste, tiere, speicher, hinweise, render, ton, main. Everything hangs on `globalThis.Dorf`.
 - `js/rng.js` – mulberry32
 - `js/karte.js` – 40x30 Finca map with kitchen, living room and guest house, furniture, collision, target locations
 - `js/pfad.js` – A* (4 directions)
@@ -74,17 +94,20 @@ Developer helpers: `?start=x,y` places Biel on a tile, `?debug=1` opens the debu
 - `js/glueck.js` – hearts per guest and the daily goal (never decreasing, reset each day)
 - `js/gaeste.js` – Mia (7), Jonas (41) and Padrina (78) with the needs Satt, Spielen and Ruhe
 - `js/tiere.js` – Bruna the donkey on her fenced meadow and the gecko on the house wall (own random generator)
-- `js/render.js` – drawing (tiles, sprites, HUD, dialog, debug)
+- `js/speicher.js` – saved game in localStorage with format number, checking and clamping all values
+- `js/hinweise.js` – picture hints for children who cannot read yet (what to do next, when to show it)
+- `js/render.js` – drawing (cached background, tiles, sprites, HUD, hints, dialog, debug)
 - `js/ton.js` – WebAudio music (plucked guitar-like loop in A minor, 66 BPM, Karplus-Strong) and soft sound effects, evening variant with crossfade, crickets at night, mute toggle
-- `js/main.js` – game loop, cooking menu, buttons, fullscreen
+- `js/main.js` – game loop with error guard, cooking menu, start over question, saving, buttons, fullscreen
 
 ## Tests
 ```
 node tests/run.js
 ```
-Uses only Node's built-in `vm` module. Nothing has to be installed.
+Uses only Node's built-in `vm` module. Nothing has to be installed. 74 tests, including a ten day soak test with random taps, keys, start over questions and a save and load every day.
 
 ## Version history
+- **v0.6** (23.10.2026): polish and stability. Saved game in the browser (day, hearts, basket, clock, garden, table) with a format number, gentle "Neu anfangen" button with a picture question, sound setting kept. Picture hints for children who cannot read yet: pulsing arrow with an icon bubble after a short pause, thought bubble for missing ingredients, fruit flying into the basket, wiggling unripe plants, pulsing sun in the evening, new soft sounds. Error guard so the loop never freezes, evening tap lock, double tap filter, bigger touch buttons and a layout for small phones held sideways. Background drawn once and cached. Rounder Padrina with a pink hair band. Ten day soak test.
 - **v0.5** (23.10.2026): small garden bed with tomatoes and carrots plus an orange tree and olive trees, harvest by click, tap or E, plants grow back gently during the day and are all ripe again each morning. Dishes use ingredients but stay forgiving: Pa amb oli always works from a small basic stock, fresh ingredients give an extra plate. Feed Bruna carrots for a cute munching reaction and an extra heart for nearby guests. Third guest Padrina, a grandmother who loves the couch and Pa amb oli, with her own sayings; the daily goal now counts all three guests.
 - **v0.4** (23.10.2026): hearts for every guest and a gentle daily goal "Alle Gäste glücklich" with a soft celebration in the evening scene, no failing. Bruna the donkey on a small fenced meadow and a gecko on the house wall, pet them by click, tap or E for a heart and a little sound. Evening music variant and quiet crickets at night, crossfading with the day loop.
 - **v0.3** (23.10.2026): calm background music made in code (soft plucked guitar loop, slow tempo, low volume), starts after the first interaction. Mute with M or the speaker button, saved in the browser. Very quiet steps, a soft fountain and pool sound nearby, a cute chime when talking and cooking. Big Sprechen and Kochen buttons on phones and tablets, fullscreen button, hint to hold the phone sideways. Cooking menu with three dishes (Pa amb oli, Ensaïmada, Tumbet) with different effects; Mia and Jonas have favorite dishes.

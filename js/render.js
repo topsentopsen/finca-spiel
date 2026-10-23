@@ -18,10 +18,42 @@
     topf: '#f6a383', topf2: '#d9805f', bett: '#c3e8ff', decke: '#ffd5e2', backe: '#ffadbb', augeHell: '#ffffff'
   };
 
-  function erstelle(canvas, ui) {
+  function erstelle(canvas, ui, doc) {
     var ctx = canvas.getContext('2d');
     if ('imageSmoothingEnabled' in ctx) ctx.imageSmoothingEnabled = false;
-    return { canvas: canvas, ctx: ctx, ui: ui ? ui.getContext('2d') : null, uiCanvas: ui || null, uiSkala: 1 };
+    doc = doc || canvas.ownerDocument || null;
+    // ab v0.6: Leinwand fuer den vorgezeichneten Hintergrund (ohne document, etwa in den Tests, wird Kachel fuer Kachel gezeichnet)
+    var neueLeinwand = (doc && typeof doc.createElement === 'function') ? function (w, h) {
+      try { var cv = doc.createElement('canvas'); if (!cv || !cv.getContext) return null; cv.width = w; cv.height = h; return cv; } catch (e) { return null; }
+    } : null;
+    return { canvas: canvas, ctx: ctx, ui: ui ? ui.getContext('2d') : null, uiCanvas: ui || null, uiSkala: 1, neueLeinwand: neueLeinwand, hg: null, obenBreite: 33 };
+  }
+
+  // ---------- Vorgezeichneter Hintergrund (ab v0.6) ----------
+  // Alle Kacheln, die sich nie aendern, und die Blumen werden einmal auf eine Leinwand in Kartengroesse gemalt.
+  // Pro Frame wird davon nur der sichtbare Ausschnitt kopiert. Wasser (Wellen) und Tafel (Teller) kommen frisch obendrauf.
+  function istLebendig(t) { var T = Dorf.Karte.T; return t === T.WASSER || t === T.TAFEL; }
+  function zeichneBlumen(c, karte, cx, cy, ganz) {
+    for (var i = 0; i < karte.blumen.length; i++) {
+      var b = karte.blumen[i], bx = b.x - cx, by = b.y - cy;
+      if (!ganz && (bx < -4 || by < -4 || bx > W + 4 || by > H + 4)) continue;
+      r(c, bx - 1, by - 1, 3, 3, b.farbe); r(c, bx - 2, by, 5, 1, b.farbe); r(c, bx, by - 2, 1, 5, b.farbe); r(c, bx, by, 1, 1, '#ffcf40');
+    }
+  }
+  function hintergrund(R, karte) {
+    if (R.ohneCache || !R.neueLeinwand) return null;
+    if (R.hg && R.hg.karte === karte) return R.hg;
+    if (R.hg && R.hg.fehlgeschlagen === karte) return null;
+    var cv = R.neueLeinwand(karte.w * K, karte.h * K), hc = cv ? cv.getContext('2d') : null;
+    if (!hc) { R.hg = { fehlgeschlagen: karte }; return null; }
+    var lebendig = [];
+    for (var y = 0; y < karte.h; y++) for (var x = 0; x < karte.w; x++) {
+      zeichneKachel(hc, karte, x, y, x * K, y * K, 0, null);
+      if (istLebendig(karte.tile(x, y))) lebendig.push({ x: x, y: y });
+    }
+    zeichneBlumen(hc, karte, 0, 0, true);
+    R.hg = { karte: karte, canvas: cv, lebendig: lebendig };
+    return R.hg;
   }
 
   function hash(x, y) { var h = (x * 374761393 + y * 668265263) >>> 0; h = ((h ^ (h >>> 13)) * 1274126177) >>> 0; return h ^ (h >>> 16); }
@@ -147,9 +179,12 @@
     if (!v || !Dorf.Garten) return;
     pille(c, 2, y, 72, 12, 'rgba(255,248,236,0.92)');
     Dorf.Garten.REIHE.forEach(function (a, i) {
-      var x = 9 + i * 17, n = v[a] || 0;
-      zeichneZutat(c, a, x, y + 6, n === 0);
-      text(R, String(n), x + 4, y + 2, { groesse: 6, fett: true, farbe: n ? P.kontur : '#b9a8cc' });
+      var x = 9 + i * 17, n = v[a] || 0, puls = (st.korbPuls && st.korbPuls[a]) || 0;
+      // gerade geerntet: das Fach hopst und leuchtet kurz
+      var hop = puls > 0 ? Math.round(Math.sin((0.45 - puls) / 0.45 * Math.PI) * 3) : 0;
+      if (puls > 0) { c.globalAlpha = Math.min(1, puls * 3); kreis(c, x, y + 6, 5, '#fff3a8'); c.globalAlpha = 1; }
+      zeichneZutat(c, a, x, y + 6 - hop, n === 0);
+      text(R, String(n), x + 4, y + 2 - hop, { groesse: 6, fett: true, farbe: n ? P.kontur : '#b9a8cc' });
     });
   }
   function glitzer(c, x, y, zeit, phase) {
@@ -181,6 +216,98 @@
     var pos = [[-5, -14], [4, -18], [0, -24]];
     pos.forEach(function (q) { zeichneZutat(c, p.art, cx + q[0], by + q[1]); });
     glitzer(c, cx + 7, by - 22, zeit, ph);
+  }
+
+  // Pflanze wackelt kurz nach dem Ernten (oder wenn sie noch waechst)
+  function wackeln(p) { return p.wackel > 0 ? Math.round(Math.sin(p.wackel * 40) * Math.min(2, p.wackel * 6)) : 0; }
+
+  // ---------- Bilder statt Worte (ab v0.6) ----------
+  // kleines Symbol, Mitte bei (x, y): Sprechblase, Topf, Sonne, Spross oder eine Zutat
+  function zeichneSymbol(c, art, x, y) {
+    if (art === 'reden') { rr(c, x - 5, y - 4, 11, 8, P.kontur); rr(c, x - 4, y - 3, 9, 6, '#ffffff'); r(c, x - 3, y + 4, 2, 2, P.kontur); r(c, x - 2, y - 1, 1, 1, P.kontur); r(c, x, y - 1, 1, 1, P.kontur); r(c, x + 2, y - 1, 1, 1, P.kontur); }
+    else if (art === 'topf') { rr(c, x - 5, y - 2, 11, 7, P.kontur); rr(c, x - 4, y - 1, 9, 5, '#ff9a8a'); r(c, x - 6, y - 1, 13, 2, P.kontur); r(c, x - 4, y, 9, 1, '#ffd0c4'); r(c, x - 2, y - 5, 1, 2, '#ffffff'); r(c, x + 1, y - 6, 1, 3, '#ffffff'); }
+    else if (art === 'sonne') { kreis(c, x, y, 4, P.kontur); kreis(c, x, y, 3, '#ffd36e'); r(c, x - 1, y - 7, 2, 2, '#ffb340'); r(c, x - 1, y + 6, 2, 2, '#ffb340'); r(c, x - 7, y - 1, 2, 2, '#ffb340'); r(c, x + 6, y - 1, 2, 2, '#ffb340'); r(c, x - 5, y - 5, 2, 2, '#ffb340'); r(c, x + 4, y - 5, 2, 2, '#ffb340'); r(c, x - 5, y + 4, 2, 2, '#ffb340'); r(c, x + 4, y + 4, 2, 2, '#ffb340'); }
+    else if (art === 'spross') { r(c, x, y - 2, 1, 6, '#4fae5c'); rr(c, x - 4, y - 4, 4, 3, '#6ccc72'); rr(c, x + 1, y - 5, 4, 3, '#5fbf6a'); r(c, x - 3, y + 3, 7, 2, '#b3805b'); }
+    else if (art === 'teller') zeichneTeller(c, 'paamboli', x, y);
+    else zeichneZutat(c, art, x, y);
+  }
+  // dicker Zeigepfeil nach unten, Spitze bei (x, y): verstehen auch Kinder, die noch nicht lesen
+  function zeichneHand(c, x, y) {
+    r(c, x - 3, y - 15, 7, 9, P.kontur); r(c, x - 7, y - 7, 15, 2, P.kontur);
+    for (var i = 0; i < 6; i++) r(c, x - 6 + i, y - 6 + i, 13 - i * 2, 1, P.kontur);
+    r(c, x - 2, y - 14, 5, 8, '#ff7fa0'); r(c, x - 5, y - 6, 11, 1, '#ff7fa0');
+    for (var k = 0; k < 4; k++) r(c, x - 4 + k, y - 5 + k, 9 - k * 2, 1, '#ff7fa0');
+    r(c, x - 1, y - 13, 1, 5, '#ffc6d8');
+  }
+  // Ring am Boden unter dem Ziel (Fuesse, Pflanze, Esel, Herd), wird vor den Figuren gemalt
+  function zeichneHinweisRing(c, st, cx, cy) {
+    var h = st.hinweis;
+    if (!h || !h.ziel || !(h.alpha > 0) || h.ziel.bildschirm) return;
+    var z = h.ziel, wx = z.x, wy = z.y, t = h.t, ring = 5 + Math.round((Math.sin(t * 5) + 1) * 1.5);
+    var fx = wx, fy = wy + 3;
+    if (z.gast) { fx = z.gast.x; fy = z.gast.y - (Dorf.Gaeste.sitzt(z.gast) ? 12 : 0) + 1; }
+    else if (z.pflanze && Dorf.Garten.punkt) { var gp = Dorf.Garten.punkt(z.pflanze); fx = gp.x; fy = gp.y + 2; }
+    else if (z.art === 'fuettern' && st.tiere && st.tiere.esel) { fx = st.tiere.esel.x; fy = st.tiere.esel.y + 1; }
+    else if (z.art === 'kochen') fy = wy + 14;
+    var rx = Math.round(fx - cx), ry = Math.round(fy - cy);
+    c.globalAlpha = h.alpha;
+    ellipse(c, rx, ry, ring + 2, 3, P.kontur); ellipse(c, rx, ry, ring + 1, 2, '#fff3a8');
+    c.globalAlpha = 1;
+  }
+  // Der Hinweis: huepfende Hand, Ring am Ziel und ein Bild, was dort passiert
+  function zeichneHinweis(c, st, cx, cy) {
+    var h = st.hinweis;
+    if (!h || !h.ziel || !(h.alpha > 0)) return;
+    var z = h.ziel, wx = z.x, wy = z.y;
+    if (z.art === 'weiter') return;   // am Abend pulsiert stattdessen die Sonne (siehe Abendszene)
+    if (z.gast) { wx = z.gast.x; wy = z.gast.y - (Dorf.Gaeste.sitzt(z.gast) ? 14 : 0) - 28; }
+    if (z.art === 'fuettern' && st.tiere && st.tiere.esel) { wx = st.tiere.esel.x; wy = st.tiere.esel.y - 30; }
+    var sx = Math.round(z.bildschirm ? wx : wx - cx), sy = Math.round(z.bildschirm ? wy : wy - cy), t = h.t;
+    c.globalAlpha = h.alpha;
+    var drinnen = sx >= 12 && sx <= W - 12 && sy >= 26 && sy <= H - 6;
+    if (!drinnen) {
+      // Ziel ausserhalb vom Bild: runder Wegweiser am Rand mit Pfeil in die Richtung
+      var kx = Math.max(14, Math.min(W - 14, sx)), ky = Math.max(30, Math.min(H - 14, sy)), dx = sx - kx, dy = sy - ky, d = Math.hypot(dx, dy) || 1;
+      var px = Math.round(kx + dx / d * 11), py = Math.round(ky + dy / d * 11), puls = Math.round((Math.sin(t * 5) + 1) * 1);
+      kreis(c, px, py, 3, P.kontur); kreis(c, px, py, 2, '#ff9fb8');
+      kreis(c, kx, ky, 9 + puls, P.kontur); kreis(c, kx, ky, 8 + puls, '#fff4dc');
+      zeichneSymbol(c, z.bild || 'reden', kx, ky);
+      c.globalAlpha = 1; return;
+    }
+    var hop = Math.round(Math.abs(Math.sin(t * 4.5)) * 4);
+    zeichneHand(c, sx, sy - 2 - hop);
+    if (z.bild) {
+      var bx = sx + 13, by = sy - 16 - hop;
+      kreis(c, bx, by, 8, P.kontur); kreis(c, bx, by, 7, '#ffffff');
+      zeichneSymbol(c, z.bild, bx, by);
+    }
+    c.globalAlpha = 1;
+  }
+  // Gedankenblase ueber Biel: was fehlt (Zutaten), was noch waechst (Spross), was als Naechstes kommt (Topf)
+  function zeichneDenken(c, st, cx, cy) {
+    var d = st.denk; if (!d || !d.bilder.length) return;
+    var sp = st.spieler, n = d.bilder.length, w = 8 + n * 11, x = Math.round(sp.x - cx), y = Math.round(sp.y - cy) - 44;
+    var auf = Math.min(1, d.t * 5), weg = Math.min(1, d.rest * 2);
+    c.globalAlpha = Math.min(auf, weg);
+    var bx = Math.max(2, Math.min(W - w - 2, x + 2)), seitlich = y - 9 < 66 && bx < 78;
+    if (seitlich) { bx = Math.max(78, x + 14); y += 14; }   // nicht unter Ziel und Korb oben links, dann neben den Kopf
+    if (seitlich) { kreis(c, x + 9, y + 8, 2, P.kontur); kreis(c, x + 9, y + 8, 1, P.box); kreis(c, x + 14, y + 3, 3, P.kontur); kreis(c, x + 14, y + 3, 2, P.box); }
+    else { kreis(c, x + 3, y + 18, 2, P.kontur); kreis(c, x + 3, y + 18, 1, P.box); kreis(c, x + 6, y + 13, 3, P.kontur); kreis(c, x + 6, y + 13, 2, P.box); }
+    pille(c, bx, y - 9, w, 16, P.box);
+    d.bilder.forEach(function (b, i) {
+      var hop = Math.round(Math.abs(Math.sin(d.t * 4 + i)) * 1);
+      zeichneSymbol(c, b, bx + 9 + i * 11, y - 1 - hop);
+    });
+    c.globalAlpha = 1;
+  }
+  // Ernte im Flug: Frucht hopst im Bogen zu Biel
+  function zeichneFlieger(c, st, cx, cy) {
+    (st.flieger || []).forEach(function (f) {
+      if (f.t < 0) return;
+      var p = Math.min(1, f.t / f.dauer), e = p * p * (3 - 2 * p), sp = st.spieler;
+      var x = f.x + (sp.x - f.x) * e, y = f.y + (sp.y - 16 - f.y) * e - Math.sin(p * Math.PI) * 18;
+      zeichneZutat(c, f.art, Math.round(x - cx), Math.round(y - cy));
+    });
   }
 
   // kleine Herzen fuer die Gaeste (HUD und Abendszene)
@@ -479,7 +606,13 @@
       qr(0, kY + 3, 3, 5, P.kontur); q(1, kY + 4, 1, 3, a.haar);
       qr(13, kY + 3, 3, 5, P.kontur); q(14, kY + 4, 1, 3, a.haar);
     }
-    if (a.dutt) { qr(4, kY - 3, 8, 5, P.kontur); q(5, kY - 2, 6, 3, a.haar); q(6, kY - 2, 2, 1, hg); }
+    if (a.dutt) {
+      // runder Dutt (ab v0.6): oben schmaler, damit er wie eine Kugel aussieht und nicht wie eine Kapuze
+      q(6, kY - 6, 4, 1, P.kontur); q(5, kY - 5, 6, 4, P.kontur); q(6, kY - 1, 4, 1, P.kontur);
+      q(6, kY - 5, 4, 4, a.haar); q(6, kY - 5, 2, 1, hg); q(6, kY - 4, 1, 1, hg);
+      q(6, kY - 1, 4, 1, '#ff9fb8');   // rosa Haarband trennt Dutt und Kopf
+      if (dir !== 'oben' && !seite) { q(2, kY + 5, 1, 2, a.haar); q(13, kY + 5, 1, 2, a.haar); }
+    }
     if (dir === 'oben') {
       q(4, kY + 1, 8, kopf - 1, a.haar); q(3, kY + 2, 10, kopf - 3, a.haar); q(6, kY + 2, 3, 1, hg);
       if (a.zoepfe) { qr(0, kY + 3, 3, 5, P.kontur); q(1, kY + 4, 1, 3, a.haar); qr(13, kY + 3, 3, 5, P.kontur); q(14, kY + 4, 1, 3, a.haar); }
@@ -575,10 +708,14 @@
       if (aktiv) { r(c, k.x + 2, k.y - hop + k.h - 4, k.w - 4, 2, '#ff9fb8'); herz(c, k.x + k.w - 10, k.y - hop + 4, '#ff7fa0'); }
       kreis(c, k.x + 7, k.y - hop + 7, 4, P.kontur); kreis(c, k.x + 7, k.y - hop + 7, 3, aktiv ? '#ff9fb8' : '#e2d6f5');
       text(R, String(i + 1), k.x + 7, k.y - hop + 4, { align: 'center', fett: true, groesse: 6, farbe: aktiv ? '#ffffff' : P.kontur });
-      // grosser Teller
+      // grosser Teller (blass, wenn Zutaten fehlen, mit gruenem Haken, wenn alles im Korb ist)
+      var pr = Dorf.Garten && st.vorrat ? Dorf.Garten.pruefe(st.vorrat, G) : { ok: true, frisch: false };
+      if (!pr.ok) c.globalAlpha = 0.5;
       c.save(); c.translate(k.x + k.w / 2, k.y - hop + 19); c.scale(3, 3);
       zeichneTeller(c, k.id, 0, 0);
       c.restore();
+      c.globalAlpha = 1;
+      if (pr.ok && (pr.frisch || !G.immer)) haken(c, k.x + k.w / 2 + 13, k.y - hop + 25);
       text(R, G.name, k.x + k.w / 2, k.y - hop + 33, { align: 'center', fett: true, groesse: 7 });
       umbruch(R, G.wirkung, k.w - 8, 6).slice(0, 2).forEach(function (zeile, j) {
         text(R, zeile, k.x + k.w / 2, k.y - hop + 42 + j * 7, { align: 'center', groesse: 6, farbe: '#7a5a9a' });
@@ -600,6 +737,42 @@
     text(R, 'Tippen oder 1, 2, 3 · Pfeile und E · Esc: zurück', W / 2, M.y + M.h - 8, { align: 'center', groesse: 6, farbe: '#7a5a9a' });
   }
 
+  // gruener Haken im Kreis, Mitte (x, y)
+  function haken(c, x, y) {
+    kreis(c, x, y, 5, P.kontur); kreis(c, x, y, 4, '#6ccc8a');
+    r(c, x - 3, y, 2, 2, '#ffffff'); r(c, x - 1, y + 1, 2, 2, '#ffffff'); r(c, x + 1, y - 1, 1, 2, '#ffffff'); r(c, x + 2, y - 2, 1, 2, '#ffffff');
+  }
+  // dickes X, Mitte (x, y)
+  function kreuz(c, x, y, col) {
+    for (var i = -3; i <= 3; i++) { r(c, x + i - 1, y + i - 1, 3, 3, col); r(c, x - i - 1, y + i - 1, 3, 3, col); }
+  }
+  // Kreispfeil (Neu anfangen), Mitte (x, y)
+  function kreispfeil(c, x, y, col) {
+    kreis(c, x, y, 7, P.kontur); kreis(c, x, y, 6, col); kreis(c, x, y, 4, P.kontur); kreis(c, x, y, 3, P.box);
+    r(c, x + 1, y - 8, 7, 7, P.box);
+    r(c, x + 1, y - 9, 1, 7, P.kontur); r(c, x + 2, y - 8, 1, 5, P.kontur);
+    r(c, x - 1, y - 7, 2, 3, col);
+    r(c, x + 3, y - 4, 5, 1, P.kontur); r(c, x + 4, y - 5, 3, 1, P.kontur); r(c, x + 5, y - 6, 1, 1, P.kontur);
+    r(c, x + 4, y - 3, 3, 3, P.kontur); r(c, x + 5, y - 3, 1, 2, col);
+  }
+  // Rueckfrage "Neu anfangen?" (ab v0.6): Bild links Nein (X), rechts Ja (Kreispfeil)
+  function zeichneFrage(R, st) {
+    var c = R.ctx, F = Dorf.Spiel.FRAGE, f = st.frage, t = f.t || 0;
+    c.fillStyle = 'rgba(75,58,90,0.55)'; c.fillRect(0, 0, W, H);
+    pille(c, F.x, F.y, F.w, F.h, P.box);
+    kreispfeil(c, W / 2, F.y + 16, '#ff9fb8');
+    text(R, 'Neu anfangen?', W / 2, F.y + 27, { align: 'center', fett: true, groesse: 10 });
+    text(R, 'Alles beginnt wieder bei Tag 1.', W / 2, F.y + 40, { align: 'center', groesse: 6, farbe: '#7a5a9a' });
+    [F.nein, F.ja].forEach(function (k, i) {
+      var aktiv = f.wahl === i, hop = aktiv ? Math.round(Math.abs(Math.sin(t * 4)) * 2) : 0, y = k.y - hop;
+      pille(c, k.x - 1, y - 1, k.w + 2, k.h + 2, aktiv ? P.kontur : '#d8cce6');
+      pille(c, k.x, y, k.w, k.h, i === 0 ? '#c9f2e2' : '#ffd1e0');
+      if (i === 0) kreuz(c, k.x + k.w / 2, y + 17, '#4f9a6a'); else kreispfeil(c, k.x + k.w / 2, y + 17, '#ff7fa0');
+      text(R, i === 0 ? 'Nein' : 'Ja, neu', k.x + k.w / 2, y + 31, { align: 'center', fett: true, groesse: 8 });
+      if (aktiv) r(c, k.x + 6, y + k.h - 4, k.w - 12, 2, i === 0 ? '#6ccc8a' : '#ff9fb8');
+    });
+  }
+
   // ---------- Text (scharf auf eigener UI-Ebene) ----------
   function text(R, s, x, y, o) {
     o = o || {};
@@ -618,24 +791,31 @@
     r(c, 0, 0, W, H, P.kontur);
 
     var x0 = Math.floor(cx / K), y0 = Math.floor(cy / K), x1 = Math.min(karte.w - 1, x0 + Math.ceil(W / K) + 1), y1 = Math.min(karte.h - 1, y0 + Math.ceil(H / K) + 1);
-    var liste = [];
+    var liste = [], hg = hintergrund(R, karte);
+    if (hg) {
+      c.drawImage(hg.canvas, -cx, -cy);
+      hg.lebendig.forEach(function (k) {
+        var sx = k.x * K - cx, sy = k.y * K - cy;
+        if (sx <= -K || sy <= -K || sx >= W || sy >= H) return;
+        c.save(); c.beginPath(); c.rect(sx, sy, K, K); c.clip();
+        zeichneKachel(c, karte, k.x, k.y, sx, sy, zeit, st);
+        c.restore();
+      });
+    }
     for (var y = Math.max(0, y0); y <= y1; y++) for (var x = Math.max(0, x0); x <= x1; x++) {
-      zeichneKachel(c, karte, x, y, x * K - cx, y * K - cy, zeit, st);
+      if (!hg) zeichneKachel(c, karte, x, y, x * K - cx, y * K - cy, zeit, st);
       if (istMoebel(karte.tile(x, y))) (function (mx, my) { liste.push({ y: my * K + 14, f: function () { zeichneMoebel(c, karte, mx, my, mx * K - cx, my * K - cy); } }); })(x, y);
     }
-    for (var i = 0; i < karte.blumen.length; i++) {
-      var b = karte.blumen[i], bx = b.x - cx, by = b.y - cy;
-      if (bx < -4 || by < -4 || bx > W + 4 || by > H + 4) continue;
-      r(c, bx - 1, by - 1, 3, 3, b.farbe); r(c, bx - 2, by, 5, 1, b.farbe); r(c, bx, by - 2, 1, 5, b.farbe); r(c, bx, by, 1, 1, '#ffcf40');
-    }
+    if (!hg) zeichneBlumen(c, karte, cx, cy, false);
     if (st.marker) zeichneMarker(c, st.marker, cx, cy);
+    zeichneHinweisRing(c, st, cx, cy);
 
     // Objekte und Figuren nach Fuss-y sortiert
-    karte.baeume.forEach(function (t) { var sx = t.x * K - cx, sy = t.y * K - cy; if (sx > -24 && sx < W + 24 && sy > -32 && sy < H + 32) liste.push({ y: t.y * K + 14, f: function () { if (t.art === 'orange') zeichneOrangenbaum(c, sx, sy); else zeichneBaum(c, sx, sy); var fr = st.garten && Dorf.Garten.an(st.garten, t.x, t.y); if (fr) zeichneBaumFruechte(c, fr, sx, sy, zeit); } }); });
+    karte.baeume.forEach(function (t) { var sx = t.x * K - cx, sy = t.y * K - cy; if (sx > -24 && sx < W + 24 && sy > -32 && sy < H + 32) liste.push({ y: t.y * K + 14, f: function () { if (t.art === 'orange') zeichneOrangenbaum(c, sx, sy); else zeichneBaum(c, sx, sy); var fr = st.garten && Dorf.Garten.an(st.garten, t.x, t.y); if (fr) zeichneBaumFruechte(c, fr, sx + wackeln(fr), sy, zeit); } }); });
     (st.garten ? st.garten.liste : []).forEach(function (p) {
       if (p.baum) return;
       var sx = p.x * K - cx, sy = p.y * K - cy;
-      if (sx > -20 && sx < W + 20 && sy > -24 && sy < H + 24) liste.push({ y: p.y * K + 10, f: function () { zeichnePflanze(c, p, sx, sy, zeit); } });
+      if (sx > -20 && sx < W + 20 && sy > -24 && sy < H + 24) liste.push({ y: p.y * K + 10, f: function () { zeichnePflanze(c, p, sx + wackeln(p), sy, zeit); } });
     });
     liste.push({ y: (karte.brunnen.y + 1) * K + 12, f: function () { zeichneBrunnen(c, karte.brunnen.x * K - cx, karte.brunnen.y * K - cy, zeit); } });
     st.gaeste.forEach(function (gs) {
@@ -658,6 +838,7 @@
     liste.forEach(function (e) { e.f(); });
     zeichneKochen(c, karte, st, cx, cy);
     zeichneHerzchen(c, st, cx, cy);
+    zeichneFlieger(c, st, cx, cy);
 
     // Debug: Pfade
     if (st.debug) {
@@ -682,7 +863,7 @@
     }
     // rechts oben sitzen die Knoepfe fuer Ton und Vollbild
     var hilfe = R.touch ? (Dorf.VERSION || '') : (Dorf.VERSION || '') + ' · E: sprechen · K: kochen · M: Ton';
-    text(R, hilfe, W - (R.touch ? 52 : 28), 2, { farbe: '#e2d6f5', align: 'right' });
+    text(R, hilfe, W - (R.obenBreite || (R.touch ? 52 : 28)), 2, { farbe: '#e2d6f5', align: 'right' });
 
     // Sprechblase (Dialogbox unten)
     if (st.blase && !st.abend && !st.menue) {
@@ -693,7 +874,8 @@
       text(R, st.blase.text, 14, 150, { groesse: 8 });
     }
 
-    if (!st.abend && !st.menue && !st.debug && Dorf.Glueck) zeichneGlueck(R, st);
+    if (!st.abend && !st.menue && !st.frage && !st.debug && Dorf.Glueck) zeichneGlueck(R, st);
+    if (!st.abend && !st.menue && !st.frage) zeichneDenken(c, st, cx, cy);
     if (st.menue && !st.abend) zeichneMenue(R, st);
     if (st.debug) zeichneDebug(R, st);
 
@@ -717,7 +899,17 @@
         herzReihe(c, g, gx + 1, 99);
       });
       text(R, 'Enter, Leertaste oder Tippen: nächster Tag', W / 2, 112, { align: 'center', farbe: '#7a5a9a' });
+      // ohne Lesen: die Sonne unten zeigt, dass ein neuer Morgen wartet
+      var bereit = seit >= ((Dorf.Spiel && Dorf.Spiel.ABEND_SPERRE) || 0) || st.abendZeit === undefined;
+      c.globalAlpha = bereit ? 1 : 0.4;
+      var winkt = bereit && st.hinweis && st.hinweis.ziel && st.hinweis.ziel.art === 'weiter' ? (st.hinweis.alpha || 0) : 0;
+      if (winkt > 0) { c.globalAlpha = winkt * 0.8; kreis(c, W / 2, 147, 13 + Math.round(Math.abs(Math.sin(seit * 3)) * 4), '#ffd36e'); c.globalAlpha = 1; }
+      kreis(c, W / 2, 147, 10 + (bereit ? Math.round((Math.sin(seit * 4) + 1)) : 0), '#fff4dc');
+      zeichneSymbol(c, 'sonne', W / 2, 147);
+      c.globalAlpha = 1;
     }
+    if (st.frage) zeichneFrage(R, st);
+    zeichneHinweis(c, st, cx, cy);
   }
 
   function zeichneDebug(R, st) {
@@ -733,5 +925,5 @@
     });
   }
 
-  Dorf.Render = { W: W, H: H, P: P, BIEL: BIEL, erstelle: erstelle, zeichne: zeichne, zeichnePerson: zeichnePerson, zeichneTeller: zeichneTeller, umbruch: umbruch };
+  Dorf.Render = { W: W, H: H, P: P, BIEL: BIEL, erstelle: erstelle, zeichne: zeichne, zeichnePerson: zeichnePerson, zeichneTeller: zeichneTeller, umbruch: umbruch, hintergrund: hintergrund, zeichneSymbol: zeichneSymbol };
 })(globalThis);

@@ -2,11 +2,14 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Finca v0.5 (Prototyp)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Finca v0.6 (Prototyp)</title>
 <style>
-  html, body { margin: 0; height: 100%; background: #3a2e48; overflow: hidden; }
-  body { display: flex; align-items: center; justify-content: center; }
+  html, body { margin: 0; height: 100%; background: #3a2e48; overflow: hidden; touch-action: manipulation; }
+  /* ab v0.6: kein Markieren, keine Lupe beim langen Druecken, Platz fuer Notch und runde Ecken */
+  body { display: flex; align-items: center; justify-content: center; box-sizing: border-box;
+    -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+    padding: env(safe-area-inset-top, 0px) env(safe-area-inset-right, 0px) env(safe-area-inset-bottom, 0px) env(safe-area-inset-left, 0px); }
   #rahmen { position: relative; line-height: 0; box-shadow: 0 0 0 4px #7a6494, 0 8px 30px rgba(0,0,0,.5); border-radius: 4px; }
   canvas { display: block; }
   #spiel { image-rendering: pixelated; image-rendering: crisp-edges; }
@@ -20,6 +23,9 @@
   #oben { position: absolute; top: calc(var(--s, 3) * 1px); right: calc(var(--s, 3) * 2px); display: flex; gap: calc(var(--s, 3) * 2px); }
   #oben .knopf { position: relative; width: max(26px, calc(var(--s, 3) * 9px)); height: max(26px, calc(var(--s, 3) * 9px));
     border-radius: 30%; background: #fff4dc; box-shadow: 0 0 0 2px #4b3a5a; }
+  /* auf Handy und Tablet sind die Knoepfe oben groesser (ab v0.6) */
+  #rahmen.touch #oben .knopf { width: max(36px, calc(var(--s, 3) * 11px)); height: max(36px, calc(var(--s, 3) * 11px)); }
+  #neu-knopf { background: #ffe3ec; }
   #ton-knopf .an { display: block; } #ton-knopf .weg { display: none; }
   #ton-knopf.aus .an { display: none; } #ton-knopf.aus .weg { display: block; }
   #ton-knopf.aus { background: #e3dbea; }
@@ -32,9 +38,18 @@
   #touch .knopf svg { width: 46%; height: 46%; }
   #touch .knopf:active { transform: translateY(3px); box-shadow: 0 0 0 3px #4b3a5a, 0 1px 0 3px #4b3a5a; }
   #knopf-sprechen { background: #c9f2e2; } #knopf-kochen { background: #ffd1e0; }
-  #hinweis { display: none; position: fixed; left: 0; right: 0; bottom: 12px; text-align: center; color: #fff4dc;
-    font: bold 15px "Trebuchet MS", Verdana, sans-serif; }
+  /* kleine Handys quer: Knoepfe nebeneinander, damit mehr vom Spiel frei bleibt */
+  @media (max-height: 430px) {
+    #rahmen.touch #touch { flex-direction: row; bottom: calc(var(--s, 3) * 44px); gap: calc(var(--s, 3) * 3px); }
+    #rahmen.touch #touch .knopf { width: max(56px, calc(var(--s, 3) * 26px)); height: max(56px, calc(var(--s, 3) * 26px)); font-size: 11px; }
+  }
+  /* Handy hochkant: ein Bild zeigt, dass man das Handy drehen soll (auch fuer Kinder, die noch nicht lesen) */
+  #hinweis { display: none; position: fixed; left: 0; right: 0; bottom: 14px; text-align: center; color: #fff4dc;
+    font: bold 15px "Trebuchet MS", Verdana, sans-serif; line-height: 1.3; }
+  #hinweis svg { width: 64px; height: 64px; display: block; margin: 0 auto 4px; animation: drehen 2.4s ease-in-out infinite; }
+  @keyframes drehen { 0%, 25% { transform: rotate(0deg); } 55%, 85% { transform: rotate(-90deg); } 100% { transform: rotate(0deg); } }
   @media (orientation: portrait) and (pointer: coarse) { #hinweis { display: block; } }
+  @media (prefers-reduced-motion: reduce) { #hinweis svg { animation: none; transform: rotate(-90deg); } }
 </style>
 </head>
 <body>
@@ -42,6 +57,9 @@
   <canvas id="spiel" width="320" height="176"></canvas>
   <canvas id="ui" width="320" height="176"></canvas>
   <div id="oben">
+    <button id="neu-knopf" class="knopf" type="button" title="Neu anfangen" aria-label="Neu anfangen">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95" fill="none" stroke="#4b3a5a" stroke-width="2.4" stroke-linecap="round"/><path d="M18.5 3.5v4.5H14" fill="none" stroke="#4b3a5a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </button>
     <button id="ton-knopf" class="knopf" type="button" title="Musik und Ton an oder aus (Taste M)" aria-label="Ton ausschalten">
       <svg class="an" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="#ff9fb8" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M16 9c1.3 1.6 1.3 4.4 0 6M18.5 6.5c2.8 3 2.8 8 0 11" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
       <svg class="weg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="#c9bcd8" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M16 9l5 6M21 9l-5 6" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
@@ -61,21 +79,26 @@
     </button>
   </div>
 </div>
-<div id="hinweis">Tipp: Handy quer halten</div>
-<script src="js/rng.js?v=0.5"></script>
-<script src="js/karte.js?v=0.5"></script>
-<script src="js/pfad.js?v=0.5"></script>
-<script src="js/kamera.js?v=0.5"></script>
-<script src="js/eingabe.js?v=0.5"></script>
-<script src="js/uhr.js?v=0.5"></script>
-<script src="js/spieler.js?v=0.5"></script>
-<script src="js/gerichte.js?v=0.5"></script>
-<script src="js/garten.js?v=0.5"></script>
-<script src="js/glueck.js?v=0.5"></script>
-<script src="js/gaeste.js?v=0.5"></script>
-<script src="js/tiere.js?v=0.5"></script>
-<script src="js/render.js?v=0.5"></script>
-<script src="js/ton.js?v=0.5"></script>
-<script src="js/main.js?v=0.5"></script>
+<div id="hinweis">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" fill="#fff4dc" stroke="#7a6494" stroke-width="1.6"/><rect x="9" y="5" width="6" height="12" rx="1" fill="#c9f2e2"/><circle cx="12" cy="19.5" r="1" fill="#7a6494"/></svg>
+  Tipp: Handy quer halten
+</div>
+<script src="js/rng.js?v=0.6"></script>
+<script src="js/karte.js?v=0.6"></script>
+<script src="js/pfad.js?v=0.6"></script>
+<script src="js/kamera.js?v=0.6"></script>
+<script src="js/eingabe.js?v=0.6"></script>
+<script src="js/uhr.js?v=0.6"></script>
+<script src="js/spieler.js?v=0.6"></script>
+<script src="js/gerichte.js?v=0.6"></script>
+<script src="js/garten.js?v=0.6"></script>
+<script src="js/glueck.js?v=0.6"></script>
+<script src="js/gaeste.js?v=0.6"></script>
+<script src="js/tiere.js?v=0.6"></script>
+<script src="js/speicher.js?v=0.6"></script>
+<script src="js/hinweise.js?v=0.6"></script>
+<script src="js/render.js?v=0.6"></script>
+<script src="js/ton.js?v=0.6"></script>
+<script src="js/main.js?v=0.6"></script>
 </body>
 </html>

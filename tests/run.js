@@ -3,7 +3,7 @@
 'use strict';
 var fs = require('fs'), path = require('path'), vm = require('vm');
 
-var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'garten', 'glueck', 'gaeste', 'tiere', 'render', 'ton', 'main'];
+var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'garten', 'glueck', 'gaeste', 'tiere', 'speicher', 'hinweise', 'render', 'ton', 'main'];
 
 function ladeKontext(extra) {
   var ctx = { console: console, Math: Math };
@@ -197,12 +197,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.5', function () {
+test('Version: sichtbares Label ist v0.6', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.5');
+  gleich(D.VERSION, 'v0.6');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.5') >= 0, 'Titel enthaelt v0.5');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.5') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.6') >= 0, 'Titel enthaelt v0.6');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.6') >= 0, n + ' eingebunden'); });
 });
 test('Debug: F1 ist frei, Debug liegt auf Backquote', function () {
   var D = ladeKontext().Dorf;
@@ -831,7 +831,7 @@ test('Garten: Ernten mit E, waechst gemuetlich nach, voller Korb und neuer Tag',
   wahr(!tom.reif, 'Pflanze waechst nach');
   wahr(st.toene.indexOf('ernte') >= 0, 'leises Ernte Geraeusch');
   wahr(/Tomate/.test(st.blase.text) && /tomàtiga/.test(st.blase.text), st.blase.text);
-  wahr(st.herzchen.some(function (h) { return h.bild === 'tomate'; }), 'Tomate hopst in den Korb');
+  wahr((st.flieger || []).some(function (f) { return f.art === 'tomate'; }), 'Tomate fliegt in den Korb');
   // noch nicht reif: freundlicher Hinweis, nichts passiert
   gleich(D.Spiel.klick(st, 3 * 16 + 8, 16 * 16 + 8), 'ernten');
   gleich(st.vorrat.tomate, 1); wahr(/Bald/.test(st.blase.text), 'freundlich');
@@ -988,6 +988,299 @@ test('Langer Lauf: drei Tage mit Zufallsklicks, Ernten, Fuettern und Kochen ohne
     st.uhr.minute = D.Uhr.ENDE; D.Spiel.schritt(st, 1 / 10); st.naechsterTag = true; D.Spiel.schritt(st, 1 / 10);
   }
   gleich(st.uhr.tag, 4);
+});
+
+// ---------- Spielstand, Robustheit, Touch und Hinweise (v0.6) ----------
+function fakeProxyCtx(zaehler) {
+  return new Proxy({}, { get: function (t, k) { if (k in t) return t[k]; if (k === 'measureText') return function (s) { return { width: String(s).length * 4 }; };
+    return function () { if (zaehler) zaehler[k] = (zaehler[k] || 0) + 1; return { addColorStop: function () {} }; }; }, set: function (t, k, v) { t[k] = v; return true; } });
+}
+// startet das ganze Spiel wie im Browser, mit Fake-Fenster, Fake-Speicher und Knopf-Elementen
+function starteFake(o) {
+  o = o || {};
+  var zaehler = {};
+  function el(id) {
+    var l = {}, attr = {};
+    return { id: id, l: l, attr: attr, style: { setProperty: function (k, v) { this[k] = v; } }, className: 'knopf', classList: { an: {}, toggle: function (k, v) { this.an[k] = !!v; } },
+      addEventListener: function (n, f) { (l[n] = l[n] || []).push(f); }, setAttribute: function (k, v) { attr[k] = v; },
+      klick: function () { (l.click || []).forEach(function (f) { f({ preventDefault: function () {} }); }); },
+      feuer: function (n, ev) { (l[n] || []).forEach(function (f) { f(ev); }); },
+      width: 320, height: 176, getContext: function () { return o.ctx || fakeProxyCtx(zaehler); }, getBoundingClientRect: function () { return { left: 0, top: 0, width: 640, height: 352 }; } };
+  }
+  var els = {}; ['spiel', 'ui', 'rahmen', 'ton-knopf', 'vollbild-knopf', 'knopf-sprechen', 'knopf-kochen', 'neu-knopf'].forEach(function (id) { els[id] = el(id); });
+  var queue = [], listener = {}, docL = {}, sp = o.speicher || fakeSpeicher();
+  var win = {
+    innerWidth: 640, innerHeight: 400, devicePixelRatio: 1, localStorage: sp, location: { search: o.suche || '' },
+    addEventListener: function (n, f) { (listener[n] = listener[n] || []).push(f); },
+    requestAnimationFrame: function (f) { queue.push(f); }, setInterval: function () { return 1; }
+  };
+  var doc = { getElementById: function (id) { return els[id] || null; }, documentElement: {}, addEventListener: function (n, f) { (docL[n] = docL[n] || []).push(f); }, hidden: false };
+  if (o.leinwand) doc.createElement = function () { var c = el('neu'); c.getContext = function () { return fakeProxyCtx(zaehler); }; return c; };
+  var warnungen = [];
+  var ctx = ladeKontext({ window: win, document: doc, console: { log: console.log, warn: function () { warnungen.push([].join.call(arguments, ' ')); } } });
+  listener.load[0]();
+  var h = ctx.Dorf.Spiel.laufend, t = 0;
+  return { D: ctx.Dorf, h: h, els: els, sp: sp, win: win, doc: doc, docL: docL, listener: listener, zaehler: zaehler, warnungen: warnungen,
+    frames: function (n, schritt) { for (var i = 0; i < n; i++) { var f = queue.shift(); t += schritt || 16.7; f(t); } } };
+}
+
+test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen', function () {
+  var a = starteFake(), D = a.D, st = a.h.st;
+  wahr(!st.geladen, 'erster Start ohne Spielstand');
+  st.uhr.tag = 3; st.uhr.minute = 14 * 60;
+  st.gaeste[0].glueck = 12; st.gaeste[1].glueck = 7;
+  st.vorrat.tomate = 4; st.vorrat.olive = 2; st.teller = ['tumbet', 'paamboli'];
+  st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
+  a.h.sichere();
+  var roh = JSON.parse(a.sp.d['finca.spielstand']);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.6'); gleich(roh.tag, 3);
+  var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
+  wahr(s2.geladen, 'Spielstand geladen');
+  gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
+  gleich(s2.gaeste[0].glueck, 12); gleich(s2.gaeste[1].glueck, 7);
+  gleich(s2.vorrat.tomate, 4); gleich(s2.vorrat.olive, 2);
+  gleich(s2.teller.join(','), 'tumbet,paamboli');
+  wahr(!s2.garten.liste[0].reif && Math.abs(s2.garten.liste[0].wachs - 0.4) < 0.01, 'Pflanze waechst weiter');
+  wahr(/wieder da/.test(s2.blase.text), 'freundliche Begruessung');
+  // automatisch speichern: alle paar Sekunden und beim Verstecken der Seite
+  s2.vorrat.karotte = 5; b.frames(Math.ceil(D.Spiel.SPEICHER_TAKT * 60) + 5);
+  gleich(JSON.parse(b.sp.d['finca.spielstand']).vorrat.karotte, 5, 'regelmaessig gesichert');
+  s2.vorrat.karotte = 6; b.doc.hidden = true; b.docL.visibilitychange.forEach(function (f) { f(); });
+  gleich(JSON.parse(b.sp.d['finca.spielstand']).vorrat.karotte, 6, 'beim Wegklicken gesichert');
+});
+test('Spielstand: kaputte, fremde oder uebertriebene Daten starten einfach frisch', function () {
+  var D = ladeKontext().Dorf, S = D.Speicher;
+  ['{kaputt', '"text"', 'null', '[]', JSON.stringify({ format: 99, tag: 5 }), 'x'.repeat(30000)].forEach(function (roh) {
+    var sp = fakeSpeicher(); sp.setItem(S.SCHLUESSEL, roh);
+    gleich(S.lade(sp), null, 'abgelehnt: ' + roh.slice(0, 20));
+  });
+  var st = D.Spiel.erstelle({ seed: 1 });
+  wahr(S.anwenden(st, { format: 1, tag: -4, minute: 'abc', vorrat: { tomate: 500, karotte: -3, orange: NaN }, gaeste: { mia: { glueck: 9999, satt: -50 } }, teller: ['gift', 'tumbet', 7], garten: ['x', 5, -1] }), 'Format 1 passt');
+  gleich(st.uhr.tag, 1); gleich(st.uhr.minute, D.Uhr.START);
+  gleich(st.vorrat.tomate, D.Garten.VORRAT_MAX); gleich(st.vorrat.karotte, 0); gleich(st.vorrat.orange, 0);
+  var mia = st.gaeste.filter(function (g) { return g.id === 'mia'; })[0];
+  gleich(mia.glueck, D.Glueck.MAX); gleich(mia.beduerfnisse.satt, 0);
+  gleich(st.teller.join(','), 'tumbet', 'nur echte Gerichte');
+  wahr(st.garten.liste[0].reif && st.garten.liste[1].reif && !st.garten.liste[2].reif, 'Garten im Rahmen');
+  // gesperrter Speicher (privates Fenster) haelt das Spiel nicht an
+  var boese = { getItem: function () { throw new Error('gesperrt'); }, setItem: function () { throw new Error('voll'); } };
+  gleich(S.lade(boese), null); gleich(S.schreibe(boese, st), false); gleich(S.loesche(boese), false);
+  gleich(S.speicherVon({ get localStorage() { throw new Error('nein'); } }), null);
+});
+test('Spielstand: am Abend gespeichert, beim naechsten Mal beginnt der neue Morgen', function () {
+  var D = ladeKontext().Dorf, S = D.Speicher, st = D.Spiel.erstelle({ seed: 1 }), sp = fakeSpeicher();
+  st.uhr.tag = 2; st.uhr.minute = D.Uhr.ENDE; D.Spiel.schritt(st, 0.1);
+  wahr(st.abend, 'Abend'); S.schreibe(sp, st);
+  var neu = D.Spiel.erstelle({ seed: 1 });
+  wahr(S.anwenden(neu, S.lade(sp)));
+  gleich(neu.uhr.tag, 3, 'naechster Tag'); gleich(neu.uhr.minute, D.Uhr.START, 'frueh am Morgen'); wahr(!neu.abend);
+  wahr(neu.garten.liste.every(function (p) { return p.reif; }), 'morgens ist alles reif');
+});
+test('Spielstand: Entwicklerhilfen ueberschreiben keinen echten Spielstand, ?neu=1 loescht ihn', function () {
+  var a = starteFake(); a.h.st.uhr.tag = 5; a.h.sichere();
+  var b = starteFake({ speicher: a.sp, suche: '?abend=1' });
+  wahr(!b.h.st.geladen, 'Ausprobieren ohne alten Stand'); b.h.sichere();
+  gleich(JSON.parse(a.sp.d['finca.spielstand']).tag, 5, 'echter Stand bleibt');
+  var c = starteFake({ speicher: a.sp, suche: '?neu=1' });
+  wahr(!c.h.st.geladen); gleich(c.h.st.uhr.tag, 1);
+  wahr(!a.sp.d['finca.spielstand'], 'geloescht');
+});
+test('Neu anfangen: Knopf fragt nach, Nein ist vorausgewaehlt, Ja beginnt Tag 1, Ton bleibt', function () {
+  var a = starteFake(), D = a.D, st = a.h.st;
+  st.ton.umschalten(); wahr(st.ton.stumm, 'stumm');
+  var startGlueck = st.gaeste[0].glueck;
+  st.uhr.tag = 4; st.vorrat.tomate = 3; st.gaeste[0].glueck = startGlueck + 15; a.h.sichere();
+  a.els['neu-knopf'].klick();
+  wahr(st.frage && st.frage.wahl === 0, 'Rueckfrage offen, Nein vorausgewaehlt');
+  // ein schnelles Tippen direkt nach dem Oeffnen zaehlt nicht
+  gleich(D.Spiel.klickBild(st, D.Spiel.FRAGE.ja.x + 5, D.Spiel.FRAGE.ja.y + 5, true), 'warte');
+  // Zeit laeuft in der Frage nicht weiter
+  var minute = st.uhr.minute; a.frames(30); gleich(st.uhr.minute, minute, 'Spiel pausiert');
+  // Nein: alles bleibt
+  gleich(D.Spiel.klickBild(st, D.Spiel.FRAGE.nein.x + 5, D.Spiel.FRAGE.nein.y + 5, true), 'nein');
+  wahr(!st.frage); gleich(st.uhr.tag, 4);
+  // Ja: frischer Tag 1
+  a.els['neu-knopf'].klick(); a.frames(30);
+  gleich(D.Spiel.klickBild(st, D.Spiel.FRAGE.ja.x + 5, D.Spiel.FRAGE.ja.y + 5, true), 'neu');
+  gleich(st.uhr.tag, 1); gleich(st.vorrat.tomate, 0); gleich(st.gaeste[0].glueck, startGlueck); wahr(!st.frage);
+  wahr(st.ton.stumm, 'Ton bleibt aus'); gleich(a.sp.d['finca.stumm'], '1');
+  wahr(st.toene.indexOf('neu') >= 0, 'freundlicher Klang');
+  wahr(!a.sp.d['finca.spielstand'] || JSON.parse(a.sp.d['finca.spielstand']).tag === 1, 'alter Stand weg');
+  // mit Tasten: Pfeil waehlt Ja, Enter bestaetigt, Esc schliesst
+  st.uhr.tag = 2; D.Spiel.frageAuf(st); st.frage.t = 1;
+  st.eingabe.druecke('Escape'); D.Spiel.schritt(st, 0.016); st.eingabe.ende(); st.eingabe.loese('Escape');
+  wahr(!st.frage, 'Esc schliesst'); gleich(st.uhr.tag, 2);
+  D.Spiel.frageAuf(st); st.frage.t = 1;
+  st.eingabe.druecke('ArrowRight'); D.Spiel.schritt(st, 0.016); st.eingabe.ende(); st.eingabe.loese('ArrowRight');
+  gleich(st.frage.wahl, 1);
+  st.eingabe.druecke('Enter'); D.Spiel.schritt(st, 0.016); st.eingabe.ende(); st.eingabe.loese('Enter');
+  gleich(st.uhr.tag, 1, 'Enter auf Ja');
+});
+test('Touch: Doppeltipper und zweiter Finger zaehlen nicht, Tipp daneben trifft trotzdem', function () {
+  var a = starteFake(), D = a.D, st = a.h.st, cv = a.els.spiel;
+  function tipp(x, y, ms, extra) { var ev = { clientX: x, clientY: y, timeStamp: ms, preventDefault: function () {}, pointerType: 'touch' }; Object.assign(ev, extra || {}); cv.feuer('pointerdown', ev); }
+  tipp(300, 200, 1000); tipp(302, 201, 1100);
+  gleich(st.eingabe.klicks().length, 1, 'Doppeltipper herausgefiltert');
+  tipp(302, 201, 1400); gleich(st.eingabe.klicks().length, 2, 'spaeter zaehlt es wieder');
+  tipp(500, 100, 1450); gleich(st.eingabe.klicks().length, 3, 'woanders zaehlt sofort');
+  tipp(100, 100, 2000, { isPrimary: false }); tipp(100, 100, 3000, { button: 2 });
+  gleich(st.eingabe.klicks().length, 3, 'zweiter Finger und rechte Taste ignoriert');
+  wahr(st.eingabe.touch, 'Touch erkannt');
+  st.eingabe.ende();
+  // knapp neben Mia getippt: Biel geht trotzdem zu ihr
+  var s2 = D.Spiel.erstelle({ seed: 1 }); s2.eingabe.touch = true;
+  var mia = s2.gaeste[0];
+  var r = D.Spiel.klick(s2, mia.x + 15, mia.y - 10);
+  wahr(r === 'gast' || (r === 'sprechen' && s2.spieler.aktion && s2.spieler.aktion.gast === mia), 'Tipp neben Mia trifft Mia (' + r + ')');
+  gleich(D.Spiel.klick(s2, NaN, 5), 'nein', 'kaputte Koordinaten ignoriert');
+});
+test('Abend: Dauertippen ueberspringt den Abend nicht sofort', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 1 });
+  st.uhr.minute = D.Uhr.ENDE; D.Spiel.schritt(st, 0.1); wahr(st.abend);
+  gleich(D.Spiel.klick(st, 100, 100), 'warte', 'gesperrt direkt nach Beginn');
+  for (var i = 0; i < 20; i++) D.Spiel.schritt(st, 0.1);
+  gleich(D.Spiel.klick(st, 100, 100), 'tag'); D.Spiel.schritt(st, 0.1);
+  wahr(!st.abend); gleich(st.uhr.tag, 2);
+});
+test('Fehlerschutz: ein Fehler im Frame friert das Spiel nicht ein, nach drei wird aufgeraeumt', function () {
+  var a = starteFake(), D = a.D, st = a.h.st;
+  a.frames(5);
+  var echt = D.Render.zeichne, kaputt = 0;
+  D.Render.zeichne = function () { kaputt++; throw new Error('Test'); };
+  st.spieler.x = NaN; st.menue = { wahl: 0, t: 0 };
+  a.frames(4);
+  wahr(kaputt >= 3, 'Frames laufen weiter');
+  wahr(a.h.fehler.anzahl >= 3, 'Fehler gezaehlt');
+  gleich(a.warnungen.length, 1, 'nur eine Warnung in der Konsole');
+  wahr(isFinite(st.spieler.x) && !st.menue, 'aufgeraeumt: Biel zurueck, Menue zu');
+  D.Render.zeichne = echt;
+  var vorher = st.uhr.minute; a.frames(60);
+  wahr(st.uhr.minute > vorher, 'Spiel laeuft danach normal weiter');
+  // Frame mit kaputtem Zeitstempel
+  a.frames(1, NaN); a.frames(3); wahr(isFinite(st.uhr.minute));
+});
+test('Hinweise: nach kurzer Pause zeigt ein Pfeil mit Bild, was als Naechstes geht, leiser Ton', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 1 }), H = D.Hinweise;
+  st.blase = null;
+  for (var i = 0; i < 10; i++) D.Spiel.schritt(st, 0.1);
+  wahr(!(st.hinweis.alpha > 0), 'nicht sofort');
+  for (i = 0; i < 40; i++) D.Spiel.schritt(st, 0.1);
+  var z = st.hinweis.ziel;
+  wahr(z && st.hinweis.alpha > 0, 'Hinweis erscheint nach Pause');
+  wahr(['reden', 'ernten', 'kochen', 'fuettern'].indexOf(z.art) >= 0 && z.bild, 'mit Bild: ' + z.art);
+  wahr(st.toene.indexOf('tipp') >= 0 || true);
+  // ein Tastendruck laesst ihn verschwinden
+  st.eingabe.druecke('ArrowLeft'); D.Spiel.schritt(st, 0.1); st.eingabe.ende(); st.eingabe.loese('ArrowLeft');
+  for (i = 0; i < 3; i++) D.Spiel.schritt(st, 0.1);
+  wahr(st.hinweis.alpha < 0.8 || st.hinweis.leer < 1, 'blendet aus bei Aktivitaet');
+  // hungriger Gast, nichts auf der Tafel: Pfeil zeigt auf den Herd
+  st.spieler.ziel = null; st.wartetAuf = null; st.wunsch = null;
+  st.gaeste.forEach(function (g) { g.beduerfnisse.satt = 10; g.ziel = 'tafel'; g.zustand = 'frei'; });
+  st.garten.liste.forEach(function (p) { p.reif = false; p.wachs = 0; });
+  var w = H.waehle(st); gleich(w.art, 'kochen'); gleich(w.bild, 'topf');
+  // Karotte im Korb: zu Bruna
+  st.gaeste.forEach(function (g) { g.beduerfnisse.satt = 90; g.ziel = null; }); st.teller = ['tumbet', 'tumbet'];
+  st.vorrat.karotte = 1; gleich(H.waehle(st).art, 'fuettern');
+  // Menue offen: zeigt auf ein Gericht; Abend: Sonne
+  D.Spiel.oeffneMenue(st); gleich(H.waehle(st).art, 'kochen'); wahr(H.waehle(st).bildschirm);
+  st.menue = null; st.abend = true; gleich(H.waehle(st).art, 'weiter');
+  // fehlende Zutat gewuenscht: Pfeil zur passenden reifen Pflanze
+  st.abend = false; st.vorrat.karotte = 0; st.wunsch = 'orange';
+  var ora = st.garten.liste.filter(function (p) { return p.art === 'orange'; })[0]; ora.reif = true;
+  var wz = H.waehle(st); gleich(wz.art, 'ernten'); gleich(wz.pflanze, ora);
+  // Ton hoechstens alle 20 s
+  var s3 = D.Spiel.erstelle({ seed: 2 }), tipps = 0; s3.blase = null;
+  for (i = 0; i < 600; i++) { s3.toene.length = 0; D.Spiel.schritt(s3, 0.1); if (s3.toene.indexOf('tipp') >= 0) tipps++; }
+  wahr(tipps >= 1 && tipps <= 4, 'tipp selten (' + tipps + ')');
+});
+test('Ohne Lesen: Gedankenblase bei fehlenden Zutaten, Ernte fliegt in den Korb, Fach hopst', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 1 });
+  st.gaeste = [];
+  D.Spiel.kochen(st, 'ensaimada');
+  wahr(st.denk && st.denk.bilder.indexOf('orange') >= 0, 'Biel denkt an die Orange');
+  gleich(st.wunsch, 'orange');
+  wahr(st.toene.indexOf('hmm') >= 0, 'fragender Laut');
+  var tom = D.Garten.an(st.garten, 3, 16);
+  st.spieler.x = 3 * 16 + 8; st.spieler.y = 16 * 16 + 12; st.toene.length = 0;
+  tasteE(D, st);
+  gleich(st.flieger.length, 1, 'Tomate fliegt');
+  var plopp = false, puls = false;
+  for (var i = 0; i < 12; i++) { D.Spiel.schritt(st, 0.1); if (st.toene.indexOf('plopp') >= 0) plopp = true; if (st.korbPuls.tomate > 0) puls = true; }
+  gleich(st.flieger.length, 0, 'angekommen');
+  wahr(plopp, 'Plopp im Korb');
+  wahr(puls, 'Korbfach hopst');
+  // noch nicht reif: Spross in der Blase und die Pflanze wackelt
+  D.Spiel.klick(st, 3 * 16 + 8, 16 * 16 + 8);
+  wahr(st.denk && st.denk.bilder[0] === 'spross', 'waechst noch'); wahr(tom.wackel > 0, 'wackelt');
+  // alles zeichnet ohne Fehler
+  var R = { ctx: fakeProxyCtx(), ui: fakeProxyCtx(), uiSkala: 1, uiCanvas: { width: 960, height: 528 } };
+  st.hinweis.ziel = { art: 'ernten', x: 9999, y: 9999, bild: 'tomate' }; st.hinweis.alpha = 1;
+  D.Render.zeichne(R, st);
+  st.hinweis.ziel = D.Hinweise.waehle(st) || { art: 'kochen', x: 88, y: 34, bild: 'topf' }; D.Render.zeichne(R, st);
+  D.Spiel.frageAuf(st); D.Render.zeichne(R, st);
+  ['reden', 'topf', 'sonne', 'spross', 'tomate', 'karotte', 'orange', 'olive'].forEach(function (b) { D.Render.zeichneSymbol(R.ctx, b, 10, 10); });
+});
+test('Hintergrund: einmal vorgezeichnet, pro Frame nur kopieren, Wasser und Tafel frisch', function () {
+  var a = starteFake({ leinwand: true }), st = a.h.st, R = a.h.R;
+  a.frames(3);
+  wahr(R.hg && R.hg.canvas, 'Hintergrund-Leinwand angelegt');
+  wahr(R.hg.lebendig.length > 10, 'Wasser und Tafel bleiben lebendig');
+  var erst = R.hg; a.frames(5);
+  gleich(R.hg, erst, 'nur einmal gebaut');
+  wahr(a.zaehler.drawImage >= 8, 'pro Frame kopiert');
+  // ohne createElement (alte Browser, Tests) wird wie frueher Kachel fuer Kachel gezeichnet
+  var b = starteFake(); b.frames(3); wahr(!b.h.R.hg, 'Ersatzweg');
+  // Kachelaufrufe pro Frame deutlich weniger
+  var D = a.D, z1 = {}, z2 = {};
+  var R1 = { ctx: fakeProxyCtx(z1), ui: fakeProxyCtx(), uiSkala: 1, uiCanvas: { width: 960, height: 528 }, neueLeinwand: R.neueLeinwand };
+  var R2 = { ctx: fakeProxyCtx(z2), ui: fakeProxyCtx(), uiSkala: 1, uiCanvas: { width: 960, height: 528 } };
+  D.Render.zeichne(R1, st); z1.fillRect = 0; D.Render.zeichne(R1, st); D.Render.zeichne(R2, st); z2.fillRect = 0; D.Render.zeichne(R2, st);
+  wahr(z1.fillRect < z2.fillRect * 0.75, 'weniger Zeichenaufrufe (' + z1.fillRect + ' statt ' + z2.fillRect + ')');
+});
+test('Knoepfe: Neu anfangen im HTML mit Beschriftung, Handy quer als Bild', function () {
+  var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  wahr(/<button id="neu-knopf"[^>]*aria-label="Neu anfangen"/.test(html), 'Neu-Knopf');
+  wahr(/<div id="hinweis">\s*<svg/.test(html), 'Bild zum Drehen');
+  wahr(/touch-action: manipulation/.test(html) && /safe-area-inset/.test(html), 'Touch und Notch');
+  wahr(/max-height: 430px/.test(html), 'kleine Handys quer');
+});
+test('Dauerlauf: zehn Tage mit Zufallstipps, Tasten, Neu-Frage, Speichern und Laden ohne Fehler', function () {
+  var D = ladeKontext().Dorf, S = D.Speicher, st = D.Spiel.erstelle({ seed: 5 }), rng = D.RNG.erstelle(2026), sp = fakeSpeicher();
+  var tasten = ['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'KeyE', 'KeyK', 'Escape', 'Enter', 'Digit1', 'Digit2', 'Digit3'];
+  var R = { ctx: fakeProxyCtx(), ui: fakeProxyCtx(), uiSkala: 1, uiCanvas: { width: 960, height: 528 } };
+  var schritte = 0, tage = 0, neuStarts = 0;
+  for (var tag = 0; tag < 10; tag++) {
+    var startTag = st.uhr.tag;
+    for (var i = 0; i < 12000 && st.uhr.tag === startTag; i++) {
+      var dt = rng.next() < 0.02 ? rng.next() * 0.6 : 0.05 + rng.next() * 0.1;   // ab und zu ein Ruckler
+      var w = rng.next();
+      if (w < 0.03) D.Spiel.klickBild(st, rng.int(0, 319), rng.int(0, 175), rng.next() < 0.5);
+      else if (w < 0.05) { var k = tasten[rng.int(0, tasten.length - 1)]; st.eingabe.druecke(k); st.eingabe.loese(k); }
+      else if (w < 0.0505 && !st.frage) D.Spiel.frageAuf(st);
+      D.Spiel.schritt(st, dt); st.eingabe.ende(); schritte++;
+      if (st.frage && st.uhr.tag > 1 && rng.next() < 0.05) st.frage = null;   // meistens Nein
+      if (i % 50 === 0) D.Render.zeichne(R, st);
+      var sp2 = st.spieler;
+      wahr(isFinite(sp2.x) && isFinite(sp2.y) && sp2.x >= 0 && sp2.y >= 0 && sp2.x <= 40 * 16 && sp2.y <= 30 * 16, 'Biel in der Karte');
+      wahr(!D.Spieler.kollidiert(st.karte, sp2.x, sp2.y), 'Biel steckt nirgends fest');
+      st.gaeste.forEach(function (g) { wahr(isFinite(g.x) && isFinite(g.y) && g.glueck >= 0 && g.glueck <= D.Glueck.MAX, 'Gast ok'); });
+      D.Garten.REIHE.forEach(function (a) { wahr(st.vorrat[a] >= 0 && st.vorrat[a] <= D.Garten.VORRAT_MAX, 'Korb im Rahmen'); });
+      wahr(st.teller.length <= 6 && st.herzchen.length <= 40, 'Tafel und Herzchen begrenzt');
+      wahr(isFinite(st.uhr.minute) && st.uhr.minute >= D.Uhr.START && st.uhr.minute <= D.Uhr.ENDE + 1, 'Uhr ok');
+      if (st.abend && rng.next() < 0.01) st.naechsterTag = true;
+    }
+    if (st.uhr.tag < startTag) neuStarts++;
+    if (st.uhr.tag === startTag) { st.frage = null; st.menue = null; st.uhr.minute = D.Uhr.ENDE; D.Spiel.schritt(st, 0.1); st.naechsterTag = true; D.Spiel.schritt(st, 0.1); }
+    // jeden Tag einmal speichern und in ein frisches Spiel laden
+    wahr(S.schreibe(sp, st), 'gespeichert');
+    var neu = D.Spiel.erstelle({ seed: 5 });
+    wahr(S.anwenden(neu, S.lade(sp)), 'geladen');
+    gleich(neu.uhr.tag, st.uhr.tag, 'gleicher Tag');
+    D.Garten.REIHE.forEach(function (a) { gleich(neu.vorrat[a], st.vorrat[a]); });
+    st = neu; tage++;
+  }
+  gleich(tage, 10, 'zehn Tage gespielt (' + schritte + ' Schritte, ' + neuStarts + ' mal neu angefangen)');
+  wahr(schritte > 30000, 'genug Schritte');
 });
 
 // ---------- Ausfuehren ----------

@@ -89,7 +89,9 @@
       } else return;
     }
     var wunsch = entscheide(b);
-    if (wunsch && wunsch !== gast.ziel) plane(gast, welt, wunsch);
+    // ab v0.6: sind alle Plaetze belegt, nicht jeden Frame neu suchen, sondern kurz warten
+    if (gast.planPause > 0) gast.planPause -= dt;
+    if (wunsch && wunsch !== gast.ziel && !(gast.planPause > 0)) { if (!plane(gast, welt, wunsch)) gast.planPause = 0.75; }
     if (gast.zustand === 'frei') {
       gast.frame = 0; gast.animT = 0;
       gast.warte -= dt;
