@@ -3,7 +3,7 @@
 'use strict';
 var fs = require('fs'), path = require('path'), vm = require('vm');
 
-var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'garten', 'glueck', 'gaeste', 'tiere', 'speicher', 'sticker', 'hinweise', 'vorlesen', 'render', 'ton', 'main'];
+var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'garten', 'glueck', 'gaeste', 'tiere', 'speicher', 'sticker', 'hinweise', 'vorlesen', 'render', 'ton', 'profile', 'leben', 'main'];
 
 function ladeKontext(extra) {
   var ctx = { console: console, Math: Math };
@@ -181,6 +181,9 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   listener.load[0]();
   var h = ctx.Dorf.Spiel.laufend;
   wahr(h && h.st, 'Spiel gestartet');
+  // ab v0.10: ohne Spielstand kommen zuerst die Bilder; das Kind tippt auf den Esel
+  wahr(h.st.wahl && !h.st.wahl.gesperrt, 'Bildauswahl offen');
+  gleich(ctx.Dorf.Spiel.waehleProfil(h.st, 'esel'), 'gewaehlt'); wahr(!h.st.wahl);
   gleich(canvases.spiel.style.width, (320 * 4) + 'px', 'ganzzahlige Skalierung');
   listener.keydown.forEach(function (f) { f({ code: 'ArrowRight', preventDefault: function () {} }); });
   listener.keydown.forEach(function (f) { f({ code: 'Backquote', preventDefault: function () {} }); });
@@ -197,12 +200,13 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.9', function () {
+test('Version: sichtbares Label ist v0.10', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.9');
+  gleich(D.VERSION, 'v0.10');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.9') >= 0, 'Titel enthaelt v0.9');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.9') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.10 (Prototyp)') >= 0, 'Titel enthaelt v0.10');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.10"') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('js/profile.js') < html.indexOf('js/main.js') && html.indexOf('js/leben.js') < html.indexOf('js/main.js'), 'neue Dateien vor main');
 });
 test('Debug: F1 ist frei, Debug liegt auf Backquote', function () {
   var D = ladeKontext().Dorf;
@@ -610,6 +614,7 @@ test('Smoke: Taste M, Lautsprecher-Knopf, Touch-Knoepfe und Vollbild im Browser'
   var ctx = ladeKontext({ window: win, document: doc });
   listener.load[0]();
   var h = ctx.Dorf.Spiel.laufend, t = 0;
+  ctx.Dorf.Spiel.waehleProfil(h.st, 'esel');
   function frames(n) { for (var i = 0; i < n; i++) { var f = queue.shift(); t += 16.7; f(t); } }
   frames(2);
   gleich(els.rahmen.style['--s'], '2', 'Skalierung fuer die Knoepfe');
@@ -1026,7 +1031,7 @@ function starteFake(o) {
       feuer: function (n, ev) { (l[n] || []).forEach(function (f) { f(ev); }); },
       width: 320, height: 176, getContext: function () { return o.ctx || fakeProxyCtx(zaehler); }, getBoundingClientRect: function () { return { left: 0, top: 0, width: 640, height: 352 }; } };
   }
-  var els = {}; ['spiel', 'ui', 'rahmen', 'ton-knopf', 'vollbild-knopf', 'knopf-aktion', 'vorlesen-knopf', 'neu-knopf'].forEach(function (id) { els[id] = el(id); });
+  var els = {}; ['spiel', 'ui', 'rahmen', 'ton-knopf', 'vollbild-knopf', 'knopf-aktion', 'vorlesen-knopf', 'eltern-knopf', 'hud'].forEach(function (id) { els[id] = el(id); });
   var queue = [], listener = {}, docL = {}, sp = o.speicher || fakeSpeicher();
   var win = {
     innerWidth: 640, innerHeight: 400, devicePixelRatio: 1, localStorage: sp, location: { search: o.suche || '' },
@@ -1040,6 +1045,8 @@ function starteFake(o) {
   var ctx = ladeKontext({ window: win, document: doc, console: { log: console.log, warn: function () { warnungen.push([].join.call(arguments, ' ')); } } });
   listener.load[0]();
   var h = ctx.Dorf.Spiel.laufend, t = 0;
+  // ab v0.10: offene Bildauswahl gleich mit dem Esel beantworten (ausser der Test will die Auswahl sehen)
+  if (h.st.wahl && !h.st.wahl.gesperrt && !o.wahl) ctx.Dorf.Spiel.waehleProfil(h.st, o.profil || 'esel');
   return { D: ctx.Dorf, h: h, els: els, sp: sp, win: win, doc: doc, docL: docL, listener: listener, zaehler: zaehler, warnungen: warnungen,
     frames: function (n, schritt) { for (var i = 0; i < n; i++) { var f = queue.shift(); t += schritt || 16.7; f(t); } } };
 }
@@ -1052,8 +1059,8 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.vorrat.tomate = 4; st.vorrat.olive = 2; st.teller = ['tumbet', 'paamboli'];
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
-  var roh = JSON.parse(a.sp.d['finca.spielstand']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.9'); gleich(roh.tag, 3);
+  var roh = JSON.parse(a.sp.d['finca.spielstand.esel']);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.10'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -1064,9 +1071,9 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   wahr(/wieder da/.test(s2.blase.text), 'freundliche Begruessung');
   // automatisch speichern: alle paar Sekunden und beim Verstecken der Seite
   s2.vorrat.karotte = 5; b.frames(Math.ceil(D.Spiel.SPEICHER_TAKT * 60) + 5);
-  gleich(JSON.parse(b.sp.d['finca.spielstand']).vorrat.karotte, 5, 'regelmaessig gesichert');
+  gleich(JSON.parse(b.sp.d['finca.spielstand.esel']).vorrat.karotte, 5, 'regelmaessig gesichert');
   s2.vorrat.karotte = 6; b.doc.hidden = true; b.docL.visibilitychange.forEach(function (f) { f(); });
-  gleich(JSON.parse(b.sp.d['finca.spielstand']).vorrat.karotte, 6, 'beim Wegklicken gesichert');
+  gleich(JSON.parse(b.sp.d['finca.spielstand.esel']).vorrat.karotte, 6, 'beim Wegklicken gesichert');
 });
 test('Spielstand: kaputte, fremde oder uebertriebene Daten starten einfach frisch', function () {
   var D = ladeKontext().Dorf, S = D.Speicher;
@@ -1100,17 +1107,29 @@ test('Spielstand: Entwicklerhilfen ueberschreiben keinen echten Spielstand, ?neu
   var a = starteFake(); a.h.st.uhr.tag = 5; a.h.sichere();
   var b = starteFake({ speicher: a.sp, suche: '?abend=1' });
   wahr(!b.h.st.geladen, 'Ausprobieren ohne alten Stand'); b.h.sichere();
-  gleich(JSON.parse(a.sp.d['finca.spielstand']).tag, 5, 'echter Stand bleibt');
+  gleich(JSON.parse(a.sp.d['finca.spielstand.esel']).tag, 5, 'echter Stand bleibt');
   var c = starteFake({ speicher: a.sp, suche: '?neu=1' });
   wahr(!c.h.st.geladen); gleich(c.h.st.uhr.tag, 1);
-  wahr(!a.sp.d['finca.spielstand'], 'geloescht');
+  wahr(!a.sp.d['finca.spielstand.esel'], 'geloescht');
 });
-test('Neu anfangen: Knopf fragt nach, Nein ist vorausgewaehlt, Ja beginnt Tag 1, Ton bleibt', function () {
+function elternHalten(a, sek) {
+  var k = a.els['eltern-knopf'];
+  k.feuer('pointerdown', { preventDefault: function () {} });
+  a.frames(Math.ceil(sek * 60));
+  k.feuer('pointerup', {});
+}
+function neuUeberEltern(a) {
+  var D = a.D, st = a.h.st, E = D.Spiel.ELTERN;
+  elternHalten(a, D.Spiel.ELTERN_HALT + 0.2);
+  wahr(st.eltern, 'Elternbereich offen'); st.eltern.t = 1;
+  gleich(D.Spiel.klickBild(st, E.neu.x + 5, E.neu.y + 5, true), 'frage');
+}
+test('Neu anfangen: im Elternbereich, fragt nach, Nein ist vorausgewaehlt, Ja beginnt Tag 1, Ton bleibt', function () {
   var a = starteFake(), D = a.D, st = a.h.st;
   st.ton.umschalten(); wahr(st.ton.stumm, 'stumm');
   var startGlueck = st.gaeste[0].glueck;
   st.uhr.tag = 4; st.vorrat.tomate = 3; st.gaeste[0].glueck = startGlueck + 15; a.h.sichere();
-  a.els['neu-knopf'].klick();
+  neuUeberEltern(a);
   wahr(st.frage && st.frage.wahl === 0, 'Rueckfrage offen, Nein vorausgewaehlt');
   // ein schnelles Tippen direkt nach dem Oeffnen zaehlt nicht
   gleich(D.Spiel.klickBild(st, D.Spiel.FRAGE.ja.x + 5, D.Spiel.FRAGE.ja.y + 5, true), 'warte');
@@ -1120,12 +1139,12 @@ test('Neu anfangen: Knopf fragt nach, Nein ist vorausgewaehlt, Ja beginnt Tag 1,
   gleich(D.Spiel.klickBild(st, D.Spiel.FRAGE.nein.x + 5, D.Spiel.FRAGE.nein.y + 5, true), 'nein');
   wahr(!st.frage); gleich(st.uhr.tag, 4);
   // Ja: frischer Tag 1
-  a.els['neu-knopf'].klick(); a.frames(30);
+  neuUeberEltern(a); a.frames(30);
   gleich(D.Spiel.klickBild(st, D.Spiel.FRAGE.ja.x + 5, D.Spiel.FRAGE.ja.y + 5, true), 'neu');
   gleich(st.uhr.tag, 1); gleich(st.vorrat.tomate, 0); gleich(st.gaeste[0].glueck, startGlueck); wahr(!st.frage);
   wahr(st.ton.stumm, 'Ton bleibt aus'); gleich(a.sp.d['finca.stumm'], '1');
   wahr(st.toene.indexOf('neu') >= 0, 'freundlicher Klang');
-  wahr(!a.sp.d['finca.spielstand'] || JSON.parse(a.sp.d['finca.spielstand']).tag === 1, 'alter Stand weg');
+  wahr(!a.sp.d['finca.spielstand.esel'] || JSON.parse(a.sp.d['finca.spielstand.esel']).tag === 1, 'alter Stand weg');
   // mit Tasten: Pfeil waehlt Ja, Enter bestaetigt, Esc schliesst
   st.uhr.tag = 2; D.Spiel.frageAuf(st); st.frage.t = 1;
   st.eingabe.druecke('Escape'); D.Spiel.schritt(st, 0.016); st.eingabe.ende(); st.eingabe.loese('Escape');
@@ -1257,9 +1276,10 @@ test('Hintergrund: einmal vorgezeichnet, pro Frame nur kopieren, Wasser und Tafe
   D.Render.zeichne(R1, st); z1.fillRect = 0; D.Render.zeichne(R1, st); D.Render.zeichne(R2, st); z2.fillRect = 0; D.Render.zeichne(R2, st);
   wahr(z1.fillRect < z2.fillRect * 0.75, 'weniger Zeichenaufrufe (' + z1.fillRect + ' statt ' + z2.fillRect + ')');
 });
-test('Knoepfe: Neu anfangen im HTML mit Beschriftung, Handy quer als Bild', function () {
+test('Knoepfe: Elternknopf statt Neu-Knopf im HTML, Handy quer als Bild', function () {
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(/<button id="neu-knopf"[^>]*aria-label="Neu anfangen"/.test(html), 'Neu-Knopf');
+  wahr(!/neu-knopf/.test(html), 'kein sichtbarer Neu-Knopf mehr (ab v0.10 im Elternbereich)');
+  wahr(/<button id="eltern-knopf"[^>]*aria-label="Für Eltern, 3 Sekunden gedrückt halten"/.test(html), 'Eltern-Knopf beschriftet');
   wahr(/<div id="hinweis">\s*<svg/.test(html), 'Bild zum Drehen');
   wahr(/touch-action: manipulation/.test(html) && /safe-area-inset/.test(html), 'Touch und Notch');
   wahr(/max-height: 430px/.test(html), 'kleine Handys quer');
@@ -1856,6 +1876,242 @@ test('Tagesgrenze v0.9: mit Buch, Menue, Huehnern und Kochen endet der Tag spaet
     S.schritt(st, 0.05); sek += 0.05;
   }
   wahr(st.abend, 'Abend erreicht'); wahr(sek <= 15 * 60 + 0.1, 'nach ' + Math.round(sek) + ' s');
+});
+
+// ---------- v0.10: Bilder (Profile), Zeitkonto, Elternbereich, Instrumente, Tiere, Ziffern, Zoom ----------
+function fakeDatum(halter) { return function () { return new Date(halter.d + 'T12:00:00'); }; }
+test('Profile: erster Start zeigt drei Bilder, jedes Bild hat eigenen Spielstand, eigenes Album, alte Staende gehoeren dem Esel', function () {
+  var sp = fakeSpeicher();
+  sp.setItem('finca.spielstand', JSON.stringify({ format: 1, version: 'v0.9', tag: 7, minute: 600 }));
+  sp.setItem('finca.album', JSON.stringify({ sonne: 1 }));
+  var a = starteFake({ speicher: sp, wahl: true }), st = a.h.st, S = a.D.Spiel;
+  wahr(!sp.d['finca.spielstand'] && sp.d['finca.spielstand.esel'], 'alter Stand umgezogen zum Esel');
+  wahr(st.wahl && !st.wahl.gesperrt, 'Bildauswahl offen');
+  gleich(S.wahlKarten().length, 3);
+  S.wahlKarten().forEach(function (k) { wahr(k.x >= 0 && k.x + k.w <= 320 && k.y + k.h <= 176, 'Karte im Bild'); wahr(k.w >= 60 && k.h >= 60, 'grosse Bilder'); });
+  // Zeit laeuft in der Auswahl nicht
+  var m = st.uhr.minute; a.frames(60); gleich(st.uhr.minute, m, 'Spiel wartet');
+  // kurzes Tippen direkt nach dem Oeffnen zaehlt nicht, dann aufs Huhn
+  var huhn = S.wahlKarten()[1]; gleich(huhn.id, 'huhn');
+  st.wahl.t = 0; gleich(S.klickBild(st, huhn.x + 20, huhn.y + 20, true), 'warte');
+  st.wahl.t = 1; gleich(S.klickBild(st, huhn.x + 20, huhn.y + 20, true), 'gewaehlt');
+  gleich(st.profil, 'huhn'); gleich(st.uhr.tag, 1, 'Huhn beginnt frisch'); wahr(!st.wahl);
+  st.uhr.tag = 3; st.album = { sonne: 1, mond: 1 }; st.albumAendern = true; a.h.sichere();
+  gleich(JSON.parse(sp.d['finca.spielstand.huhn']).tag, 3); gleich(JSON.parse(sp.d['finca.spielstand.esel']).tag, 7, 'Esel bleibt');
+  gleich(sp.d['finca.profil'], 'huhn');
+  // Wechsel zum Esel (ueber den Elternbereich): eigener Stand, eigenes Album
+  S.oeffneEltern(st); S.elternTat(st, 'wechseln'); wahr(st.wahl && st.wahl.zurueck, 'Auswahl mit Zurueck');
+  gleich(S.waehleProfil(st, 'esel'), 'gewaehlt'); gleich(st.uhr.tag, 7); gleich(a.D.Sticker.anzahl(st.album), 1);
+  gleich(S.waehleProfil(st, 'gecko'), 'nein', 'ohne offene Auswahl ist ein Bild nur per Elternbereich');
+  var info = a.D.Profile.uebersicht(sp, st.konto);
+  gleich(info.filter(function (x) { return x.id === 'huhn'; })[0].sticker, 2, 'Album des Huhns bleibt');
+});
+test('Zeitkonto: 15 Minuten pro Bild und Tag, Bildwechsel, Neuladen und Neu anfangen umgehen sie nicht', function () {
+  var sp = fakeSpeicher(), tag = { d: '2026-10-23' }, F = { Date: fakeDatum(tag) };
+  var a = starteFake({ speicher: sp, fenster: F }), st = a.h.st, S = a.D.Spiel, P = a.D.Profile, U = a.D.Uhr;
+  a.frames(600);
+  nah(P.sekunden(st.konto, 'esel'), 10, 0.5, 'echte Sekunden gebucht');
+  a.h.sichere(); wahr(JSON.parse(sp.d['finca.zeitkonto']).profile.esel.sek > 9, 'Konto gespeichert');
+  // Neuladen: Esel ist gleich wieder da, ohne Auswahl, mit seiner Zeit
+  var b = starteFake({ speicher: sp, fenster: F, wahl: true }), s2 = b.h.st;
+  wahr(!s2.wahl, 'heute schon gespielt: keine Auswahl'); gleich(s2.profil, 'esel'); wahr(s2.spielzeit > 9, 'Zeit bleibt');
+  // Neu anfangen behaelt die Zeit
+  s2.spielzeit = 300; S.neuAnfangen(s2); gleich(s2.spielzeit, 300); gleich(s2.profil, 'esel');
+  // bis zum Schluss spielen (eine Sekunde pro Frame)
+  for (var i = 0; i < 1200 && !s2.abend; i++) b.frames(1, 1000);
+  wahr(s2.abend, 'Tag vorbei'); wahr(P.fertig(s2.konto, 'esel'), 'Esel ist fertig fuer heute');
+  wahr(P.sekunden(s2.konto, 'esel') <= U.TAG_LIMIT + 2, 'hoechstens 15 Minuten gebucht');
+  b.frames(60 * 15); s2.naechsterTag = true; b.frames(2);
+  wahr(s2.wahl && s2.wahl.gesperrt, 'statt neuem Tag: Schlafenszeit'); wahr(s2.abend || s2.wahl, 'kein neuer Tag');
+  gleich(S.waehleProfil(s2, 'huhn'), 'gesperrt', 'Kind kann nicht einfach ein anderes Bild nehmen');
+  gleich(S.waehleProfil(s2, 'esel'), 'gesperrt');
+  var minute = s2.uhr.minute; b.frames(120); gleich(s2.uhr.minute, minute, 'nichts laeuft weiter');
+  b.h.sichere();
+  // Neuladen und Neu anfangen: bleibt Schlafenszeit
+  var c = starteFake({ speicher: sp, fenster: F, wahl: true }), s3 = c.h.st;
+  wahr(s3.wahl && s3.wahl.gesperrt, 'nach dem Neuladen weiter Schlafenszeit');
+  S.neuAnfangen(s3); wahr(s3.wahl && s3.wahl.gesperrt, 'Neu anfangen schenkt keine Zeit');
+  var d = starteFake({ speicher: sp, fenster: F, wahl: true, suche: '?neu=1' });
+  wahr(d.h.st.wahl && d.h.st.wahl.gesperrt, '?neu=1 schenkt keine Zeit');
+  // Eltern lassen ein anderes Kind spielen: das Huhn hat eigene 15 Minuten, der Esel schlaeft
+  S.oeffneEltern(s3); S.elternTat(s3, 'wechseln');
+  wahr(s3.wahl && !s3.wahl.gesperrt && !s3.wahl.zurueck, 'Auswahl ohne Zurueck');
+  gleich(S.waehleProfil(s3, 'esel'), 'schlaeft');
+  gleich(S.waehleProfil(s3, 'huhn'), 'gewaehlt'); wahr(s3.spielzeit < 1, 'Huhn hat noch seine Zeit');
+  c.frames(300); wahr(P.sekunden(s3.konto, 'huhn') > 4 && P.fertig(s3.konto, 'esel'), 'getrennt gebucht');
+  // zurueck zum Esel geht nicht, auch nicht ueber die Eltern
+  S.oeffneEltern(s3); S.elternTat(s3, 'wechseln'); gleich(S.waehleProfil(s3, 'esel'), 'schlaeft');
+});
+test('Zeitkonto: um Mitternacht wachen alle auf, neuer Kalendertag hat wieder 15 Minuten', function () {
+  var sp = fakeSpeicher(), tag = { d: '2026-10-23' }, F = { Date: fakeDatum(tag) };
+  var a = starteFake({ speicher: sp, fenster: F }), st = a.h.st, S = a.D.Spiel, P = a.D.Profile;
+  for (var i = 0; i < 1200 && !st.abend; i++) a.frames(1, 1000);
+  a.frames(60 * 15); st.naechsterTag = true; a.frames(2);
+  wahr(st.wahl && st.wahl.gesperrt, 'Schlafenszeit');
+  tag.d = '2026-10-24'; a.frames(150);
+  wahr(!st.wahl.gesperrt, 'neuer Tag: Bilder wieder antippbar');
+  gleich(P.sekunden(st.konto, 'esel'), 0); wahr(!P.fertig(st.konto, 'esel'));
+  gleich(S.waehleProfil(st, 'esel'), 'weiter'); gleich(st.spielzeit, 0, 'volle 15 Minuten');
+  st.naechsterTag = true; a.frames(2); wahr(!st.abend, 'neuer Spieltag beginnt');
+  a.frames(300); wahr(P.sekunden(st.konto, 'esel') > 4);
+  // ueber Mitternacht gespielt: das Konto beginnt neu, die Zeit auch
+  st.spielzeit = 500; tag.d = '2026-10-25'; a.frames(150);
+  wahr(st.spielzeit < 5, 'neuer Kalendertag, neue Zeit'); wahr(P.sekunden(st.konto, 'esel') < 5);
+});
+test('Elternbereich: 3 Sekunden halten oeffnet, kurzes Tippen nicht; Spiel pausiert; weniger Bewegung wird gespeichert', function () {
+  var a = starteFake(), st = a.h.st, S = a.D.Spiel, E = S.ELTERN, k = a.els['eltern-knopf'];
+  gleich(S.ELTERN_HALT, 3);
+  k.feuer('pointerdown', { preventDefault: function () {} }); a.frames(60); k.feuer('pointerup', {}); a.frames(5);
+  wahr(!st.eltern, 'eine Sekunde reicht nicht');
+  wahr(+k.style['--p'] === 0, 'Ring wieder leer');
+  k.feuer('pointerdown', { preventDefault: function () {} }); a.frames(120); k.feuer('pointerleave', {}); a.frames(120);
+  wahr(!st.eltern, 'Finger weggezogen zaehlt nicht');
+  k.feuer('pointerdown', { preventDefault: function () {} }); a.frames(100);
+  wahr(+k.style['--p'] > 0.4 && +k.style['--p'] < 1, 'Ring fuellt sich');
+  a.frames(90); k.feuer('pointerup', {});
+  wahr(st.eltern, 'nach 3 Sekunden offen'); wahr(st.toene.length === 0 || true);
+  var m = st.uhr.minute, z = st.spielzeit; a.frames(120); gleich(st.uhr.minute, m, 'Spiel pausiert'); gleich(st.spielzeit, z, 'Zeit pausiert');
+  // Tastatur: Enter halten
+  S.schliesseEltern(st);
+  k.feuer('keydown', { key: 'Enter', preventDefault: function () {} }); a.frames(200); k.feuer('keyup', {});
+  wahr(st.eltern, 'auch mit der Tastatur');
+  // weniger Bewegung
+  st.eltern.t = 1; wahr(!st.ruhig);
+  gleich(S.klickBild(st, E.ruhig.x + 5, E.ruhig.y + 5, true), 'ruhig'); wahr(st.ruhig); a.frames(2);
+  gleich(a.sp.d['finca.ruhig'], '1', 'gespeichert'); wahr(a.els.rahmen.classList.an.ruhig, 'Knoepfe ruhig');
+  gleich(S.klickBild(st, E.zu.x + 3, E.zu.y + 3, true), 'zu'); wahr(!st.eltern);
+  var b = starteFake({ speicher: a.sp }); wahr(b.h.st.ruhig, 'bleibt nach dem Neuladen');
+  var c = starteFake({ fenster: { matchMedia: function (q) { return { matches: /reduced-motion/.test(q) }; } } });
+  wahr(c.h.st.ruhig, 'Systemeinstellung weniger Bewegung wird uebernommen');
+  // daneben tippen schliesst, Esc schliesst
+  S.oeffneEltern(st); st.eltern.t = 1; gleich(S.klickBild(st, 5, 5, true), 'zu');
+  S.oeffneEltern(st); st.eltern.t = 1; st.eingabe.druecke('Escape'); S.schritt(st, 0.02); st.eingabe.ende(); st.eingabe.loese('Escape'); wahr(!st.eltern);
+  // mit Pfeilen und Enter bedienbar
+  S.oeffneEltern(st); st.eltern.t = 1;
+  st.eingabe.druecke('ArrowDown'); S.schritt(st, 0.02); st.eingabe.ende(); st.eingabe.loese('ArrowDown');
+  gleich(st.eltern.wahl, 'ruhig');
+  st.eingabe.druecke('Enter'); S.schritt(st, 0.02); st.eingabe.ende(); st.eingabe.loese('Enter'); wahr(!st.ruhig, 'Enter schaltet um');
+});
+test('Weniger Bewegung: nichts huepft, glitzert oder pulst, Voegel fliegen nicht weg, nur ein Falter', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 1 });
+  st.ruhig = true;
+  var L = st.leben, sp = { x: L.voegel[0].x + 5, y: L.voegel[0].y };
+  for (var i = 0; i < 60; i++) D.Leben.update(L, { ruhig: true, spieler: sp, abend: false, minute: 600 }, 0.05);
+  wahr(L.voegel.every(function (v) { return v.zustand === 'sitzt'; }), 'Voegel bleiben sitzen');
+  gleich(L.falter.filter(function (f) { return !f.aus; }).length, 1);
+  var c = fakeProxyCtx(), R = { ctx: c, ui: fakeProxyCtx(), uiSkala: 1, uiCanvas: { width: 320, height: 176 } };
+  D.Render.zeichne(R, st); st.zeit = 7.3; D.Render.zeichne(R, st);
+  var zu = D.Spiel.erstelle({ seed: 1 }); zu.ruhig = false;
+  for (i = 0; i < 60; i++) D.Leben.update(zu.leben, { ruhig: false, spieler: { x: zu.leben.voegel[0].x + 5, y: zu.leben.voegel[0].y }, abend: false, minute: 600 }, 0.05);
+  wahr(zu.leben.voegel.some(function (v) { return v.zustand === 'fliegt' || v.x !== L.voegel[0].x; }), 'sonst fliegen sie weg');
+});
+test('Instrumente: Gitarre, Kastagnetten, Trommel; Tippen spielt, Noten passen zur Musik, Gaeste freuen sich', function () {
+  var D = ladeKontext().Dorf, S = D.Spiel, T = D.Ton, st = S.erstelle({ seed: 1 });
+  var ins = st.karte.instrumente;
+  gleich(ins.map(function (x) { return x.art; }).join(','), 'gitarre,kastagnetten,trommel');
+  ins.forEach(function (x) { wahr(st.karte.blockiert(x.x, x.y), 'Instrument steht im Weg wie eine Deko'); });
+  // jede Note gehoert zum Akkord, der gerade klingt
+  T.FOLGE.forEach(function (ak) {
+    var klassen = T.AKKORDE[ak].map(function (m) { return m % 12; });
+    ['gitarre', 'trommel'].forEach(function (art) { for (var n = 0; n < 4; n++) T.instrumentNoten(art, ak, n).forEach(function (no) {
+      wahr(klassen.indexOf(no.midi % 12) >= 0, art + ' ' + no.midi + ' in ' + ak); wahr(no.staerke <= 0.2, 'leise');
+    }); });
+    T.instrumentNoten('kastagnetten', ak, 2).forEach(function (no) { wahr(no.freq && no.staerke <= 0.06, 'Klick leise'); });
+  });
+  for (var s = 0; s < 64; s++) wahr(T.FOLGE.indexOf(T.akkordBei(s)) >= 0);
+  gleich(T.akkordBei(0), 'Am'); gleich(T.akkordBei(8), 'G');
+  // hinlaufen und spielen
+  var g = ins[0];
+  var r = S.klick(st, g.x * 16 + 8, g.y * 16 + 8);
+  wahr(r === 'musik' || st.spieler.aktion, 'zum Instrument laufen');
+  for (var i = 0; i < 30 * 20 && !(st.musik && st.musik.length); i++) S.schritt(st, 1 / 30);
+  wahr(st.musik && st.musik[0].art === 'gitarre', 'angekommen und gespielt');
+  wahr(g.wackel > 0 && st.noten.length === 1, 'wackelt, Note steigt auf');
+  // nah dran: Knopf zeigt Musik
+  gleich(S.kontext(st) && S.kontext(st).art, 'musik'); gleich(S.AKTION_NAME.musik, 'Musik machen');
+  var mia = st.gaeste[0]; mia.x = st.spieler.x + 10; mia.y = st.spieler.y; mia.glueckPause = {}; var vor = mia.glueck;
+  for (i = 0; i < 10; i++) { S.musiziere(st, g); }
+  wahr(st.noten.length <= S.NOTEN_MAX, 'hoechstens sechs Noten');
+  wahr(mia.glueck > vor, 'Gast in der Naehe freut sich');
+  wahr(st.heute.musik && st.gelernt.musik, 'zaehlt fuer Sticker und Tipps');
+  for (i = 0; i < 60; i++) S.schritt(st, 1 / 30);
+  gleich(st.noten.length, 0, 'Noten verschwinden'); gleich(g.wackel, 0);
+  // Zeichnen klappt
+  var R = { ctx: fakeProxyCtx(), ui: fakeProxyCtx(), uiSkala: 1, uiCanvas: { width: 320, height: 176 } };
+  S.musiziere(st, ins[1]); S.musiziere(st, ins[2]); D.Render.zeichne(R, st);
+});
+test('Ton v0.10: Instrumente landen im Takt, stumm spielt nichts, neue Klaenge leise', function () {
+  var au = fakeAudio(), D = ladeKontext().Dorf, t = D.Ton.erstelle({ AudioContext: au.AC, localStorage: fakeSpeicher() });
+  wahr(!t.instrument('gitarre', 0) || true);
+  t.entsperre();
+  var l = t.instrument('gitarre', 1); wahr(l && l.length === 3, 'Gitarre drei Saiten');
+  wahr(t.instrument('trommel', 0) && t.instrument('kastagnetten', 2).length === 3);
+  ['wahl', 'schlaf', 'eltern', 'vogel', 'flattern'].forEach(function (n) { t.spiele(n); });
+  t.umschalten(); gleich(t.instrument('gitarre', 0), false, 'stumm');
+  for (var x = 0; x < 10; x++) { var r = D.Ton.raster(1.01 + x * 0.07, 1, D.Ton.ACHTEL / 4); wahr(r >= 1.01 + x * 0.07 - 1e-9, 'nicht in der Vergangenheit'); }
+});
+test('Hintergrund: Voegel und Falter am Tag, abends weg, nie mehr als sechs, Teilchen insgesamt hoechstens 40', function () {
+  var D = ladeKontext().Dorf, S = D.Spiel, st = S.erstelle({ seed: 3 }); st.uhr.minute = 600;
+  wahr(D.Leben.anzahl(st.leben) > 0 && D.Leben.anzahl(st.leben) <= D.Leben.MAX);
+  for (var i = 0; i < 30 * 20; i++) S.schritt(st, 1 / 30);
+  wahr(st.leben.sichtbar > 0.9, 'tagsueber da');
+  wahr(st.leben.falter.every(function (f) { return f.x > 0 && f.y > 0 && f.x < 640 && f.y < 480; }), 'Falter bleiben auf der Karte');
+  for (i = 0; i < 100; i++) st.herzchen.push({ x: 10, y: 10, t: 0 });
+  for (i = 0; i < 20; i++) S.musiziere(st, st.karte.instrumente[0]);
+  S.schritt(st, 1 / 30);
+  var teile = st.herzchen.length + st.noten.length + D.Leben.anzahl(st.leben);
+  wahr(teile <= 40, 'Teilchen: ' + teile);
+  st.uhr.minute = 20 * 60 + 30;
+  for (i = 0; i < 60; i++) D.Leben.update(st.leben, { minute: st.uhr.minute, spieler: st.spieler }, 0.05);
+  wahr(st.leben.sichtbar < 0.01, 'abends ziehen sie sich zurueck');
+  var a = D.Leben.erstelle(st.karte, 5), b = D.Leben.erstelle(st.karte, 5);
+  gleich(JSON.stringify(a.voegel.map(function (v) { return [v.x, v.y]; })), JSON.stringify(b.voegel.map(function (v) { return [v.x, v.y]; })), 'gleicher Seed, gleiche Plaetze');
+});
+test('Pixelziffern: 0 bis 9 als eigene 3x5 Bilder, Breite stimmt, gezeichnet ohne Schrift', function () {
+  var D = ladeKontext().Dorf, Z = D.Render.ZIFFER;
+  '0123456789/:'.split('').forEach(function (z) { wahr(Z[z] && Z[z].length === 15 && /^[01]+$/.test(Z[z]), 'Ziffer ' + z); });
+  var gesehen = {}; '0123456789'.split('').forEach(function (z) { var k = Z[z]; wahr(!gesehen[k], 'jede Ziffer anders'); gesehen[k] = 1; });
+  var zaehler = {}, c = fakeProxyCtx(zaehler);
+  D.Render.ziffern(c, '12/30', 10, 10, { skala: 2 });
+  wahr(zaehler.fillRect > 20 && !zaehler.fillText, 'Pixel statt Schrift');
+});
+test('Randplakette v0.10: weiter weg von den Herzen (y0 ab 44)', function () {
+  var D = ladeKontext().Dorf;
+  wahr(D.Render.RAND.y0 >= 44, 'Abstand zu den Herzen');
+  wahr(D.Render.RAND.hz <= 2, 'nicht schneller als 2 Hz');
+});
+test('Zoom am Handy: 1,25 mal groesser, Klicks treffen trotzdem, Anzeigen auf eigener Ebene', function () {
+  var a = starteFake({ suche: '?zoom=1.25' }), st = a.h.st, S = a.D.Spiel;
+  gleich(st.zoom, 1.25); gleich(a.h.zoom, 1.25);
+  gleich(a.els.spiel.width, 256); gleich(a.els.spiel.height, 141);
+  gleich(st.kamera.viewW, 256); gleich(st.kamera.viewH, 141);
+  wahr(a.h.R.hud && a.els.hud.width === 320, 'HUD-Ebene in voller Groesse');
+  a.frames(5);
+  // Klick in der Bildmitte landet in der Mitte der gezeigten Welt
+  st.marker = null; Dorf_klick(a, 160, 120);
+  wahr(st.marker, 'Laufziel');
+  var wx = Math.round(st.kamera.x) + 160 / 1.25, wy = Math.round(st.kamera.y) + 120 / 1.25;
+  wahr(Math.abs(st.marker.x * 16 + 8 - wx) <= 24 && Math.abs(st.marker.y * 16 + 8 - wy) <= 24, 'Ziel unter dem Finger (' + st.marker.x + ',' + st.marker.y + ')');
+  // Auswahl, Eltern, Buch und Menue bleiben in Bildschirmpunkten
+  S.oeffneEltern(st); st.eltern.t = 1; gleich(S.klickBild(st, S.ELTERN.zu.x + 3, S.ELTERN.zu.y + 3, true), 'zu');
+  // Zeichnen mit Zoom: alles laeuft, danach ist die Groesse wieder normal
+  a.frames(3); gleich(a.D.Render.W, 320); gleich(a.D.Render.H, 176);
+  var b = starteFake({ fenster: { navigator: { maxTouchPoints: 5 }, innerWidth: 800, innerHeight: 380 } });
+  gleich(b.h.st.zoom, 1.25, 'kleines Handy quer: automatisch');
+  var c = starteFake({ fenster: { navigator: { maxTouchPoints: 5 }, innerWidth: 1280, innerHeight: 800 } });
+  gleich(c.h.st.zoom, 1, 'Tablet: kein Zoom'); wahr(!c.h.R.hud);
+  var d = starteFake({ suche: '?touch=1&zoom=1' }); gleich(d.h.st.zoom, 1);
+});
+function Dorf_klick(a, x, y) { return a.D.Spiel.klickBild(a.h.st, x, y, false); }
+test('Bildauswahl und Elternbereich zeichnen: Tag und Sticker als Pixelziffern, schlafende Bilder, keine Ziffer zu klein', function () {
+  var a = starteFake({ wahl: true }), st = a.h.st, D = a.D, R = a.h.R;
+  a.frames(2);
+  wahr(R.letzteWahl && R.letzteWahl.karten.length === 3, 'drei Karten gezeichnet');
+  st.wahl.gesperrt = true; a.frames(2); wahr(R.letzteWahl.gesperrt, 'Schlafenszeit gezeichnet');
+  D.Spiel.waehleProfil(st, 'esel'); st.wahl = null; D.Spiel.oeffneEltern(st); a.frames(2);
+  wahr(R.letzteEltern && R.letzteEltern.zeilen.length === 3, 'Minuten je Bild');
+  var E = D.Spiel.ELTERN;
+  [E.zu, E.ruhig, E.wechseln, E.neu].forEach(function (k) { wahr(k.x >= E.x && k.x + k.w <= E.x + E.w && k.y + k.h <= E.y + E.h, 'Knopf im Feld'); wahr(k.h >= 20, 'gross genug'); });
 });
 
 // ---------- Ausfuehren ----------

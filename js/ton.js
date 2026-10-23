@@ -74,6 +74,35 @@
     return out;
   }
 
+  // ab v0.10: Instrumente zum Antippen. Was gerade klingt, passt immer zum aktuellen Akkord der Musik.
+  function akkordBei(schritt) { var s = ((Math.floor(schritt) % 64) + 64) % 64; return FOLGE[Math.floor(s / 8)]; }
+  // Reine Funktion: welche Toene ein Instrument zu einem Akkord spielt. n zaehlt die Schlaege (Abwechslung).
+  function instrumentNoten(art, akkord, n) {
+    var a = AKKORDE[akkord] || AKKORDE.Am, k = n || 0, l = [];
+    if (art === 'gitarre') {
+      // weicher Strum, eine Oktave ueber der Begleitung, abwechselnd ab und auf
+      var toene = [a[1] + 12, a[2] + 12, a[3] + 12];
+      if (k % 2 === 1) toene.reverse();
+      toene.forEach(function (m, i) { l.push({ midi: m, versatz: i * 0.035, staerke: 0.2 - i * 0.025, klang: 'saite' }); });
+    } else if (art === 'kastagnetten') {
+      // zwei helle Klicks, beim dritten Schlag ein kleines Trippeln
+      l.push({ freq: 2600, versatz: 0, staerke: 0.05, klang: 'klick' });
+      l.push({ freq: 3100, versatz: ACHTEL / 4, staerke: 0.04, klang: 'klick' });
+      if (k % 3 === 2) l.push({ freq: 2800, versatz: ACHTEL / 2, staerke: 0.035, klang: 'klick' });
+    } else if (art === 'trommel') {
+      // weicher, tiefer Schlag auf dem Grundton des Akkords
+      l.push({ midi: a[0] + 12, versatz: 0, staerke: 0.09, klang: 'trommel' });
+      if (k % 2 === 1) l.push({ midi: a[0] + 19, versatz: ACHTEL / 2, staerke: 0.05, klang: 'trommel' });
+    }
+    return l;
+  }
+  // Naechster Zeitpunkt im feinen Raster der Musik (Viertel einer Achtel), damit Schlaege im Takt landen
+  function raster(jetzt, naechste, fein) {
+    if (!(fein > 0) || !(naechste > jetzt)) return jetzt;
+    var k = Math.floor((naechste - jetzt) / fein);
+    return naechste - k * fein;
+  }
+
   function klemme(v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
   // Mischung nach Uhrzeit: ab 18:30 Abendmusik, ab 20:30 Grillen. Abendszene: ganz Abend.
   function mischung(stunde, abendSzene) {
@@ -254,6 +283,38 @@
       gn.gain.exponentialRampToValueAtTime(0.0001, start + dauer);
       o.connect(gn); gn.connect(knoten.effekte); o.start(start); o.stop(start + dauer + 0.05);
     }
+    // Gerade hoerbarer Achtelschritt (der Planer ist bis zu 0,35 s voraus)
+    t.aktuellerSchritt = function () {
+      if (!t.ctx) return t.schrittIndex;
+      var vor = Math.max(0, Math.ceil((t.naechste - t.ctx.currentTime) / ACHTEL));
+      return ((t.schrittIndex - vor) % 64 + 64) % 64;
+    };
+    function klick(freq, wann, staerke) {
+      if (!rauschen) return;
+      var c = t.ctx, q = c.createBufferSource(), bp = c.createBiquadFilter(), gn = c.createGain();
+      q.buffer = rauschen; bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = 4;
+      gn.gain.setValueAtTime(0.0001, wann); gn.gain.linearRampToValueAtTime(staerke * 3, wann + 0.002); gn.gain.exponentialRampToValueAtTime(0.0001, wann + 0.045);
+      q.connect(bp); bp.connect(gn); gn.connect(knoten.effekte); q.start(wann, (freq % 13) / 10, 0.06);
+    }
+    function trommel(midi, wann, staerke) {
+      var c = t.ctx, o = c.createOscillator(), gn = c.createGain(), f = mtof(midi);
+      o.type = 'sine'; o.frequency.setValueAtTime(f * 1.6, wann); o.frequency.exponentialRampToValueAtTime(f, wann + 0.06);
+      gn.gain.setValueAtTime(0, wann); gn.gain.linearRampToValueAtTime(staerke, wann + 0.006); gn.gain.exponentialRampToValueAtTime(0.0001, wann + 0.5);
+      o.connect(gn); gn.connect(knoten.musik); o.start(wann); o.stop(wann + 0.55);
+    }
+    // ab v0.10: ein Instrument spielen. Rueckgabe: die gespielten Noten (oder false ohne Ton)
+    t.instrument = function (art, n) {
+      if (!t.ctx || t.stumm || !t.bereit) return false;
+      var c = t.ctx, jetzt = c.currentTime + 0.01;
+      var wann = raster(jetzt, t.naechste, ACHTEL / 4), liste = instrumentNoten(art, akkordBei(t.aktuellerSchritt()), n);
+      liste.forEach(function (x) {
+        var w = wann + x.versatz;
+        if (x.klang === 'saite') spieleNote({ midi: x.midi, staerke: x.staerke, art: 'melodie' }, w, 'musik');
+        else if (x.klang === 'klick') klick(x.freq, w, x.staerke);
+        else if (x.klang === 'trommel') trommel(x.midi, w, x.staerke);
+      });
+      return liste;
+    };
     // Leise Effekte. Unbekannte Namen werden ignoriert.
     t.spiele = function (name) {
       if (!t.ctx || t.stumm || !t.bereit) return false;
@@ -289,6 +350,12 @@
       else if (name === 'neu') { [783.99, 659.25, 523.25, 659.25, 783.99].forEach(function (f, i) { ton(f, j + i * 0.11, 0.5, 0.03); }); }
       else if (name === 'feier') { [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach(function (f, i) { ton(f, j + i * 0.16, 1.1, 0.04); }); }
       else if (name === 'nacht') { ton(783.99, j, 1.0, 0.035); ton(659.25, j + 0.3, 1.0, 0.03); ton(523.25, j + 0.6, 1.4, 0.03); }
+      // ab v0.10: Bild gewaehlt (kleines Arpeggio in a-Moll), Profil schlaeft schon, Elternbereich, Vogel zwitschert
+      else if (name === 'wahl') { [440, 523.25, 659.25, 880].forEach(function (f, i) { ton(f, j + i * 0.09, 0.5, 0.028); }); }
+      else if (name === 'schlaf') { ton(523.25, j, 0.6, 0.02, 'sine', 440); ton(392, j + 0.35, 0.8, 0.016); }
+      else if (name === 'eltern') { ton(660, j, 0.07, 0.02, 'triangle'); ton(990, j + 0.08, 0.12, 0.016, 'triangle'); }
+      else if (name === 'vogel') { ton(2900, j, 0.07, 0.006, 'sine', 3600); ton(3300, j + 0.1, 0.06, 0.005, 'sine', 4100); }
+      else if (name === 'flattern') { ton(1800, j, 0.05, 0.004, 'triangle', 1200); ton(1600, j + 0.06, 0.05, 0.003, 'triangle', 1100); }
       else if (name === 'schritt') {
         if (!rauschen) return false;
         var q = c.createBufferSource(), lp = c.createBiquadFilter(), gn = c.createGain();
@@ -309,5 +376,6 @@
   }
 
   Dorf.Ton = { SCHLUESSEL: SCHLUESSEL, BPM: BPM, LAUT: LAUT, UEBERBLENDEN: UEBERBLENDEN, AKKORDE: AKKORDE, FOLGE: FOLGE, mtof: mtof, noten: noten, zupfe: zupfe, mischung: mischung, zirpen: zirpen,
+    akkordBei: akkordBei, instrumentNoten: instrumentNoten, raster: raster, ACHTEL: ACHTEL,
     stummLaden: stummLaden, stummSpeichern: stummSpeichern, erstelle: erstelle };
 })(globalThis);

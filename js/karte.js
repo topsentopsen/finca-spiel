@@ -15,11 +15,13 @@
     // ab v0.8: kleiner Huehnerstall oberhalb vom Innenhof
     STALL: 26,
     // ab v0.9: Pflanzkuebel mit Blumen als Deko im Hof, an der Arkade und am Tor
-    KUEBEL: 27
+    KUEBEL: 27,
+    // ab v0.10: Musikinstrumente zum Antippen (Gitarre, Kastagnetten, Trommel) auf der Wiese unter dem Hof
+    INSTRUMENT: 28
   };
   var BLOCK = {};
   [T.MAUER, T.WAND, T.WASSER, T.BRUNNEN, T.OLIVE, T.TAFEL, T.HERD, T.TOR,
-    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH, T.ZAUN, T.WIESE, T.ORANGE, T.STALL, T.KUEBEL].forEach(function (t) { BLOCK[t] = true; });
+    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH, T.ZAUN, T.WIESE, T.ORANGE, T.STALL, T.KUEBEL, T.INSTRUMENT].forEach(function (t) { BLOCK[t] = true; });
 
   var KACHEL = 16, BREITE = 40, HOEHE = 30;
 
@@ -128,7 +130,13 @@
       if (tiles[by * w + bx] === T.GRAS) blumen.push({ x: bx * KACHEL + rng.int(2, 13), y: by * KACHEL + rng.int(2, 13), farbe: rng.pick(farben) });
     }
 
+    // Musikecke (v0.10): erst nach den Blumen gesetzt, damit der Seed-Zufall gleich bleibt
+    var INSTRUMENTE = [{ art: 'gitarre', x: 16, y: 22 }, { art: 'kastagnetten', x: 17, y: 22 }, { art: 'trommel', x: 22, y: 22 }];
+    INSTRUMENTE.forEach(function (p) { set(p.x, p.y, T.INSTRUMENT); });
+    blumen = blumen.filter(function (b) { return tiles[Math.floor(b.y / KACHEL) * w + Math.floor(b.x / KACHEL)] === T.GRAS; });
+
     var karte = {
+      instrumente: INSTRUMENTE.map(function (p) { return { art: p.art, x: p.x, y: p.y, wackel: 0, schlag: 0 }; }),
       kuebel: KUEBEL.map(function (p) { return { x: p[0], y: p[1] }; }),
       w: w, h: h, kachel: KACHEL, tiles: tiles, baeume: baeume, blumen: blumen, raeume: RAEUME,
       brunnen: { x: 19, y: 15 }, wiese: WIESE, garten: garten, huehner: HUEHNER, stall: STALL,

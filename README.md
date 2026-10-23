@@ -1,4 +1,4 @@
-# Finca v0.9
+# Finca v0.10
 
 A small browser game with a handheld look, written in pure JavaScript. There is no build, no npm and there are no external assets. Music and sounds are generated in code with WebAudio.
 
@@ -20,7 +20,8 @@ Optional: `index.html?seed=12345` uses a different seed for flowers and guest de
 | E | Do the fitting action nearby: pick up an egg, talk to a nearby guest, pet or feed a nearby animal, harvest a nearby plant, open the cooking menu at the stove, or close the dialog |
 | K | Cook: walk to the stove and open the cooking menu (press again to confirm) |
 | In the cooking menu | 1, 2, 3 or tap a card to cook; arrow keys and E / Enter to choose; Esc or tap outside to go back |
-| Round arrow button (top right) | Start over: a friendly question with two big picture buttons, "Nein" is preselected (arrows and Enter, or Esc to close) |
+| Gear button (top right, small and pale) | Parent area: hold it for 3 seconds (a ring fills up; Enter held for 3 seconds also works). A short tap does nothing, so children do not open it by accident. The game pauses while it is open |
+| Click / tap the guitar, castanets or drum (courtyard) | Walk there and play a soft note that fits the chord of the music; notes float up, nearby guests get a little happiness |
 | M or speaker button (top right) | Music and sounds on or off (saved in the browser) |
 | Fullscreen button (top right) | Fullscreen on or off |
 | Action button | One big round button on phones and tablets (bottom right). Its picture shows what it will do right now (egg, talk, pet, harvest, cook) and it does exactly that, same as E |
@@ -35,7 +36,18 @@ Music starts softly after the first click, tap or key press (browsers do not all
 ## Saved game and starting over
 The game remembers where you were: day, clock time, hearts, basket, garden and the plates on the table are stored in the browser (localStorage, key `finca.spielstand`, with a format number so later versions can recognize old saves). It saves every 5 seconds, in the evening, at the new morning and when the tab is hidden. If you leave in the evening, the next visit starts directly with the next morning. Broken or unknown data is simply ignored and a fresh day starts. If the browser blocks storage (private window), the game still runs, it just does not remember.
 
-"Neu anfangen" (round arrow button) asks first and then starts again at day 1. The sound setting (on or off) has its own key and stays as it was.
+"Neu anfangen" is in the parent area (from v0.10); it asks first and then starts again at day 1 for the current picture. It does not give back play time. The sound setting (on or off) has its own key and stays as it was.
+
+## Pictures (profiles) and the daily time rule (from v0.10)
+At the first start the game asks "Wer spielt?" with three big pictures (donkey, hen, gecko). Each picture has its own saved game, hearts and sticker album (keys `finca.spielstand.<picture>` and `finca.album.<picture>`; an old v0.9 save moves to the donkey).
+
+Time rule (chosen and tested): **15 minutes per picture per calendar day**. Real play seconds are booked in `finca.zeitkonto` together with the date. Reloading, "Neu anfangen", switching pictures or `?neu=1` never give time back. Whoever played today comes straight back into their own picture after a reload. When a picture's day is over, the whole picture chooser shows "Schlafenszeit" and every picture just sleeps when tapped, so a child cannot simply pick another picture. Only the parent area ("Anderes Bild") opens a chooser where a different child whose time is not used up can play; pictures with used up time still sleep. At midnight every picture gets a new 15 minutes; an open "Schlafenszeit" chooser notices this within 2 seconds.
+
+## Parent area (from v0.10)
+Hold the gear button for 3 seconds. Shows the minutes played today per picture, the switch "Weniger Bewegung" (no hopping, glittering or pulsing, birds stay put; taken from the system setting the first time and saved in `finca.ruhig`), "Anderes Bild" and "Neu anfangen". Esc, the X or a tap outside closes it.
+
+## Phone zoom (from v0.10)
+On small touch screens (shorter side under 500 px) the world is drawn 1.25 times bigger so Biel and the guests are easier to see; hearts, menus and the book keep their full size on their own layer. `?zoom=1` or `?zoom=1.25` forces it.
 
 ## Day length (from v0.7)
 A game day lasts at most 15 real minutes of active play. The normal pace is about 40 seconds per game hour, so a day without pauses takes about 11 minutes. If the clock falls behind (an open question, a slow device), it gently speeds up so the evening always arrives in time. The time keeps counting in the cooking menu and in the start over question, it is saved with the game, and "Neu anfangen" or reloading does not reset it. A hidden tab counts as a pause. About 90 seconds before the limit (or from 21:30 game time) dusk comes: the sky in the day arc turns to night, the moon rises, windows and lanterns switch on one by one with a soft chime, and then a circle closes around Biel before the "Bona nit" scene.
@@ -93,7 +105,7 @@ The table holds at most 6 plates. Guests take their favorite dish when it is the
 Developer helpers: `?start=x,y` places Biel on a tile, `?debug=1` opens the debug overlay, `?touch=1` shows the touch buttons on a desktop, `?menue=1` opens the cooking menu right away, `?uhr=20` sets the clock to 20:00, `?abend=1` jumps to the evening scene, `?herzen=1` makes all guests almost happy, `?korb=1` puts three of every ingredient in the basket, `?neu=1` deletes the saved game. With any developer helper except `?neu=1` the saved game is neither loaded nor overwritten.
 
 ## Structure
-- `index.html` loads the scripts in this order: rng, karte, pfad, kamera, eingabe, uhr, spieler, gerichte, garten, glueck, gaeste, tiere, speicher, sticker, hinweise, vorlesen, render, ton, main. Everything hangs on `globalThis.Dorf`.
+- `index.html` loads the scripts in this order: rng, karte, pfad, kamera, eingabe, uhr, spieler, gerichte, garten, glueck, gaeste, tiere, speicher, sticker, hinweise, vorlesen, render, ton, profile, leben, main. Everything hangs on `globalThis.Dorf`.
 - `js/rng.js` – mulberry32
 - `js/karte.js` – 40x30 Finca map with kitchen, living room and guest house, furniture, collision, target locations
 - `js/pfad.js` – A* (4 directions)
@@ -112,7 +124,9 @@ Developer helpers: `?start=x,y` places Biel on a tile, `?debug=1` opens the debu
 - `js/render.js` – drawing (cached background, tiles, sprites, HUD, hints, dialog, debug)
 - `js/ton.js` – WebAudio music (plucked guitar-like loop in A minor, 66 BPM, Karplus-Strong) and soft sound effects, evening variant with crossfade, crickets at night, mute toggle
 - `js/vorlesen.js` – optional read aloud with the browser's built in speechSynthesis (German voice only, slow and calm, only after the first tap, silent when muted)
-- `js/main.js` – game loop with error guard, cooking menu, start over question, saving, buttons, fullscreen
+- `js/profile.js` – the three pictures (profiles), their save keys, the daily time account per picture and calendar day, "Weniger Bewegung" setting
+- `js/leben.js` – background life: a few birds and butterflies (own random generator, at most six, gone in the evening)
+- `js/main.js` – game loop with error guard, cooking menu, picture chooser, parent area, instruments, start over question, saving, buttons, fullscreen
 
 ## Tests
 ```
@@ -121,6 +135,7 @@ node tests/run.js
 Uses only Node's built-in `vm` module. Nothing has to be installed. 105 tests, including a ten day soak test with random taps, keys, start over questions and a save and load every day.
 
 ## Version history
+- **v0.10** (23.10.2026): pictures (profiles) for each child with their own save, hearts and album, chosen by tapping a picture; 15 minutes per picture per calendar day that cannot be bypassed by switching, reloading or starting over. Hidden parent area (hold the gear 3 seconds) with "Neu anfangen", "Weniger Bewegung" and picture switching; the start over button is gone from the children's view. Guitar, castanets and drum to tap, playing soft notes in the chord of the music. Birds and butterflies in the background (birds hop away when Biel comes close, all leave in the evening). Pixel digits for numbers. Phone zoom. New soft sounds (picture chosen, sleeping, parent area, birds). The edge badge sits further away from the hearts.
 - **v0.9** (23.10.2026): "Bona nit" as a picture scene with a starry sky, string lights and the guests at the long table, hearts counting up, then the sticker of the day. Cooking cards and a picture recipe book without reading, the egg in a golden slot, a wiggle and bloop when something is missing. A small sticker album to look at. Decoration: bougainvillea on the walls, shutters at some windows, flower planters in the courtyard, at the arcade and the gate. Thought clouds over the guests and yawning when tired. Round hint badges at the screen edge that avoid the basket and the touch button. Own small favicon drawn inline. The 15 minute day limit stays and is tested again with book and menu use.
 - **v0.8** (23.10.2026): redrawn figures with their own shapes (Mia small with pigtails, Jonas broad with glasses, Padrina with a bun, skirt and walking stick, Biel with a straw hat), a small hop while talking. Speech bubbles show only pictures, no names and no text, and pop in next to the speaker; the speaker's face at the top glows. One context button on touch devices whose picture shows the fitting action. Hearts fly from the guest up to their face before they count, and the basket in the bottom left visibly fills with the harvested items. Hens with a little coop lay eggs; an egg is a new ingredient that is never required: in Ensaïmada and Tumbet it adds one extra plate. Optional read aloud with the browser's own German voice. The 15 minute day limit stays and is tested again with hens, eggs and flying hearts.
 - **v0.7** (23.10.2026): new look after a design review. Calmer pastel palette with darker, quieter ground and stronger character colors, outlines in the color of each object, silver green olive trees, a wooden frame around the garden bed, sparse courtyard stones and a stone ring around the well. Light is now multiplied with a color per time of day, and at dusk windows, five lanterns, the stove and a little lantern in Biel's hand glow. Text free HUD with day arc, guest faces and hearts. Biel with a straw hat and a ring under his feet, tap ring, rounded system font, round buttons with colored rims, a play triangle instead of a green cross on "Nein". Hard limit of 15 real minutes per game day with a visible dusk and a closing circle before "Bona nit".

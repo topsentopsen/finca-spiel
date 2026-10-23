@@ -13,7 +13,8 @@
     pool: { menge: 10 },
     couch: { menge: 10 },
     tier: { menge: 8, pause: 6 },
-    fuettern: { menge: 20, pause: 8 }
+    fuettern: { menge: 20, pause: 8 },
+    musik: { menge: 6, pause: 5 }        // ab v0.10: Biel macht Musik in der Naehe
   };
 
   function start(gast) { gast.glueck = START; gast.glueckPause = {}; }

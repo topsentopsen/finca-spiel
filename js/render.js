@@ -3,6 +3,8 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var W = 320, H = 176, K = 16;
+  // ab v0.10: Zoom am Handy (ZM > 1 heisst: die Welt ist groesser, HUD bleibt gleich) und ruhige Bewegung
+  var ZM = 1, RUHIG = false;
   // ab v0.7: runde Systemschrift, wenn das Geraet eine hat (keine fremden Schriften)
   var SCHRIFT = 'ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif';
 
@@ -114,7 +116,8 @@
     schnecke: [['......kkk..', 'k.k..ksssk.', '.k..kskksk.', '.kg.kskssk.', '.kggksssk..', '.kggggggggk', '..kkkkkkkk.'], { s: '#e0a070', g: '#c9e3a4' }],
     zzz: [['kkkk.....', '..k......', '.k.......', 'kkkk.kkk.', '......k..', '.....kkk.'], {}],
     mond: [['..kkk..', '.kyyk..', 'kyyk...', 'kyyk...', 'kyyyk.k', '.kyyyyk', '..kkkk.'], { y: '#fff1c2' }],
-    blume: [['..kkk..', '.kpppk.', 'kppyppk', 'kpyyypk', 'kppyppk', '.kpkpk.', '...g...', '..gg...'], { p: '#ffb3d1', y: '#ffd35e', g: '#5fbf6a' }]
+    blume: [['..kkk..', '.kpppk.', 'kppyppk', 'kpyyypk', 'kppyppk', '.kpkpk.', '...g...', '..gg...'], { p: '#ffb3d1', y: '#ffd35e', g: '#5fbf6a' }],
+    note: [['....kkkk.', '....kaaak', '....k.kak', '....k..kk', '....k....', '.kkkk....', 'kaaaak...', 'kaaaak...', '.kkkk....'], { a: '#ffb037' }]
   };
   var EI = [['..kkk..', '.kwcck.', 'kwcccck', 'kccccck', 'kccccdk', '.kcddk.', '..kkk..'], { c: '#fff1d6', w: '#ffffff', d: '#ecd2a8' }];
   function zeichneEi(c, x, y) { muster(c, x, y, EI[0], EI[1]); }
@@ -233,6 +236,7 @@
   // Huepfer einer Figur: Herz bekommen (3 px) oder gerade angefangen zu sprechen (2 px)
   function huepfer(st, name, herzHop) {
     var h = 0;
+    if (RUHIG) return 0;
     if (herzHop > 0) h = Math.max(h, Math.sin((1 - herzHop / 0.25) * Math.PI) * 3);
     var b = st.blase;
     if (b && b.sprecher === name && !st.menue && (b.t || 0) < 0.3) h = Math.max(h, Math.sin((b.t || 0) / 0.3 * Math.PI) * 2);
@@ -255,8 +259,8 @@
     var kx = Math.round(wer.x - cx), ky = Math.round(wer.y - wer.off - cy - m.hoehe - 2);
     var bw = bilder.length * 13 + 7, bh = 17;
     // oben links liegen die Gesichter, oben rechts Hilfe und Knoepfe: dort darf die Blase nicht hin
-    var hudRechts = 60 + st.gaeste.length * 36 - 14;
-    function oben(x) { return x < hudRechts ? 30 : 12; }
+    var hudRechts = (60 + st.gaeste.length * 36 - 14) / ZM;
+    function oben(x) { return x < hudRechts ? 30 / ZM : 12 / ZM; }
     var bx = Math.max(2, Math.min(W - bw - 2, Math.round(kx - bw / 2))), by = ky - bh - 5, seite = 0;
     if (by < oben(bx)) {
       // kein Platz ueber dem Kopf: neben den Kopf, auf die Seite mit mehr Platz
@@ -265,7 +269,7 @@
       bx = Math.max(2, Math.min(W - bw - 2, bx));
       by = Math.max(oben(bx), ky - 2);
     }
-    by = Math.min(H - bh - 26, by);
+    by = Math.min(H - bh - Math.round(26 / ZM), by);
     var kopfY = ky + Math.round(m.kopf / 2) + 2;
     var t = b.t || 0, sk;
     if (t < 0.15) sk = 0.6 + (1.05 - 0.6) * (t / 0.15);
@@ -345,6 +349,7 @@
     return { gezeigt: info, plus: plus, x: bx, y: by - 24, w: w, h: 25 };
   }
   function glitzer(c, x, y, zeit, phase) {
+    if (RUHIG) return;
     var t = (zeit * 0.8 + phase) % 3;
     if (t > 0.5) return;
     var a = t < 0.25 ? t * 4 : (0.5 - t) * 4;
@@ -406,7 +411,7 @@
   function zeichneHinweisRing(c, st, cx, cy) {
     var h = st.hinweis;
     if (!h || !h.ziel || !(h.alpha > 0) || h.ziel.bildschirm) return;
-    var z = h.ziel, wx = z.x, wy = z.y, t = h.t, ring = 5 + Math.round((Math.sin(t * 5) + 1) * 1.5);
+    var z = h.ziel, wx = z.x, wy = z.y, t = h.t, ring = RUHIG ? 6 : 5 + Math.round((Math.sin(t * 5) + 1) * 1.5);
     var fx = wx, fy = wy + 3;
     if (z.gast) { fx = z.gast.x; fy = z.gast.y - (Dorf.Gaeste.sitzt(z.gast) ? 12 : 0) + 1; }
     else if (z.pflanze && Dorf.Garten.punkt) { var gp = Dorf.Garten.punkt(z.pflanze); fx = gp.x; fy = gp.y + 2; }
@@ -418,7 +423,8 @@
     ellipse(c, rx, ry, ring + 2, 3, P.kontur); ellipse(c, rx, ry, ring + 1, 2, '#fff3a8');
     c.globalAlpha = 1;
   }
-  var RAND = { r: 11, x0: 22, y0: 38, hz: 0.9 };
+  // ab v0.10: y0 44 statt 38, damit die Plakette nicht an den Herzen oben klebt
+  var RAND = { r: 11, x0: 22, y0: 44, hz: 0.9 };
   // Der Hinweis: huepfende Hand, Ring am Ziel und ein Bild, was dort passiert
   function zeichneHinweis(c, st, cx, cy, R) {
     var h = st.hinweis;
@@ -428,7 +434,7 @@
     if (z.art === 'weiter') return;   // am Abend pulsiert stattdessen die Sonne (siehe Abendszene)
     if (z.gast) { wx = z.gast.x; wy = z.gast.y - (Dorf.Gaeste.sitzt(z.gast) ? 14 : 0) - 28; }
     if (z.art === 'fuettern' && st.tiere && st.tiere.esel) { wx = st.tiere.esel.x; wy = st.tiere.esel.y - 30; }
-    var sx = Math.round(z.bildschirm ? wx : wx - cx), sy = Math.round(z.bildschirm ? wy : wy - cy), t = h.t;
+    var sx = Math.round(z.bildschirm ? wx : (wx - cx) * ZM), sy = Math.round(z.bildschirm ? wy : (wy - cy) * ZM), t = h.t;
     c.globalAlpha = h.alpha;
     var drinnen = sx >= 12 && sx <= W - 12 && sy >= 26 && sy <= H - 6;
     if (!drinnen) {
@@ -438,7 +444,7 @@
       if (kx < 62 && ky > H - 34) { if (sy > H) kx = 74; else ky = H - 34; }
       if (R && R.touch && kx > W - 40 && ky > H - 40) { if (sy > H) kx = W - 52; else ky = H - 42; }
       var dx = sx - kx, dy = sy - ky, d = Math.hypot(dx, dy) || 1;
-      ky += Math.round(Math.sin(t * Math.PI * 2 * RAND.hz) * 2);
+      if (!RUHIG) ky += Math.round(Math.sin(t * Math.PI * 2 * RAND.hz) * 2);
       for (var j = 0; j < 3; j++) {
         var pd = RAND.r + 1 + j * 3, pr = 3 - j, px = Math.round(kx + dx / d * pd), py = Math.round(ky + dy / d * pd);
         kreis(c, px, py, pr + 1, P.kontur); kreis(c, px, py, pr, '#ff9fb8');
@@ -448,7 +454,7 @@
       if (R) R.letzterRand = { x: kx, y: ky, bild: z.bild || 'reden' };
       c.globalAlpha = 1; return;
     }
-    var hop = Math.round(Math.abs(Math.sin(t * 4.5)) * 4);
+    var hop = RUHIG ? 0 : Math.round(Math.abs(Math.sin(t * 4.5)) * 4);
     zeichneHand(c, sx, sy - 2 - hop);
     if (z.bild) {
       var bx = sx + 13, by = sy - 16 - hop;
@@ -463,13 +469,13 @@
     var sp = st.spieler, n = d.bilder.length, w = 8 + n * 11, x = Math.round(sp.x - cx), y = Math.round(sp.y - cy) - 44;
     var auf = Math.min(1, d.t * 5), weg = Math.min(1, d.rest * 2);
     c.globalAlpha = Math.min(auf, weg);
-    var bx = Math.max(2, Math.min(W - w - 2, x + 2)), seitlich = y - 9 < 42 && bx < 78;
-    if (seitlich) { bx = Math.max(78, x + 14); y += 14; }   // nicht unter Ziel und Korb oben links, dann neben den Kopf
+    var bx = Math.max(2, Math.min(W - w - 2, x + 2)), seitlich = y - 9 < 42 / ZM && bx < 78 / ZM;
+    if (seitlich) { bx = Math.max(Math.round(78 / ZM), x + 14); y += 14; }   // nicht unter Ziel und Korb oben links, dann neben den Kopf
     if (seitlich) { kreis(c, x + 9, y + 8, 2, P.kontur); kreis(c, x + 9, y + 8, 1, P.box); kreis(c, x + 14, y + 3, 3, P.kontur); kreis(c, x + 14, y + 3, 2, P.box); }
     else { kreis(c, x + 3, y + 18, 2, P.kontur); kreis(c, x + 3, y + 18, 1, P.box); kreis(c, x + 6, y + 13, 3, P.kontur); kreis(c, x + 6, y + 13, 2, P.box); }
     pille(c, bx, y - 9, w, 16, P.box);
     d.bilder.forEach(function (b, i) {
-      var hop = Math.round(Math.abs(Math.sin(d.t * 4 + i)) * 1);
+      var hop = RUHIG ? 0 : Math.round(Math.abs(Math.sin(d.t * 4 + i)) * 1);
       zeichneSymbol(c, b, bx + 9 + i * 11, y - 1 - hop);
     });
     c.globalAlpha = 1;
@@ -480,7 +486,7 @@
   function zeichneFlieger(c, st, cx, cy) {
     (st.flieger || []).forEach(function (f) {
       if (f.t < 0) return;
-      var p = Math.min(1, f.t / f.dauer), e = sanft(p), z = korbZiel(f.art);
+      var p = Math.min(1, f.t / f.dauer), e = sanft(p), z0 = korbZiel(f.art), z = { x: z0.x / ZM, y: z0.y / ZM };
       var x0 = f.x - cx, y0 = f.y - cy, x = x0 + (z.x - x0) * e, y = y0 + (z.y - 8 - y0) * e - Math.sin(p * Math.PI) * 22;
       zeichneZutat(c, f.art, Math.round(x), Math.round(y));
     });
@@ -490,7 +496,7 @@
   function zeichneHerzFlug(c, st, cx, cy) {
     (st.herzFlug || []).forEach(function (h) {
       if (h.t < 0) return;
-      var p = Math.min(1, h.t / h.dauer), e = sanft(p), z = chipPos(st, h.id);
+      var p = Math.min(1, h.t / h.dauer), e = sanft(p), z0 = chipPos(st, h.id), z = { x: z0.x / ZM, y: z0.y / ZM };
       var x0 = h.x - cx, y0 = h.y - cy, kx = (x0 + z.x) / 2, ky = Math.min(y0, z.y) - 30;
       var x = (1 - e) * (1 - e) * x0 + 2 * (1 - e) * e * kx + e * e * z.x, y = (1 - e) * (1 - e) * y0 + 2 * (1 - e) * e * ky + e * e * (z.y + 12);
       muster(c, Math.round(x), Math.round(y), BILD.herz[0], BILD.herz[1]);
@@ -516,7 +522,7 @@
       case T.ZAUN:
         zeichneZaun(c, karte, x, y, sx, sy, hs);
         break;
-      case T.GRAS: case T.OLIVE: case T.ORANGE: case T.STALL:
+      case T.GRAS: case T.OLIVE: case T.ORANGE: case T.STALL: case T.INSTRUMENT:
         r(c, sx, sy, K, K, P.gras);
         if (hs % 3 === 0) { r(c, sx + (hs % 11) + 2, sy + ((hs >> 4) % 10) + 3, 1, 2, P.gras2); r(c, sx + (hs % 11) + 4, sy + ((hs >> 4) % 10) + 2, 1, 3, P.gras2); }
         if (hs % 5 === 1) r(c, sx + ((hs >> 7) % 12) + 2, sy + ((hs >> 9) % 12) + 2, 2, 1, P.gras3);
@@ -995,14 +1001,14 @@
     text(R, 'Was kochst du?', W / 2 + 6, M.y - 3, { align: 'center', fett: true, groesse: 8 });
     if (MB) { pille(c, MB.x, MB.y, MB.w, MB.h, '#e6f7f3'); buchBild(c, MB.x + MB.w / 2, MB.y + MB.h / 2); }
     karten.forEach(function (k, i) {
-      var G = Dorf.Gerichte.hole(k.id), aktiv = i === wahl, hop = aktiv ? Math.round(Math.abs(Math.sin(z * 4)) * 2) : 0;
+      var G = Dorf.Gerichte.hole(k.id), aktiv = i === wahl, hop = aktiv && !RUHIG ? Math.round(Math.abs(Math.sin(z * 4)) * 2) : 0;
       var dx = 0;
       if (wk && wk.id === k.id && wk.t < WK) dx = Math.round(Math.sin(wk.t * 40) * 4 * (1 - wk.t / WK));
       var x = k.x + dx, y = k.y - hop, mx = x + k.w / 2;
       pille(c, x, y, k.w, k.h, aktiv ? '#ffe3ec' : '#fff4dc');
       if (aktiv) r(c, x + 2, y + k.h - 4, k.w - 4, 2, '#ff9fb8');
       kreis(c, x + 7, y + 7, 4, P.kontur); kreis(c, x + 7, y + 7, 3, aktiv ? '#ff9fb8' : '#e2d6f5');
-      text(R, String(i + 1), x + 7, y + 4, { align: 'center', fett: true, groesse: 6, farbe: aktiv ? '#ffffff' : P.kontur });
+      ziffern(c, String(i + 1), x + 7, y + 5, { align: 'center', farbe: aktiv ? '#ffffff' : P.kontur });
       var pr = Dorf.Garten && st.vorrat ? Dorf.Garten.pruefe(st.vorrat, G) : { ok: true, frisch: false, fehlt: {} };
       // grosser Teller auf farbigem Grund, blass, wenn etwas fehlt
       kreis(c, mx, y + 20, 14, P.kontur); kreis(c, mx, y + 20, 13, PLATTE[k.id] || '#fff0c2');
@@ -1071,7 +1077,7 @@
     text(R, 'Neu anfangen?', W / 2, F.y + 27, { align: 'center', fett: true, groesse: 10 });
     text(R, 'Alles beginnt wieder bei Tag 1.', W / 2, F.y + 40, { align: 'center', groesse: 6, farbe: '#7a5a9a' });
     [F.nein, F.ja].forEach(function (k, i) {
-      var aktiv = f.wahl === i, hop = aktiv ? Math.round(Math.abs(Math.sin(t * 4)) * 2) : 0, y = k.y - hop;
+      var aktiv = f.wahl === i, hop = aktiv && !RUHIG ? Math.round(Math.abs(Math.sin(t * 4)) * 2) : 0, y = k.y - hop;
       pille(c, k.x - 1, y - 1, k.w + 2, k.h + 2, aktiv ? P.kontur : '#d8cce6');
       pille(c, k.x, y, k.w, k.h, i === 0 ? '#d4f3dc' : '#ffd1e0');
       // ab v0.7: Nein heisst weiterspielen, darum ein gruenes Spielen Dreieck statt eines Kreuzes
@@ -1239,7 +1245,7 @@
     var spricht = st.blase && !st.menue && st.blase.sprecher;
     st.gaeste.forEach(function (g, i) {
       var n = Dorf.Glueck ? Dorf.Glueck.herzen(g) : 0, fliegt = imFlug(st.herzFlug, 'id', g.id), zeige = Math.max(0, n - fliegt);
-      var redet = spricht === g.name, hop = redet ? Math.round(Math.abs(Math.sin(st.zeit * 5)) * 2) : 0;
+      var redet = spricht === g.name, hop = redet && !RUHIG ? Math.round(Math.abs(Math.sin(st.zeit * 5)) * 2) : 0;
       var puls = (st.chipPuls && st.chipPuls[g.id]) || 0, sk = redet ? 1.15 : 1;
       if (puls > 0) sk = Math.max(sk, 1 + 0.2 * Math.sin((1 - puls / 0.35) * Math.PI));
       zeichneGesicht(c, g, 60 + i * 36, 11, zeige, hop, { skala: sk, spricht: redet, zeit: st.zeit });
@@ -1252,7 +1258,7 @@
       pille(c, tx - 6, 4, 18 + nt * 4, 14, P.uiFlaeche);
       for (var ti = 0; ti < nt; ti++) zeichneTeller(c, tl[ti], tx + 2 + ti * 4, 11 - ti);
     }
-    if (st.tagesziel && st.tagesziel.erreicht) for (var k = 0; k < 3; k++) { var ph = (st.zeit * 1.5 + k / 3) % 1; c.globalAlpha = 1 - ph; r(c, 50 + k * 36, 2 + Math.round(ph * 4), 1, 3, '#fff6c8'); r(c, 49 + k * 36, 3 + Math.round(ph * 4), 3, 1, '#fff6c8'); c.globalAlpha = 1; }
+    if (st.tagesziel && st.tagesziel.erreicht && !RUHIG) for (var k = 0; k < 3; k++) { var ph = (st.zeit * 1.5 + k / 3) % 1; c.globalAlpha = 1 - ph; r(c, 50 + k * 36, 2 + Math.round(ph * 4), 1, 3, '#fff6c8'); r(c, 49 + k * 36, 3 + Math.round(ph * 4), 3, 1, '#fff6c8'); c.globalAlpha = 1; }
     info.korb = zeichneVorrat(R, st);
     R.letzteHud = info;
   }
@@ -1309,10 +1315,15 @@
       var sp = [x0 + 36, x0 + 98, x0 + 170, x0 + 232], zl = [B.y + 32, B.y + 72, B.y + 112];
       liste.forEach(function (s, i) {
         var x = sp[i % 4], y = zl[Math.floor(i / 4)], da = !!album[s.id];
-        if (da && s.id === neu) { c.globalAlpha = 0.45 + 0.25 * Math.sin(st.zeit * Math.PI * 2); kreis(c, x, y, 18, '#fff3a8'); c.globalAlpha = 1; }
+        if (da && s.id === neu) { c.globalAlpha = RUHIG ? 0.55 : 0.45 + 0.25 * Math.sin(st.zeit * Math.PI * 2); kreis(c, x, y, 18, '#fff3a8'); c.globalAlpha = 1; }
         zeichneSticker(c, s, x, y, 14, da);
         info.sticker.push({ id: s.id, da: da, neu: da && s.id === neu });
       });
+      // ab v0.10: wie viele schon da sind, in Pixelziffern
+      var hat = Dorf.Sticker && Dorf.Sticker.anzahl ? Dorf.Sticker.anzahl(album) : 0;
+      muster(c, x0 + 56, B.y + B.h - 8, BILD.stern[0], BILD.stern[1]);
+      ziffern(c, hat + '/' + liste.length, x0 + 64, B.y + B.h - 10, { farbe: P.kontur });
+      info.anzahl = hat;
     } else {
       var G = Dorf.Gerichte.hole(Dorf.Gerichte.REIHE[seite]) || Dorf.Gerichte.hole('paamboli'), id = G.id, lx = x0 + 68, rx = mx + 66;
       info.rezept = id;
@@ -1473,11 +1484,219 @@
   }
 
   // ---------- Hauptzeichnen ----------
+  // ---------- ab v0.10: Pixelziffern, Instrumente, Noten, Leben, Bildauswahl, Elternbereich ----------
+  // Ziffern 3x5 als Pixel (passen zum Spielbild, keine Schrift noetig)
+  var ZIFFER = {
+    '0': '111101101101111', '1': '010110010010111', '2': '111001111100111', '3': '111001011001111', '4': '101101111001001',
+    '5': '111100111001111', '6': '111100111101111', '7': '111001010010010', '8': '111101111101111', '9': '111101111001111',
+    '/': '001001010100100', ':': '000010000010000', '-': '000000111000000'
+  };
+  function ziffernBreite(s, k) { return String(s).length * 4 * (k || 1) - (k || 1); }
+  function ziffern(c, s, x, y, o) {
+    o = o || {}; s = String(s);
+    var k = o.skala || 1, w = ziffernBreite(s, k), farbe = o.farbe || P.kontur;
+    if (o.align === 'center') x -= Math.floor(w / 2); else if (o.align === 'right') x -= w;
+    for (var pass = o.rand ? 0 : 1; pass < 2; pass++) {
+      for (var i = 0; i < s.length; i++) {
+        var m = ZIFFER[s.charAt(i)]; if (!m) continue;
+        for (var j = 0; j < 15; j++) if (m.charAt(j) === '1') {
+          var px = x + i * 4 * k + (j % 3) * k, py = y + Math.floor(j / 3) * k;
+          if (pass === 0) r(c, px - k, py - k, 3 * k, 3 * k, o.rand); else r(c, px, py, k, k, farbe);
+        }
+      }
+    }
+    return w;
+  }
+  // grosses Bild (ganzzahlig vergroessert), Mitte (x, y)
+  function grossesBild(c, art, x, y, k) {
+    var b = BILD[art]; if (!b) return;
+    c.save(); c.translate(x, y); c.scale(k, k); muster(c, 0, 0, b[0], b[1]); c.restore();
+  }
+  function wackelX(i) { return i && i.wackel > 0 && !RUHIG ? Math.round(Math.sin(i.wackel * 36) * Math.min(2, i.wackel * 6)) : 0; }
+  // Instrumente auf der Wiese: Gitarre am Staender, Kastagnetten auf einer Decke, Trommel
+  function zeichneInstrument(c, ins, sx, sy) {
+    var x = sx + wackelX(ins), y = sy, w = ins.wackel > 0 ? ins.wackel : 0, kp = P.kontur;
+    ellipse(c, sx + 8, sy + 14, 7, 2, 'rgba(75,58,90,0.18)');
+    if (ins.art === 'gitarre') {
+      r(c, x + 3, y + 12, 10, 2, P.konturHolz);   // Staender
+      kreis(c, x + 8, y + 9, 5, kp); kreis(c, x + 8, y + 9, 4, '#e0995a');
+      kreis(c, x + 8, y + 3, 4, kp); kreis(c, x + 8, y + 3, 3, '#e0995a');
+      r(c, x + 5, y + 1, 1, 2, '#f6c48e');
+      kreis(c, x + 8, y + 6, 1, '#7a4a3a');
+      r(c, x + 7, y - 9, 3, 10, kp); r(c, x + 8, y - 8, 1, 9, '#a56c48');
+      r(c, x + 6, y - 12, 5, 4, kp); r(c, x + 7, y - 11, 3, 2, '#7a4a3a');
+      r(c, x + 6, y + 11, 5, 1, kp);
+      if (w > 0) for (var k = 0; k < 3; k++) r(c, x + 7 + k, y - 6, 1, 15, 'rgba(255,248,238,0.6)');
+    } else if (ins.art === 'kastagnetten') {
+      pille(c, sx + 1, sy + 8, 14, 6, '#ffd1e0'); r(c, sx + 3, sy + 10, 10, 1, '#ff9fb8');
+      var hb = w > 0 ? Math.round(Math.sin(w * 30) * 2) : 0;
+      kreis(c, x + 5, y + 8 - Math.abs(hb), 3, kp); kreis(c, x + 5, y + 8 - Math.abs(hb), 2, '#a0523a'); r(c, x + 4, y + 7 - Math.abs(hb), 1, 1, '#e08a6a');
+      kreis(c, x + 11, y + 9, 3, kp); kreis(c, x + 11, y + 9, 2, '#a0523a'); r(c, x + 10, y + 8, 1, 1, '#e08a6a');
+      r(c, x + 7, y + 7 - Math.abs(hb), 2, 1, '#ff6f91'); r(c, x + 8, y + 8, 1, 1, '#ff6f91');
+    } else {
+      var dr = w > 0.3 && !RUHIG ? 1 : 0;
+      rr(c, x + 1, y + 4 + dr, 14, 10 - dr, kp); rr(c, x + 2, y + 5 + dr, 12, 8 - dr, '#ff8f8f');
+      for (var z = 0; z < 3; z++) { r(c, x + 3 + z * 4, y + 8, 2, 1, '#fff4dc'); r(c, x + 4 + z * 4, y + 9, 2, 1, '#fff4dc'); }
+      ellipse(c, x + 8, y + 5 + dr, 7, 2, kp); ellipse(c, x + 8, y + 5 + dr, 6, 1, '#fff8ee');
+      r(c, x + 12, y - 1, 1, 5, '#b98463'); kreis(c, x + 12, y - 2, 1, '#fff4dc');
+    }
+  }
+  // Noten steigen vom Instrument auf
+  function zeichneNoten(c, st, cx, cy) {
+    (st.noten || []).forEach(function (n) {
+      var d = n.dauer || 1.2, f = Math.min(1, n.t / d), x = Math.round(n.x - cx + (RUHIG ? 0 : Math.sin(n.t * 3 + n.phase) * 2)), y = Math.round(n.y - cy - f * (RUHIG ? 10 : 18));
+      c.globalAlpha = f < 0.7 ? 1 : (1 - f) / 0.3;
+      r(c, x - 1, y + 1, 4, 3, P.kontur); r(c, x + 2, y - 5, 1, 7, P.kontur); r(c, x + 2, y - 5, 3, 1, P.kontur);
+      r(c, x, y + 2, 2, 1, n.farbe || '#ff7fa0');
+      c.globalAlpha = 1;
+    });
+  }
+  // Schmetterling: zwei Fluegelpaare, die langsam auf und zu gehen; kleiner Schatten am Boden
+  function zeichneFalter(c, f, sx, sy, a) {
+    c.globalAlpha = a * 0.5; r(c, Math.round(sx) - 1, Math.round(sy) + 1, 3, 1, 'rgba(75,58,90,0.35)');
+    c.globalAlpha = a;
+    var x = Math.round(sx), y = Math.round(sy - f.hoehe), auf = Math.sin(f.phase) > 0 || f.warte > 0 && Math.sin(f.phase * 0.3) > 0.6;
+    if (auf) { r(c, x - 3, y - 2, 3, 3, f.farbe); r(c, x + 1, y - 2, 3, 3, f.farbe); r(c, x - 2, y + 1, 2, 2, f.farbe); r(c, x + 1, y + 1, 2, 2, f.farbe); r(c, x - 3, y - 2, 1, 1, P.kontur); r(c, x + 3, y - 2, 1, 1, P.kontur); }
+    else { r(c, x - 1, y - 3, 1, 4, f.farbe); r(c, x + 1, y - 3, 1, 4, f.farbe); }
+    r(c, x, y - 2, 1, 4, P.kontur);
+    c.globalAlpha = 1;
+  }
+  // kleiner Vogel: pickt, hopst, fliegt mit Fluegelschlag
+  function zeichneVogel(c, v, sx, sy, a, zeit) {
+    c.globalAlpha = a;
+    var x = Math.round(sx), y = Math.round(sy - v.hoehe - (v.hop > 0 ? 1 : 0)), b = v.blick || 1;
+    ellipse(c, Math.round(sx), Math.round(sy) + 1, v.hoehe > 0 ? 2 : 3, 1, 'rgba(75,58,90,0.22)');
+    var pick = v.pickt > 0 && v.zustand !== 'fliegt' ? 1 : 0;
+    r(c, x - 3, y - 4, 6, 4, P.kontur); r(c, x - 2, y - 3, 4, 2, '#a7795a'); r(c, x - 1, y - 2, 3, 1, '#ecd8b8');
+    r(c, x - b * 4, y - 4, 2, 1, P.kontur);   // Schwanz
+    var hx = x + b * 3 - (b > 0 ? 1 : 0), hy = y - 5 + pick * 2;
+    r(c, hx - 1, hy - 1, 3, 3, P.kontur); r(c, hx, hy, 1, 1, '#a7795a');
+    r(c, hx + b * 2, hy + 1, 1, 1, '#e0ad3e');
+    if (v.zustand === 'fliegt') { var o = Math.sin(zeit * 12) > 0 ? -3 : 1; r(c, x - 1, y - 4 + o, 2, 3, '#8c6248'); }
+    if (v.zustand !== 'fliegt') { r(c, x - 1, y, 1, 1, '#e0ad3e'); r(c, x + 1, y, 1, 1, '#e0ad3e'); }
+    c.globalAlpha = 1;
+  }
+  function lebenListe(liste, c, st, cx, cy) {
+    var L = st.leben; if (!L || !(L.sichtbar > 0.02)) return 0;
+    var n = 0;
+    L.falter.forEach(function (f) {
+      if (f.aus) return;
+      var sx = f.x - cx, sy = f.y - cy; if (sx < -8 || sx > W + 8 || sy < -24 || sy > H + 8) return;
+      n++; liste.push({ y: f.y + 6, f: function () { zeichneFalter(c, f, sx, sy, L.sichtbar); } });
+    });
+    L.voegel.forEach(function (v) {
+      var sx = v.x - cx, sy = v.y - cy; if (sx < -8 || sx > W + 8 || sy < -30 || sy > H + 8) return;
+      n++; liste.push({ y: v.y + (v.hoehe > 0 ? 40 : 0), f: function () { zeichneVogel(c, v, sx, sy, L.sichtbar, st.zeit); } });
+    });
+    return n;
+  }
+
+  // Bildauswahl beim Start: drei grosse Bilder. Schlafenszeit: alle Bilder schlafen, nichts zu tippen.
+  function zeichneWahl(R, st) {
+    var c = R.ctx, w = st.wahl, S = Dorf.Spiel, karten = S.wahlKarten(), info = { karten: [], gesperrt: !!w.gesperrt };
+    var nacht = !!w.gesperrt;
+    if (nacht) { var band = ['#2b2150', '#33285c', '#3c3068', '#463874']; for (var i = 0; i < 4; i++) r(c, 0, i * 44, W, 44, band[i]); }
+    else { r(c, 0, 0, W, H, '#fff1e6'); r(c, 0, 132, W, H - 132, '#c4e6a4'); r(c, 0, 132, W, 2, '#a8d68f'); }
+    if (nacht) {
+      for (var s = 0; s < 18; s++) { var hs = hash(s, 13); r(c, hs % W, 3 + (hs >> 9) % 34, 1, 1, '#fff6c8'); }
+      grossesBild(c, 'mond', W - 26, 18, 2);
+      text(R, 'Schlafenszeit', W / 2, 12, { align: 'center', fett: true, groesse: 10, farbe: '#fff6c8' });
+      text(R, 'Morgen geht es weiter.', W / 2, 25, { align: 'center', groesse: 7, farbe: '#d8cce6' });
+    } else {
+      zeichneSymbol(c, 'sonne', W / 2 - 52, 18);
+      text(R, 'Wer spielt?', W / 2 + 6, 13, { align: 'center', fett: true, groesse: 10 });
+    }
+    var info2 = w.info || [];
+    karten.forEach(function (k, i) {
+      var pr = Dorf.Profile.hole(k.id), u = null;
+      info2.forEach(function (q) { if (q.id === k.id) u = q; });
+      var schlaeft = nacht || !!(u && u.fertig), aktiv = !nacht && w.wahl === i && !schlaeft;
+      var dx = w.stups && w.stups.id === k.id && w.stups.t > 0 && !RUHIG ? Math.round(Math.sin(w.stups.t * 40) * 3) : 0;
+      var hop = aktiv && !RUHIG ? Math.round(Math.abs(Math.sin((w.t || 0) * 3)) * 2) : 0;
+      var x = k.x + dx, y = k.y - hop;
+      pille(c, x - 1, y - 1, k.w + 2, k.h + 2, aktiv ? P.kontur : (nacht ? '#5a4a7e' : '#d8cce6'));
+      pille(c, x, y, k.w, k.h, schlaeft ? (nacht ? '#4b3d72' : '#e6dcef') : pr.farbe);
+      kreis(c, x + k.w / 2, y + 36, 27, schlaeft ? (nacht ? '#3c3068' : '#d8cce6') : '#fffdf8');
+      if (schlaeft) c.globalAlpha = nacht ? 0.75 : 0.55;
+      grossesBild(c, k.id, x + k.w / 2, y + 36, 4);
+      c.globalAlpha = 1;
+      if (schlaeft) { muster(c, x + k.w - 14, y + 12, BILD.zzz[0], { }); grossesBild(c, 'mond', x + 13, y + 12, 1); }
+      // darunter: Tag (Sonne + Zahl) und Sticker (Stern + Zahl), in Pixelziffern
+      var tag = u ? u.tag : 0, stk = u ? u.sticker : 0, ty = y + k.h - 22, farbe = nacht ? '#fff6c8' : P.kontur;
+      zeichneSymbol(c, 'sonne', x + 16, ty + 2); ziffern(c, tag > 0 ? tag : '-', x + 26, ty, { farbe: farbe });
+      muster(c, x + 54, ty + 2, BILD.stern[0], BILD.stern[1]); ziffern(c, stk, x + 62, ty, { farbe: farbe });
+      if (aktiv) r(c, x + 8, y + k.h - 6, k.w - 16, 2, pr.rand || P.kontur);
+      info.karten.push({ id: k.id, x: x, y: y, schlaeft: schlaeft, aktiv: aktiv, tag: tag, sticker: stk });
+    });
+    if (!nacht) text(R, 'Tippe auf dein Bild', W / 2, H - 14, { align: 'center', groesse: 7, farbe: '#5c7a4a' });
+    R.letzteWahl = info;
+    return info;
+  }
+
+  // Elternbereich: Minuten heute je Bild, weniger Bewegung, anderes Bild, neu anfangen
+  function knopfFlaeche(c, k, farbe, an) {
+    pille(c, k.x - 1, k.y - 1, k.w + 2, k.h + 2, an ? P.kontur : '#d8cce6');
+    pille(c, k.x, k.y, k.w, k.h, farbe);
+  }
+  function zeichneEltern(R, st) {
+    var c = R.ctx, E = Dorf.Spiel.ELTERN, e = st.eltern, info = { zeilen: [], ruhig: !!st.ruhig };
+    c.fillStyle = 'rgba(58,44,80,0.6)'; c.fillRect(0, 0, W, H);
+    pille(c, E.x - 1, E.y - 1, E.w + 2, E.h + 2, P.kontur); pille(c, E.x, E.y, E.w, E.h, P.box);
+    text(R, 'Für Eltern', E.x + 12, E.y + 8, { fett: true, groesse: 9 });
+    knopfFlaeche(c, E.zu, '#e6dcef', e.wahl === 'zu'); kreuz(c, E.zu.x + E.zu.w / 2, E.zu.y + E.zu.h / 2, P.kontur);
+    var max = Math.round(((Dorf.Uhr && Dorf.Uhr.TAG_LIMIT) || 900) / 60);
+    text(R, 'Heute gespielt (höchstens ' + max + ' Min. je Bild, ab Mitternacht neu):', E.x + 12, E.y + 22, { groesse: 6, farbe: '#7a5a9a' });
+    (e.info || []).forEach(function (u, i) {
+      var x = E.x + 12 + i * 80, y = E.y + 32, min = Math.min(max, Math.floor((u.sek || 0) / 60));
+      pille(c, x, y, 76, 30, u.farbe || '#fff4dc');
+      grossesBild(c, u.id, x + 14, y + 15, 2);
+      ziffern(c, min, x + 30, y + 6, { skala: 2, farbe: P.kontur });
+      text(R, 'Min.', x + 32 + ziffernBreite(min, 2), y + 10, { groesse: 6 });
+      var status = u.fertig ? 'schläft bis morgen' : (u.id === st.profil && st.profilGeladen ? 'spielt gerade' : '');
+      if (status) text(R, status, x + 30, y + 20, { groesse: 5, farbe: '#7a5a9a' });
+      info.zeilen.push({ id: u.id, minuten: min, fertig: !!u.fertig });
+    });
+    var Rk = E.ruhig;
+    knopfFlaeche(c, Rk, '#fff4dc', e.wahl === 'ruhig');
+    text(R, 'Weniger Bewegung', Rk.x + 10, Rk.y + 6, { fett: true, groesse: 7 });
+    var sx = Rk.x + Rk.w - 34, sy = Rk.y + 4;
+    pille(c, sx, sy, 26, 12, st.ruhig ? '#7ed492' : '#d8cce6'); kreis(c, st.ruhig ? sx + 20 : sx + 6, sy + 6, 5, P.kontur); kreis(c, st.ruhig ? sx + 20 : sx + 6, sy + 6, 4, '#ffffff');
+    text(R, st.ruhig ? 'an' : 'aus', sx - 4, Rk.y + 7, { align: 'right', groesse: 6, farbe: '#7a5a9a' });
+    var Wk = E.wechseln, Nk = E.neu;
+    knopfFlaeche(c, Wk, '#e6defb', e.wahl === 'wechseln');
+    grossesBild(c, 'esel', Wk.x + 14, Wk.y + Wk.h / 2, 1); grossesBild(c, 'huhn', Wk.x + 26, Wk.y + Wk.h / 2, 1);
+    text(R, 'Anderes Bild', Wk.x + 36, Wk.y + 8, { fett: true, groesse: 7 });
+    knopfFlaeche(c, Nk, '#ffd1e0', e.wahl === 'neu');
+    kreispfeil(c, Nk.x + 14, Nk.y + Nk.h / 2 + 1, '#ff7fa0');
+    text(R, 'Neu anfangen', Nk.x + 28, Nk.y + 8, { fett: true, groesse: 7 });
+    text(R, 'Öffnen: 3 Sekunden auf das Zahnrad oben drücken. Die Zeit bleibt beim Wechseln erhalten.', W / 2, E.y + E.h - 11, { align: 'center', groesse: 5, farbe: '#7a5a9a' });
+    R.letzteEltern = info;
+    return info;
+  }
+
   function zeichne(R, st) {
+    // ab v0.10: mit Zoom malt die Welt auf ein kleineres Bild (wird groesser angezeigt), HUD und Fenster auf eine eigene Ebene
+    var haupt = R.ctx, mitHud = !!(R.hud && st.zoom && st.zoom !== 1);
+    ZM = mitHud ? st.zoom : 1; RUHIG = !!st.ruhig;
+    var WW = Math.round(320 / ZM), WH = Math.round(176 / ZM);
+    W = WW; H = WH;
+    try { zeichneAlles(R, st, mitHud, WW, WH); }
+    finally { W = 320; H = 176; R.ctx = haupt; }
+  }
+  function zeichneAlles(R, st, mitHud, WW, WH) {
     var c = R.ctx, karte = st.karte, kam = st.kamera, zeit = st.zeit, T = Dorf.Karte.T;
     var cx = Math.round(kam.x), cy = Math.round(kam.y);
+    function inWelt(f) { W = WW; H = WH; try { f(); } finally { W = 320; H = 176; } }
     if (R.ui) { R.ui.setTransform(1, 0, 0, 1, 0, 0); R.ui.clearRect(0, 0, R.uiCanvas.width, R.uiCanvas.height); R.ui.setTransform(R.uiSkala, 0, 0, R.uiSkala, 0, 0); }
+    if (R.hud) { R.hud.setTransform(1, 0, 0, 1, 0, 0); R.hud.clearRect(0, 0, 320, 176); }
     r(c, 0, 0, W, H, P.kontur);
+    if (st.wahl && !st.eltern) {
+      // Bildauswahl deckt alles ab: die Welt muss nicht gemalt werden
+      W = 320; H = 176; if (mitHud) R.ctx = R.hud;
+      zeichneWahl(R, st); zeichneTipps(R.ctx, st);
+      R.letzteHud = null; R.letzteEltern = null;
+      return;
+    }
 
     var x0 = Math.floor(cx / K), y0 = Math.floor(cy / K), x1 = Math.min(karte.w - 1, x0 + Math.ceil(W / K) + 1), y1 = Math.min(karte.h - 1, y0 + Math.ceil(H / K) + 1);
     var liste = [], hg = hintergrund(R, karte);
@@ -1514,6 +1733,11 @@
       var sx = p.x * K - cx, sy = p.y * K - cy;
       if (sx > -20 && sx < W + 20 && sy > -24 && sy < H + 24) liste.push({ y: p.y * K + 10, f: function () { zeichnePflanze(c, p, sx + wackeln(p), sy, zeit); } });
     });
+    (karte.instrumente || []).forEach(function (ins) {
+      var sx = ins.x * K - cx, sy = ins.y * K - cy;
+      if (sx > -20 && sx < W + 20 && sy > -24 && sy < H + 24) liste.push({ y: ins.y * K + 12, f: function () { zeichneInstrument(c, ins, sx, sy); } });
+    });
+    R.letztesLeben = lebenListe(liste, c, st, cx, cy);
     liste.push({ y: (karte.brunnen.y + 1) * K + 12, f: function () { zeichneBrunnen(c, karte.brunnen.x * K - cx, karte.brunnen.y * K - cy, zeit); } });
     var redner = st.blase && !st.abend && !st.menue ? st.blase.sprecher : null;
     R.letzteWolken = [];
@@ -1545,6 +1769,7 @@
     liste.forEach(function (e) { e.f(); });
     zeichneKochen(c, karte, st, cx, cy);
     zeichneHerzchen(c, st, cx, cy);
+    zeichneNoten(c, st, cx, cy);
 
     // Debug: Pfade
     if (st.debug) {
@@ -1558,29 +1783,37 @@
     // Tageslicht (ab v0.7: multipliziert, dazu leuchtende Fenster, Laternen, Herd und Biels Laterne)
     zeichneLicht(R, st, cx, cy);
 
+    // ab hier Bildschirm: 320 x 176 (mit Zoom auf der HUD Ebene)
+    W = 320; H = 176;
+    var cw = c;
+    if (mitHud) { R.ctx = R.hud; c = R.hud; }
+
     // klein fuer die Eltern: Version und Tasten, rechts oben neben den Knoepfen
     var hilfe = R.touch ? (Dorf.VERSION || '') : (Dorf.VERSION || '') + ' · E: Aktion · K: kochen · M: Ton';
     if (!st.abend && !st.buch) text(R, hilfe, W - (R.obenBreite || (R.touch ? 52 : 28)), 3, { farbe: P.uiTinteWeich, rand: 'rgba(255,248,238,0.85)', align: 'right', groesse: 6 });
 
     // ab v0.8: Sprechblase mit Bildern ueber dem Kopf (kein Name, kein Text fuer die Kinder)
     R.letzteBlase = null;
-    if (st.blase && !st.abend && !st.menue && !st.frage && !st.buch) R.letzteBlase = zeichneSprechblase(c, st, cx, cy);
+    if (st.blase && !st.abend && !st.menue && !st.frage && !st.buch && !st.eltern) inWelt(function () { R.letzteBlase = zeichneSprechblase(cw, st, cx, cy); });
 
-    if (!st.abend && !st.menue && !st.frage && !st.buch && !st.debug && Dorf.Glueck) zeichneHud(R, st);
-    if (!st.abend && !st.frage) { zeichneFlieger(c, st, cx, cy); zeichneHerzFlug(c, st, cx, cy); }
-    if (!st.abend && !st.menue && !st.frage && !st.buch) zeichneDenken(c, st, cx, cy);
+    if (!st.abend && !st.menue && !st.frage && !st.buch && !st.eltern && !st.debug && Dorf.Glueck) zeichneHud(R, st);
+    if (!st.abend && !st.frage) inWelt(function () { zeichneFlieger(cw, st, cx, cy); zeichneHerzFlug(cw, st, cx, cy); });
+    if (!st.abend && !st.menue && !st.frage && !st.buch && !st.eltern) inWelt(function () { zeichneDenken(cw, st, cx, cy); });
     if (st.menue && !st.abend) zeichneMenue(R, st);
     if (st.debug) zeichneDebug(R, st);
 
     // Abendszene (ab v0.7 schliesst sich vorher ein Kreis um Biel, ab v0.9 ein Bild statt Text)
     var irisDauer = (Dorf.Spiel && Dorf.Spiel.ABEND && Dorf.Spiel.ABEND.iris) || 1.2, irisSeit = st.abendZeit === undefined ? 99 : st.zeit - st.abendZeit;
     R.letzteAbend = null;
-    if (st.abend && irisSeit < irisDauer) zeichneIris(c, st, cx, cy, irisSeit / irisDauer);
+    if (st.abend && irisSeit < irisDauer) inWelt(function () { zeichneIris(cw, st, cx, cy, irisSeit / irisDauer); });
     if (st.abend && irisSeit >= irisDauer) R.letzteAbend = zeichneAbendSzene(R, st, st.abendZeit === undefined ? 99 : irisSeit);
     R.letztesBuch = null;
     if (st.buch) R.letztesBuch = zeichneBuch(R, st);
     if (st.frage) zeichneFrage(R, st);
-    if (!st.buch) zeichneHinweis(c, st, cx, cy, R);
+    R.letzteWahl = null; R.letzteEltern = null;
+    if (st.wahl && !st.eltern) zeichneWahl(R, st);   // Texte der Auswahl sonst ueber dem Elternfeld
+    if (st.eltern) zeichneEltern(R, st);
+    if (!st.buch && !st.eltern && !st.wahl) zeichneHinweis(c, st, cx, cy, R);
     zeichneTipps(c, st);
   }
 
@@ -1597,5 +1830,5 @@
     });
   }
 
-  Dorf.Render = { W: W, H: H, P: P, BIEL: BIEL, erstelle: erstelle, zeichne: zeichne, zeichnePerson: zeichnePerson, zeichneTeller: zeichneTeller, umbruch: umbruch, hintergrund: hintergrund, zeichneSymbol: zeichneSymbol, kenntSymbol: kenntSymbol, masse: masse, BILD: BILD, KORB: KORB, chipPos: chipPos };
+  Dorf.Render = { W: W, H: H, P: P, BIEL: BIEL, erstelle: erstelle, zeichne: zeichne, zeichnePerson: zeichnePerson, zeichneTeller: zeichneTeller, umbruch: umbruch, hintergrund: hintergrund, zeichneSymbol: zeichneSymbol, kenntSymbol: kenntSymbol, masse: masse, BILD: BILD, KORB: KORB, chipPos: chipPos, RAND: RAND, ZIFFER: ZIFFER, ziffern: ziffern, zeichneWahl: zeichneWahl, zeichneEltern: zeichneEltern };
 })(globalThis);

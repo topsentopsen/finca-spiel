@@ -3,7 +3,7 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.9';
+  var VERSION = 'v0.10';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
   var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
@@ -14,8 +14,14 @@
   var SPEICHER_TAKT = 5;      // alle 5 Sekunden wird der Spielstand gesichert
   var FLUG_KORB = 0.6;        // ab v0.8: so lange fliegt eine Frucht oder ein Ei in den Korb unten links
   var AKTION_PULS = 3;        // der grosse Knopf pulsiert nur bei den ersten drei Malen
-  var AKTION_NAME = { reden: 'Reden', streicheln: 'Streicheln', fuettern: 'Füttern', ernten: 'Ernten', sammeln: 'Ei aufheben', kochen: 'Kochen', weiter: 'Neuer Tag' };
+  var AKTION_NAME = { reden: 'Reden', streicheln: 'Streicheln', fuettern: 'Füttern', ernten: 'Ernten', sammeln: 'Ei aufheben', kochen: 'Kochen', weiter: 'Neuer Tag', musik: 'Musik machen' };
   var WACKEL = 0.5, MENUE_ZU = 0.9;   // ab v0.9: Karte mit fehlenden Zutaten wackelt, danach geht das Menue zu
+  // ab v0.10: Elternbereich (3 Sekunden auf das Zahnrad drücken), Instrumente, Zoom am Handy
+  var ELTERN_HALT = 3;
+  var ELTERN = { x: 30, y: 10, w: 260, h: 156, zu: { x: 262, y: 14, w: 24, h: 22 },
+    ruhig: { x: 42, y: 90, w: 236, h: 20 }, wechseln: { x: 42, y: 116, w: 114, h: 24 }, neu: { x: 164, y: 116, w: 114, h: 24 } };
+  var WAHL = { y: 40, w: 86, h: 104, abstand: 10 };
+  var MUSIK_NAH = 26, NOTEN_MAX = 6, HERZCHEN_MAX = 28;
   Dorf.VERSION = VERSION;
 
   function erstelle(opts) {
@@ -37,8 +43,10 @@
       eingabe: opts.eingabe || Dorf.Eingabe.erstelle(null),
       spieler: Dorf.Spieler.erstelle(karte.start.biel),
       uhr: Dorf.Uhr.erstelle(),
-      kamera: Dorf.Kamera.erstelle(Dorf.Render ? Dorf.Render.W : 320, Dorf.Render ? Dorf.Render.H : 176, karte.w * karte.kachel, karte.h * karte.kachel)
+      zoom: opts.zoom > 1 ? opts.zoom : 1, noten: [],
+      kamera: Dorf.Kamera.erstelle(Math.round((Dorf.Render ? Dorf.Render.W : 320) / (opts.zoom > 1 ? opts.zoom : 1)), Math.round((Dorf.Render ? Dorf.Render.H : 176) / (opts.zoom > 1 ? opts.zoom : 1)), karte.w * karte.kachel, karte.h * karte.kachel)
     };
+    st.leben = Dorf.Leben ? Dorf.Leben.erstelle(karte, seed) : null;
     st.gaeste = Dorf.Gaeste.REIHE.map(function (id) { return Dorf.Gaeste.erstelle(id, karte); });
     st.garten = Dorf.Garten.erstelle(karte);
     st.vorrat = Dorf.Garten.leererVorrat();
@@ -96,6 +104,7 @@
     (st.tiere.eier || []).forEach(function (ei) { pruef(Math.hypot(wx - ei.x, wy - (ei.y - 3)) - 1, { ei: ei }); });
     st.garten.liste.forEach(function (p) { var q = Dorf.Garten.punkt(p); pruef(Math.hypot(wx - q.x, wy - (q.y - (p.baum ? 14 : 6))) - (p.baum ? 6 : 3), { pflanze: p }); });
     pruef(Math.hypot(wx - HERD_MITTE.x, wy - HERD_MITTE.y) - 12, { herd: true });
+    (st.karte.instrumente || []).forEach(function (ins) { pruef(Math.hypot(wx - (ins.x * 16 + 8), wy - (ins.y * 16 + 6)) - 6, { instrument: ins }); });
     return best;
   }
 
@@ -104,9 +113,12 @@
     if (!isFinite(wx) || !isFinite(wy)) return 'nein';
     if (st.frage) { st.frage = null; return 'nein'; }
     if (st.buch) { schliesseBuch(st); return 'zurueck'; }
+    if (st.wahl || st.eltern) return 'nein';
     if (st.abend) {
       // gerade erst Abend: Dauertippen soll den schoenen Abend nicht sofort wegklicken
       if (st.abendZeit !== undefined && st.zeit - st.abendZeit < ABEND_SPERRE) return 'warte';
+      // ab v0.10: ist die Zeit fuer heute um, kommt kein neuer Tag, sondern die Schlafenszeit
+      if (tagGesperrt(st)) { oeffneWahl(st, { gesperrt: true }); return 'schlaf'; }
       st.naechsterTag = true; return 'tag';
     }
     if (st.menue) { schliesseMenue(st); return 'zurueck'; }
@@ -116,11 +128,17 @@
     var tier = (gast || ei) ? null : Dorf.Tiere.an(st.tiere, wx, wy);
     var pf = (gast || tier || ei) ? null : Dorf.Garten.an(st.garten, tx, ty);
     var herd = !gast && !tier && !pf && !ei && karte.tile(tx, ty) === T.HERD;
-    if (!gast && !tier && !pf && !herd && !ei) {
+    var ins = (!gast && !tier && !pf && !ei && !herd) ? instrumentAn(st, tx, ty) : null;
+    if (!gast && !tier && !pf && !herd && !ei && !ins) {
       var f = naechstesZiel(st, wx, wy, st.eingabe.touch ? 14 : 8);
-      if (f) { gast = f.gast || null; tier = f.tier || null; pf = f.pflanze || null; herd = !!f.herd; ei = f.ei || null; }
+      if (f) { gast = f.gast || null; tier = f.tier || null; pf = f.pflanze || null; herd = !!f.herd; ei = f.ei || null; ins = f.instrument || null; }
     }
-    if (ei) {
+    if (ins) {
+      if (instrumentNah(st, ins)) { musiziere(st, ins); return 'musik'; }
+      ziel = besterNachbar(st, ins.x, ins.y);
+      aktion = { art: 'musik', instrument: ins };
+      tx = ins.x; ty = ins.y;
+    } else if (ei) {
       if (Math.hypot(ei.x - sp.x, ei.y - sp.y) <= Dorf.Tiere.EI_NAH) { sammle(st, ei); return 'sammeln'; }
       tx = Math.floor(ei.x / K); ty = Math.floor(ei.y / K);
       ziel = karte.blockiert(tx, ty) ? besterNachbar(st, tx, ty) : { x: tx, y: ty };
@@ -150,6 +168,32 @@
     if (!ziel || !Dorf.Spieler.geheZu(sp, karte, ziel.x, ziel.y, aktion)) { st.marker = { x: tx, y: ty, t: 0, nein: true }; return 'nein'; }
     st.marker = { x: ziel.x, y: ziel.y, t: 0 };
     return aktion ? aktion.art : 'laufen';
+  }
+
+  // ---------- Instrumente (ab v0.10) ----------
+  function instrumentAn(st, tx, ty) { var l = st.karte.instrumente || []; for (var i = 0; i < l.length; i++) if (l[i].x === tx && l[i].y === ty) return l[i]; return null; }
+  function instrumentNah(st, ins) { return Math.hypot(ins.x * 16 + 8 - st.spieler.x, ins.y * 16 + 12 - st.spieler.y) <= MUSIK_NAH; }
+  function naechstesInstrument(st) {
+    var best = null, bd = MUSIK_NAH;
+    (st.karte.instrumente || []).forEach(function (ins) { var d = Math.hypot(ins.x * 16 + 8 - st.spieler.x, ins.y * 16 + 12 - st.spieler.y); if (d <= bd) { bd = d; best = ins; } });
+    return best;
+  }
+  var NOTEN_FARBEN = { gitarre: '#ffb037', kastagnetten: '#ff7fa0', trommel: '#7fd3ec' };
+  // Biel spielt: das Instrument wackelt, eine Note steigt auf, der Ton passt zur Musik. Gaeste in der Naehe freuen sich.
+  function musiziere(st, ins) {
+    var sp = st.spieler, dx = ins.x * 16 + 8 - sp.x, dy = ins.y * 16 + 8 - sp.y;
+    if (Math.abs(dx) > Math.abs(dy)) sp.dir = dx < 0 ? 'links' : 'rechts'; else sp.dir = dy < 0 ? 'oben' : 'unten';
+    ins.wackel = 0.45; ins.schlag = (ins.schlag || 0) + 1;
+    st.musik = (st.musik || []).slice(-3); st.musik.push({ art: ins.art, n: ins.schlag });
+    st.noten = st.noten || [];
+    st.noten.push({ x: ins.x * 16 + 8 + (ins.schlag % 2 ? 3 : -3), y: ins.y * 16 - 2, t: 0, dauer: 1.2, phase: ins.schlag, farbe: NOTEN_FARBEN[ins.art] });
+    if (st.noten.length > NOTEN_MAX) st.noten.splice(0, st.noten.length - NOTEN_MAX);
+    if (Dorf.Glueck) st.gaeste.forEach(function (gs) {
+      if (Math.hypot(gs.x - sp.x, gs.y - sp.y) < 80) { Dorf.Glueck.gib(st, gs, 'musik'); if (!st.ruhig && !(gs.hop > 0)) gs.hop = 0.25; }
+    });
+    lerne(st, 'musik'); merke(st, 'musik');
+    if (!st.musikGesagt) { st.musikGesagt = true; sage(st, 'Biel', 'Musik! Tipp noch mal, dann spiele ich weiter.', 3, ['note', 'lachen']); }
+    return true;
   }
 
   function rede(st, gast) {
@@ -299,6 +343,146 @@
   function frageAuf(st) { if (st.frage) return; st.frage = { wahl: 0, t: 0 }; st.menue = null; st.buch = null; Dorf.Spieler.stoppe(st.spieler); st.marker = null; klang(st, 'menue'); }
   function drin(k, x, y) { return x >= k.x && x < k.x + k.w && y >= k.y && y < k.y + k.h; }
 
+  // ---------- Profile, Bildauswahl und Tageszeit je Bild (ab v0.10) ----------
+  // Regel: Jedes Bild (Kind) hat am Kalendertag hoechstens einen Spieltag von 15 Minuten. Die Zeit steht im Zeitkonto
+  // (finca.zeitkonto) und bleibt bei Neu laden, Neu anfangen und beim Bildwechsel erhalten. Wer heute schon gespielt hat,
+  // kommt nach dem Neuladen direkt wieder in sein Bild (keine Auswahl). Ein anderes Bild waehlen geht nur im Elternbereich.
+  // Ist die Zeit eines Bildes um, schlaeft es bis Mitternacht und laesst sich nicht mehr antippen.
+  function heute(st) { return st.datumJetzt ? st.datumJetzt() : (Dorf.Profile ? Dorf.Profile.datum(new Date()) : ''); }
+  function wahlKarten() {
+    var L = Dorf.Profile ? Dorf.Profile.LISTE : [], x0 = Math.round((320 - L.length * WAHL.w - (L.length - 1) * WAHL.abstand) / 2);
+    return L.map(function (p, i) { return { id: p.id, x: x0 + i * (WAHL.w + WAHL.abstand), y: WAHL.y, w: WAHL.w, h: WAHL.h }; });
+  }
+  function kontoPruefen(st) { if (st.konto && Dorf.Profile && Dorf.Profile.pruefeDatum(st.konto, heute(st))) { st.kontoAendern = true; return true; } return false; }
+  function tagGesperrt(st) {
+    if (!st.konto || !st.profil || !Dorf.Profile) return false;
+    kontoPruefen(st);
+    return Dorf.Profile.fertig(st.konto, st.profil);
+  }
+  function uebersicht(st) {
+    if (!Dorf.Profile) return [];
+    if (st.sichern) { try { st.sichern(); } catch (e) { /* egal */ } }
+    if (st.speicher) return Dorf.Profile.uebersicht(st.speicher, st.konto);
+    return Dorf.Profile.LISTE.map(function (p) { return { id: p.id, bild: p.id, farbe: p.farbe, rand: p.rand, tag: p.id === st.profil ? st.uhr.tag : 0, sticker: 0, sek: st.konto ? Dorf.Profile.sekunden(st.konto, p.id) : 0, fertig: st.konto ? Dorf.Profile.fertig(st.konto, p.id) : false }; });
+  }
+  function oeffneWahl(st, o) {
+    o = o || {};
+    kontoPruefen(st);
+    var idx = 0;
+    wahlKarten().forEach(function (k, i) { if (k.id === st.profil) idx = i; });
+    st.wahl = { t: 0, gesperrt: !!o.gesperrt, wahl: idx, stups: null, zurueck: !!o.zurueck, info: uebersicht(st), takt: 0 };
+    st.menue = null; st.buch = null; st.frage = null; st.marker = null; st.wartetAuf = null;
+    if (st.spieler) Dorf.Spieler.stoppe(st.spieler);
+    klang(st, o.gesperrt ? 'schlaf' : 'menue');
+    return true;
+  }
+  function frischerStand(st, zusatz) {
+    var behalte = { eingabe: st.eingabe, ton: st.ton, debug: st.debug, speicher: st.speicher, fps: st.fps, vorlesen: st.vorlesen,
+      profil: st.profil, profilGeladen: st.profilGeladen, konto: st.konto, ruhig: st.ruhig, darfSpeichern: st.darfSpeichern,
+      datumJetzt: st.datumJetzt, sichern: st.sichern, albumFest: st.albumFest, elternDruck: st.elternDruck };
+    Object.keys(zusatz || {}).forEach(function (k) { behalte[k] = zusatz[k]; });
+    var neu = erstelle({ seed: st.seed, eingabe: st.eingabe, zoom: st.zoom });
+    Object.keys(st).forEach(function (k) { if (!(k in neu)) delete st[k]; });
+    Object.keys(neu).forEach(function (k) { st[k] = neu[k]; });
+    Object.keys(behalte).forEach(function (k) { if (behalte[k] !== undefined) st[k] = behalte[k]; });
+  }
+  function ladeProfil(st, id) {
+    var P = Dorf.Profile, album = st.albumFest ? st.album : undefined;
+    frischerStand(st, { album: album });
+    st.profil = id; st.profilGeladen = true;
+    var sp = st.speicher;
+    if (sp && st.darfSpeichern !== false && P) {
+      var alt = Dorf.Speicher ? Dorf.Speicher.lade(sp, P.spielstandSchluessel(id)) : null;
+      if (alt && Dorf.Speicher.anwenden(st, alt)) {
+        st.geladen = true;
+        sage(st, 'Biel', 'Schön, dass du wieder da bist! Tag ' + st.uhr.tag + ' geht weiter.', 4.5, ['lachen', 'herz']);
+        st.herzchen.push({ x: st.spieler.x, y: st.spieler.y - 26, t: 0, farbe: '#ff7fa0' });
+      }
+      if (Dorf.Sticker && !st.albumFest) st.album = Dorf.Sticker.lade(sp, P.albumSchluessel(id));
+      P.merkeLetztes(sp, id);
+    }
+    // das Zeitkonto von heute gilt (auch wenn der Spielstand von gestern ist)
+    if (st.konto && P) st.spielzeit = P.sekunden(st.konto, id);
+    return true;
+  }
+  // Ein Kind tippt auf sein Bild
+  function waehleProfil(st, id) {
+    var P = Dorf.Profile, w = st.wahl;
+    if (!P || !P.hole(id) || !w) return 'nein';   // nur aus der offenen Auswahl
+    if (w && w.gesperrt) { w.stups = { id: id, t: 0.4 }; klang(st, 'schlaf'); return 'gesperrt'; }
+    kontoPruefen(st);
+    if (st.konto && P.fertig(st.konto, id)) { if (w) w.stups = { id: id, t: 0.4 }; klang(st, 'schlaf'); return 'schlaeft'; }
+    if (st.profil === id && st.profilGeladen) { st.wahl = null; if (st.konto) st.spielzeit = P.sekunden(st.konto, id); klang(st, 'wahl'); return 'weiter'; }
+    if (st.profilGeladen && st.sichern) { try { st.sichern(); } catch (e) { /* egal */ } }
+    ladeProfil(st, id);
+    st.wahl = null; st.speichernJetzt = true;
+    klang(st, 'wahl');
+    return 'gewaehlt';
+  }
+  function wahlKlick(st, bx, by, zeiger) {
+    var w = st.wahl;
+    if (zeiger && w.t < 0.3) return 'warte';
+    var karten = wahlKarten();
+    for (var i = 0; i < karten.length; i++) if (drin(karten[i], bx, by)) return waehleProfil(st, karten[i].id);
+    if (w.zurueck && !w.gesperrt) { st.wahl = null; return 'zurueck'; }
+    return 'nein';
+  }
+  function wahlSchritt(st, e, dt) {
+    var w = st.wahl, n = wahlKarten().length;
+    w.t += dt; if (w.stups) { w.stups.t -= dt; if (w.stups.t <= 0) w.stups = null; }
+    // um Mitternacht wachen alle wieder auf
+    w.takt += dt;
+    if (w.takt >= 2) { w.takt = 0; if (st.konto && Dorf.Profile.pruefeDatum(st.konto, heute(st))) { st.kontoAendern = true; w.gesperrt = false; w.info = uebersicht(st); } }
+    if (w.gesperrt) return;
+    var alt = w.wahl;
+    if (e.neu('links') || e.neu('hoch')) w.wahl = (w.wahl + n - 1) % n;
+    if (e.neu('rechts') || e.neu('runter')) w.wahl = (w.wahl + 1) % n;
+    if (w.wahl !== alt) klang(st, 'menue');
+    var karten = wahlKarten();
+    if (e.neu('wahl1') && karten[0]) return waehleProfil(st, karten[0].id);
+    if (e.neu('wahl2') && karten[1]) return waehleProfil(st, karten[1].id);
+    if (e.neu('wahl3') && karten[2]) return waehleProfil(st, karten[2].id);
+    if (w.t > 0.2 && (e.neu('weiter') || e.neu('sprechen'))) return waehleProfil(st, karten[w.wahl].id);
+    if (e.neu('abbruch') && w.zurueck) st.wahl = null;
+  }
+
+  // ---------- Elternbereich (ab v0.10) ----------
+  function oeffneEltern(st) {
+    st.eltern = { t: 0, wahl: null, info: uebersicht(st) };
+    st.menue = null; st.buch = null; st.frage = null; st.marker = null;
+    if (st.spieler) Dorf.Spieler.stoppe(st.spieler);
+    klang(st, 'eltern');
+    return true;
+  }
+  function schliesseEltern(st) { st.eltern = null; }
+  function setzeRuhig(st, an) { st.ruhig = !!an; st.ruhigAendern = true; st.speichernJetzt = true; klang(st, 'menue'); }
+  function elternTat(st, was) {
+    if (was === 'zu') { schliesseEltern(st); return 'zu'; }
+    if (was === 'ruhig') { setzeRuhig(st, !st.ruhig); return 'ruhig'; }
+    if (was === 'wechseln') { schliesseEltern(st); oeffneWahl(st, { zurueck: !!st.profilGeladen && !tagGesperrt(st) }); return 'wechseln'; }
+    if (was === 'neu') { schliesseEltern(st); st.wahl = null; frageAuf(st); return 'frage'; }
+    return 'nein';
+  }
+  function elternKlick(st, bx, by, zeiger) {
+    var e = st.eltern;
+    if (zeiger && e.t < 0.3) return 'warte';
+    if (drin(ELTERN.zu, bx, by)) return elternTat(st, 'zu');
+    if (drin(ELTERN.ruhig, bx, by)) return elternTat(st, 'ruhig');
+    if (drin(ELTERN.wechseln, bx, by)) return elternTat(st, 'wechseln');
+    if (drin(ELTERN.neu, bx, by)) return elternTat(st, 'neu');
+    if (!drin(ELTERN, bx, by)) return elternTat(st, 'zu');
+    return 'nein';
+  }
+  var ELTERN_REIHE = ['ruhig', 'wechseln', 'neu', 'zu'];
+  function elternSchritt(st, e, dt) {
+    var el = st.eltern; el.t += dt;
+    if (e.neu('abbruch')) { schliesseEltern(st); return; }
+    var i = ELTERN_REIHE.indexOf(el.wahl);
+    if (e.neu('runter') || e.neu('rechts')) { el.wahl = ELTERN_REIHE[(i + 1) % ELTERN_REIHE.length]; klang(st, 'menue'); }
+    else if (e.neu('hoch') || e.neu('links')) { el.wahl = ELTERN_REIHE[(i + ELTERN_REIHE.length - 1) % ELTERN_REIHE.length]; klang(st, 'menue'); }
+    else if (el.t > 0.2 && el.wahl && (e.neu('weiter') || e.neu('sprechen'))) elternTat(st, el.wahl);
+  }
+
   // ---------- Bilderbuch (ab v0.9) ----------
   // Seiten 0 bis 2: ein Rezept pro Gericht (Zutaten + Zutaten = Gericht, wer es liebt, Ei als Extra). Seite 3: das Sticker Album.
   // Bedienen ohne Lesen: linke Haelfte tippen = zurueck blaettern, rechte Haelfte = weiter, X oder daneben = zu. Zwei Reiter oben: Topf und Stern.
@@ -348,6 +532,8 @@
   function klickBild(st, bx, by, zeiger) {
     if (!isFinite(bx) || !isFinite(by)) return 'nein';
     st.tipps = (st.tipps || []).slice(-3); st.tipps.push({ x: bx, y: by, t: 0 });
+    if (st.eltern) return elternKlick(st, bx, by, zeiger);
+    if (st.wahl) return wahlKlick(st, bx, by, zeiger);
     if (st.frage) {
       if (zeiger && st.frage.t < 0.3) return 'warte';
       if (drin(FRAGE.ja, bx, by)) { neuAnfangen(st); return 'neu'; }
@@ -364,7 +550,9 @@
       }
       schliesseMenue(st); return 'zurueck';
     }
-    return klick(st, bx + Math.round(st.kamera.x), by + Math.round(st.kamera.y));
+    // ab v0.10: mit Zoom ist ein Bildpixel kleiner als ein Weltpixel
+    var z = st.zoom > 1 ? st.zoom : 1;
+    return klick(st, bx / z + Math.round(st.kamera.x), by / z + Math.round(st.kamera.y));
   }
 
   function frageSchritt(st, e) {
@@ -377,15 +565,15 @@
   function neuAnfangen(st) {
     // die Spielzeit des Tages bleibt: Neu anfangen verlaengert den Tag nicht ueber 15 Minuten
     // ab v0.9: das Sticker Album gehoert dem Kind und bleibt auch beim Neuanfang
-    var behalte = { eingabe: st.eingabe, ton: st.ton, debug: st.debug, speicher: st.speicher, fps: st.fps, spielzeit: st.spielzeit, album: st.album, albumNeu: st.albumNeu, vorlesen: st.vorlesen };
-    var neu = erstelle({ seed: st.seed, eingabe: st.eingabe });
-    Object.keys(st).forEach(function (k) { if (!(k in neu)) delete st[k]; });
-    Object.keys(neu).forEach(function (k) { st[k] = neu[k]; });
-    Object.keys(behalte).forEach(function (k) { if (behalte[k] !== undefined) st[k] = behalte[k]; });
-    if (Dorf.Speicher && st.speicher) Dorf.Speicher.loesche(st.speicher);
+    // ab v0.10: auch Bild, Zeitkonto und "weniger Bewegung" bleiben; geloescht wird nur der Spielstand dieses Bildes
+    frischerStand(st, { spielzeit: st.spielzeit, album: st.album, albumNeu: st.albumNeu });
+    if (st.konto && st.profil && Dorf.Profile) st.spielzeit = Math.max(st.spielzeit || 0, Dorf.Profile.sekunden(st.konto, st.profil));
+    if (Dorf.Speicher && st.speicher) Dorf.Speicher.loesche(st.speicher, st.profil && Dorf.Profile ? Dorf.Profile.spielstandSchluessel(st.profil) : undefined);
     st.speichernJetzt = true;
     st.herzchen.push({ x: st.spieler.x, y: st.spieler.y - 26, t: 0, farbe: '#ff7fa0' });
     klang(st, 'neu');
+    // die Zeit fuer heute ist trotzdem um: dann gleich wieder schlafen
+    if (tagGesperrt(st)) oeffneWahl(st, { gesperrt: true });
     return true;
   }
 
@@ -410,6 +598,7 @@
     if (a.art === 'kochen' && amHerd(st)) oeffneMenue(st);
     else if (a.art === 'sammeln') { if (st.tiere.eier.indexOf(a.ei) >= 0 && Math.hypot(a.ei.x - st.spieler.x, a.ei.y - st.spieler.y) <= Dorf.Tiere.EI_NAH + 6) sammle(st, a.ei); }
     else if (a.art === 'ernten') { if (Dorf.Garten.nah(a.pflanze, st.spieler)) ernte(st, a.pflanze); }
+    else if (a.art === 'musik') { if (instrumentNah(st, a.instrument)) musiziere(st, a.instrument); }
     else if (a.art === 'streicheln') {
       var t = a.tier;
       if (Dorf.Tiere.nah(t, st.spieler)) { if (t.ziel && t.lockt) { st.wartetAuf = { tier: t, rest: 3 }; return; } streichle(st, t); }
@@ -434,7 +623,7 @@
   // ab v0.8: Was macht der eine grosse Knopf (und Taste E) gerade? Gleiche Reihenfolge wie vorher bei E:
   // Gast in der Naehe, dann Tier (beim Huhn zuerst das Ei), dann reife Pflanze, dann Ei, dann Herd. null = es gibt gerade nichts zu tun.
   function kontext(st) {
-    if (st.frage || st.buch) return null;
+    if (st.frage || st.buch || st.wahl || st.eltern) return null;
     if (st.abend) return { art: 'weiter' };
     if (st.menue) return { art: 'kochen' };
     var sp = st.spieler, naechster = null, best = 28;
@@ -448,6 +637,8 @@
     if (pf) return { art: 'ernten', ziel: pf };
     if (eiNah) return { art: 'sammeln', ziel: eiNah };
     if (amHerd(st)) return { art: 'kochen' };
+    var ins = naechstesInstrument(st);
+    if (ins) return { art: 'musik', ziel: ins };
     return null;
   }
   function tueKontext(st, k) {
@@ -457,6 +648,7 @@
     else if (k.art === 'ernten') ernte(st, k.ziel);
     else if (k.art === 'sammeln') sammle(st, k.ziel);
     else if (k.art === 'kochen') oeffneMenue(st);
+    else if (k.art === 'musik') musiziere(st, k.ziel);
     else return false;
     return true;
   }
@@ -471,8 +663,24 @@
     st.zeit += dt;
     // Tipp-Kreise (ab v0.7) altern auch in Menue, Rueckfrage und Abend
     if (st.tipps && st.tipps.length) { st.tipps.forEach(function (tp) { tp.t += dt; }); st.tipps = st.tipps.filter(function (tp) { return tp.t < TIPP_DAUER; }); }
+    // ab v0.10: Elternbereich nach 3 Sekunden Druecken auf das Zahnrad
+    if (st.elternDruck && !st.eltern) {
+      st.elternHalt = (st.elternHalt || 0) + echt;
+      if (st.elternHalt >= ELTERN_HALT) { st.elternDruck = false; st.elternHalt = 0; oeffneEltern(st); }
+    } else st.elternHalt = 0;
+    // Elternbereich und Bildauswahl halten das Spiel an (die Zeit laeuft dann nicht)
+    if (st.eltern) { elternSchritt(st, e, dt); return; }
+    if (st.wahl) { wahlSchritt(st, e, dt); return; }
     // harte 15 Minuten Grenze: zaehlt auch, waehrend Menue oder Rueckfrage offen sind
-    if (!st.abend) st.spielzeit = (st.spielzeit || 0) + echt;
+    if (!st.abend) {
+      st.spielzeit = (st.spielzeit || 0) + echt;
+      // ab v0.10: dieselbe Zeit geht ins Zeitkonto des Bildes (pro Kalendertag)
+      if (st.konto && st.profil && Dorf.Profile) {
+        Dorf.Profile.buche(st.konto, st.profil, echt); st.kontoAendern = true;
+        st.kontoTakt = (st.kontoTakt || 0) + echt;
+        if (st.kontoTakt >= 2) { st.kontoTakt = 0; if (kontoPruefen(st)) st.spielzeit = 0; }   // Mitternacht: neuer Kalendertag, neue 15 Minuten
+      }
+    }
     if (e.neu('debug')) st.debug = !st.debug;
     if (Dorf.Hinweise) Dorf.Hinweise.update(st, dt, e.aktiv ? e.aktiv() : false);
     if (st.frage) { st.frage.t += dt; frageSchritt(st, e); return; }
@@ -490,6 +698,8 @@
       if (st.blase) { st.blase.t = (st.blase.t || 0) + dt; st.blase.rest -= dt; if (st.blase.rest <= 0) st.blase = null; }
       if (buchJetzt || st.buch) { st.naechsterTag = false; return; }
       if ((e.neu('weiter') && !gesperrt) || st.naechsterTag) {
+        st.naechsterTag = false;
+        if (tagGesperrt(st)) { oeffneWahl(st, { gesperrt: true }); return; }
         st.abend = false; st.naechsterTag = false; st.spielzeit = 0;
         Dorf.Uhr.neuerTag(st.uhr);
         st.gaeste.forEach(function (gs) { gs.beduerfnisse.satt = 60; if (gs.beduerfnisse.ruhe !== undefined) gs.beduerfnisse.ruhe = 80; });
@@ -510,7 +720,11 @@
     if (st.tiere.neuesEi) { st.tiere.neuesEi = 0; klang(st, 'gack'); }
     Dorf.Garten.update(st.garten, stunden);
     for (var hz = st.herzchen.length - 1; hz >= 0; hz--) { st.herzchen[hz].t += dt; if (st.herzchen[hz].t > 1.4) st.herzchen.splice(hz, 1); }
-    if (st.herzchen.length > 40) st.herzchen.splice(0, st.herzchen.length - 40);
+    // ab v0.10: hoechstens 28 Herzchen, damit mit Noten und Tieren im Hintergrund nie mehr als 40 Teilchen da sind
+    if (st.herzchen.length > HERZCHEN_MAX) st.herzchen.splice(0, st.herzchen.length - HERZCHEN_MAX);
+    for (var nt = st.noten.length - 1; nt >= 0; nt--) { st.noten[nt].t += dt; if (st.noten[nt].t >= st.noten[nt].dauer) st.noten.splice(nt, 1); }
+    (st.karte.instrumente || []).forEach(function (ins) { if (ins.wackel > 0) ins.wackel = Math.max(0, ins.wackel - dt); });
+    if (st.leben && Dorf.Leben) Dorf.Leben.update(st.leben, { ruhig: !!st.ruhig, spieler: st.spieler, abend: st.abend, minute: st.uhr.minute }, dt).forEach(function (n) { klang(st, n); });
     // Ernte im Flug: kommt die Frucht im Korb an, hopst das Korbfach kurz
     for (var fl = st.flieger.length - 1; fl >= 0; fl--) {
       var fg = st.flieger[fl]; fg.t += dt;
@@ -572,6 +786,8 @@
     if (Dorf.Uhr.vorbei(st.uhr)) {
       st.abend = true; st.abendZeit = st.zeit; st.blase = null; st.kochen = null; st.menue = null; st.buch = null; Dorf.Spieler.stoppe(st.spieler); st.marker = null; st.wartetAuf = null;
       st.denk = null; st.speichernJetzt = true; st.abendZaehler = 0; st.stickerGezeigt = false;
+      // ab v0.10: Spieltag fuer dieses Bild ist heute vorbei
+      if (st.konto && st.profil && Dorf.Profile) { Dorf.Profile.setzeFertig(st.konto, st.profil); st.kontoAendern = true; }
       // ab v0.9: Sticker fuer heute ins Album (wird in der Abendszene gezeigt)
       if (st.tagesziel.erreicht) merke(st, 'ziel');
       if (Dorf.Sticker) Dorf.Sticker.vergib(st);
@@ -597,7 +813,7 @@
     if (st.zeit - (st.gaehnZeit === undefined ? -999 : st.gaehnZeit) < GAEHN.tonAbstand) return;
     for (var i = 0; i < st.gaeste.length; i++) {
       var gs = st.gaeste[i], sx = gs.x - st.kamera.x, sy = gs.y - st.kamera.y;
-      if (gaehnen(st, i) > 0.5 && sx > 0 && sx < 320 && sy > 0 && sy < 176) { st.gaehnZeit = st.zeit; klang(st, 'gaehn'); return; }
+      if (gaehnen(st, i) > 0.5 && sx > 0 && sx < st.kamera.viewW && sy > 0 && sy < st.kamera.viewH) { st.gaehnZeit = st.zeit; klang(st, 'gaehn'); return; }
     }
   }
   function abendHerzen(st, i, seit) {
@@ -610,6 +826,8 @@
   // Notfall-Aufraeumen nach einem Fehler: alles Vorlaeufige weg, Figuren zurueck auf sichere Plaetze.
   function rette(st) {
     st.menue = null; st.frage = null; st.buch = null; st.blase = null; st.marker = null; st.wartetAuf = null; st.denk = null; st.kochen = null;
+    st.eltern = null; st.elternDruck = false; st.noten = []; st.musik = [];
+    if (st.wahl && !st.wahl.gesperrt && st.profilGeladen) st.wahl = null;
     st.flieger = []; st.herzchen = []; st.herzFlug = []; st.chipPuls = {}; st.toene = []; st.naechsterTag = false;
     if (st.spieler) {
       Dorf.Spieler.stoppe(st.spieler);
@@ -636,7 +854,14 @@
     var startPos = null, ms = win.location && win.location.search ? /[?&]start=(\d+),(\d+)/.exec(win.location.search) : null;
     if (ms) startPos = { x: parseInt(ms[1], 10), y: parseInt(ms[2], 10) };
     var debugAn = !!(win.location && win.location.search && /[?&]debug=1/.test(win.location.search));
-    var st = erstelle({ seed: seed, eingabe: Dorf.Eingabe.erstelle(win, canvas, Dorf.Render.W, Dorf.Render.H) });
+    // ab v0.10: auf kleinen Handys (Touch, kurze Seite unter 500 Pixel) ist alles 1,25 mal groesser. ?zoom=1 schaltet es aus.
+    var such0 = (win.location && win.location.search) || '';
+    var touchVorab = !!((win.matchMedia && win.matchMedia('(pointer: coarse)').matches) || (win.navigator && win.navigator.maxTouchPoints > 0) || /[?&]touch=1/.test(such0));
+    var Z = touchVorab && Math.min(win.innerWidth || 999, win.innerHeight || 999) < 500 ? 1.25 : 1;
+    var mz = /[?&]zoom=([\d.]+)/.exec(such0);
+    if (mz) Z = Math.max(1, Math.min(2, parseFloat(mz[1]) || 1));
+    if (opts.zoom) Z = opts.zoom;
+    var st = erstelle({ seed: seed, zoom: Z, eingabe: Dorf.Eingabe.erstelle(win, canvas, Dorf.Render.W, Dorf.Render.H) });
     if (startPos && !st.karte.blockiert(startPos.x, startPos.y)) {
       st.spieler.x = startPos.x * 16 + 8; st.spieler.y = startPos.y * 16 + 12;
       Dorf.Kamera.sofort(st.kamera, st.spieler.x, st.spieler.y - 12);
@@ -652,33 +877,71 @@
     // Entwicklerhilfe: ?menue=1 oeffnet gleich das Kochmenue (fuer Screenshots)
     if (win.location && /[?&]menue=1/.test(win.location.search || '')) oeffneMenue(st);
     var R = Dorf.Render.erstelle(canvas, ui, doc);
+    // ab v0.10: mit Zoom zeigt das Spielbild weniger Welt (kleinere interne Groesse), die Anzeigen liegen scharf auf einer eigenen Ebene
+    var hudCanvas = doc.getElementById('hud');
+    if (Z !== 1) {
+      canvas.width = Math.round(Dorf.Render.W / Z); canvas.height = Math.round(Dorf.Render.H / Z);
+      if (R.ctx) R.ctx.imageSmoothingEnabled = false;
+      if (hudCanvas && hudCanvas.getContext) {
+        hudCanvas.width = Dorf.Render.W; hudCanvas.height = Dorf.Render.H;
+        R.hud = hudCanvas.getContext('2d'); if (R.hud) R.hud.imageSmoothingEnabled = false;
+        R.hudCanvas = hudCanvas;
+        if (hudCanvas.style) hudCanvas.style.display = '';
+      }
+    } else if (hudCanvas && hudCanvas.style) hudCanvas.style.display = 'none';
     var rahmen = doc.getElementById('rahmen');
     var ton = st.ton = Dorf.Ton ? Dorf.Ton.erstelle(win) : null;
 
     // ab v0.6: Spielstand laden. Entwicklerhilfen (?uhr, ?abend, ?korb ...) und ?neu=1 spielen ohne alten Stand.
+    // ab v0.10: jedes Bild (Kind) hat einen eigenen Spielstand, eigene Herzen und ein eigenes Album.
     var such = (win.location && win.location.search) || '';
+    var P = Dorf.Profile;
     var speicher = st.speicher = Dorf.Speicher ? Dorf.Speicher.speicherVon(win) : null;
     var ohneStand = /[?&](neu|uhr|abend|herzen|korb|menue|start)=/.test(such);
     var darfSpeichern = !/[?&](uhr|abend|herzen|korb|menue|start)=/.test(such);   // Ausprobieren ueberschreibt keinen echten Spielstand
-    if (speicher && /[?&]neu=1/.test(such)) Dorf.Speicher.loesche(speicher);
-    if (speicher && !ohneStand) {
-      var alt = Dorf.Speicher.lade(speicher);
-      if (alt && Dorf.Speicher.anwenden(st, alt)) {
-        st.geladen = true;
-        sage(st, 'Biel', 'Schön, dass du wieder da bist! Tag ' + st.uhr.tag + ' geht weiter.', 4.5, ['lachen', 'herz']);
-        st.herzchen.push({ x: st.spieler.x, y: st.spieler.y - 26, t: 0, farbe: '#ff7fa0' });
-      }
-    }
-    // ab v0.9: Sticker Album (eigener Schluessel). Entwicklerhilfe ?album=5 klebt die ersten 5 Sticker ein (nur zum Ansehen, wird nicht gespeichert).
-    if (speicher && darfSpeichern && Dorf.Sticker) st.album = Dorf.Sticker.lade(speicher);
+    var DatumK = win.Date || Date;
+    st.datumJetzt = function () { return P ? P.datum(new DatumK()) : ''; };
+    if (speicher && P) P.migriere(speicher);
+    var reduziert = !!(win.matchMedia && win.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    st.ruhig = speicher && P ? P.ladeRuhig(speicher, reduziert) : reduziert;
     var ma = /[?&]album=(\d+)/.exec(such);
-    if (ma && Dorf.Sticker) { darfSpeichern = false; st.album = {}; Dorf.Sticker.LISTE.slice(0, parseInt(ma[1], 10)).forEach(function (x) { st.album[x.id] = 1; }); }
+    if (ma) darfSpeichern = false;
+    st.darfSpeichern = darfSpeichern;
+    if (speicher && darfSpeichern && P) st.konto = P.ladeKonto(speicher, st.datumJetzt());
+    var mp = /[?&]profil=([a-z]+)/.exec(such), wunsch = mp && P && P.hole(mp[1]) ? mp[1] : null;
+    if (ma && Dorf.Sticker) { st.albumFest = true; st.album = {}; Dorf.Sticker.LISTE.slice(0, parseInt(ma[1], 10)).forEach(function (x) { st.album[x.id] = 1; }); }
+    if (!P) { st.profil = 'esel'; st.profilGeladen = true; }
+    else if (ohneStand) {
+      // Entwicklerhilfen: ohne Auswahl, direkt mit einem Bild (Standard Esel)
+      st.profil = wunsch || 'esel'; st.profilGeladen = true;
+      if (speicher && /[?&]neu=1/.test(such) && Dorf.Speicher) Dorf.Speicher.loesche(speicher, P.spielstandSchluessel(st.profil));
+      if (speicher && darfSpeichern && Dorf.Sticker && !st.albumFest) st.album = Dorf.Sticker.lade(speicher, P.albumSchluessel(st.profil));
+      if (st.konto) st.spielzeit = Math.max(st.spielzeit || 0, P.sekunden(st.konto, st.profil));
+      if (/[?&]neu=1/.test(such) && tagGesperrt(st)) oeffneWahl(st, { gesperrt: true });   // auch ?neu=1 schenkt keine neue Zeit
+    } else {
+      // wer heute schon gespielt hat, ist nach dem Neuladen gleich wieder da; sonst Bilder zeigen
+      var letztes = speicher ? P.letztes(speicher) : null;
+      var start = wunsch || (letztes && st.konto && P.gespielt(st.konto, letztes) ? letztes : null);
+      if (start) { ladeProfil(st, start); if (tagGesperrt(st)) oeffneWahl(st, { gesperrt: true }); }
+      else oeffneWahl(st, {});
+    }
+    if (/[?&]wahl=1/.test(such)) oeffneWahl(st, { zurueck: true });
+    if (/[?&]eltern=1/.test(such)) oeffneEltern(st);
     if (/[?&]buch=(\d)/.test(such)) oeffneBuch(st, parseInt(/[?&]buch=(\d)/.exec(such)[1], 10));
-    var speicherUhr = 0;
+    var speicherUhr = 0, ruhigZuletzt = null;
     function sichere() {
-      if (speicher && darfSpeichern) { Dorf.Speicher.schreibe(speicher, st); if (Dorf.Sticker && st.albumAendern) { Dorf.Sticker.schreibe(speicher, st.album); st.albumAendern = false; } }
+      if (speicher && st.darfSpeichern) {
+        if (st.profilGeladen && P) {
+          Dorf.Speicher.schreibe(speicher, st, P.spielstandSchluessel(st.profil));
+          if (Dorf.Sticker && st.albumAendern && !st.albumFest) { Dorf.Sticker.schreibe(speicher, st.album, P.albumSchluessel(st.profil)); st.albumAendern = false; }
+        }
+        if (st.konto && P) { P.schreibeKonto(speicher, st.konto); st.kontoAendern = false; }
+      }
+      if (speicher && P && st.ruhigAendern) { P.schreibeRuhig(speicher, st.ruhig); st.ruhigAendern = false; }
       speicherUhr = 0; st.speichernJetzt = false;
     }
+    st.sichern = sichere;
+    if (st.profilGeladen && st.darfSpeichern && speicher && P) P.merkeLetztes(speicher, st.profil);
 
     // Ton-Knopf (Lautsprecher), Vollbild-Knopf und grosse Knoepfe fuer Handy und Tablet
     var tonKnopf = doc.getElementById('ton-knopf'), vollKnopf = doc.getElementById('vollbild-knopf');
@@ -754,8 +1017,30 @@
       if (vorlesen.an && st.blase) letzteBlase = null;   // die aktuelle Blase gleich noch einmal vorlesen
     });
     if (ton) { var tonAlt = ton.beiAenderung; ton.beiAenderung = function () { if (tonAlt) tonAlt(); if (ton.stumm && vorlesen) vorlesen.stopp(); zeigeVorlesen(); }; }
-    var neuKnopf = doc.getElementById('neu-knopf');
-    knopf(neuKnopf, function () { if (st.frage) st.frage = null; else frageAuf(st); });
+    // ab v0.10: der Elternbereich steckt hinter dem kleinen Zahnrad: 3 Sekunden gedrueckt halten (ein Ring fuellt sich)
+    var elternKnopf = doc.getElementById('eltern-knopf');
+    if (elternKnopf && elternKnopf.addEventListener) {
+      var los = function (ev) { if (ev && ev.preventDefault) ev.preventDefault(); if (ton) ton.entsperre(); st.elternDruck = true; };
+      var halt = function () { st.elternDruck = false; };
+      elternKnopf.addEventListener('pointerdown', los);
+      ['pointerup', 'pointerleave', 'pointercancel', 'blur'].forEach(function (n) { elternKnopf.addEventListener(n, halt); });
+      elternKnopf.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { if (ev.preventDefault) ev.preventDefault(); if (!ev.repeat) st.elternDruck = true; } });
+      elternKnopf.addEventListener('keyup', halt);
+      elternKnopf.addEventListener('contextmenu', function (ev) { if (ev.preventDefault) ev.preventDefault(); });
+      elternKnopf.addEventListener('click', function (ev) { if (ev.preventDefault) ev.preventDefault(); });
+    }
+    var elternRing = -1;
+    function zeigeEltern() {
+      if (!elternKnopf || !elternKnopf.style || !elternKnopf.style.setProperty) return;
+      var p = st.eltern ? 0 : Math.min(1, (st.elternHalt || 0) / ELTERN_HALT), r = Math.round(p * 20) / 20;
+      if (r === elternRing) return;
+      elternRing = r; elternKnopf.style.setProperty('--p', String(r));
+    }
+    function zeigeRuhig() {
+      if (st.ruhig === ruhigZuletzt) return;
+      ruhigZuletzt = st.ruhig;
+      if (rahmen && rahmen.classList) rahmen.classList.toggle('ruhig', !!st.ruhig);
+    }
     // ab v0.9: Bilderbuch-Knopf (Rezepte und Sticker). Ein Punkt am Knopf zeigt einen neuen Sticker an.
     var buchKnopf = doc.getElementById('buch-knopf'), buchPunkt = null;
     knopf(buchKnopf, function () { if (ton) ton.entsperre(); if (st.buch) schliesseBuch(st); else { st.menue = null; oeffneBuch(st); } });
@@ -787,10 +1072,11 @@
       var dpr = win.devicePixelRatio || 1;
       var cw = Dorf.Render.W * s + 'px', ch = Dorf.Render.H * s + 'px';
       canvas.style.width = cw; canvas.style.height = ch;
+      if (R.hudCanvas && R.hudCanvas.style) { R.hudCanvas.style.width = cw; R.hudCanvas.style.height = ch; }
       if (rahmen && rahmen.style && rahmen.style.setProperty) rahmen.style.setProperty('--s', String(s));
       if (ui) { ui.width = Math.round(Dorf.Render.W * s * dpr); ui.height = Math.round(Dorf.Render.H * s * dpr); ui.style.width = cw; ui.style.height = ch; R.uiSkala = s * dpr; }
       // Platz der Knoepfe oben rechts in internen Pixeln, damit der Hilfetext nicht darunter liegt
-      var bw = R.touch ? Math.max(36 / s, 11) : Math.max(26 / s, 9), anzahl = ((vollKnopf && vollGeht) ? 3 : 2) + (neuKnopf ? 1 : 0) + (buchKnopf ? 1 : 0) + (vorlesenKnopf && vorlesen && vorlesen.verfuegbar ? 1 : 0);
+      var bw = R.touch ? Math.max(36 / s, 11) : Math.max(26 / s, 9), anzahl = ((vollKnopf && vollGeht) ? 3 : 2) + (elternKnopf ? 1 : 0) + (buchKnopf ? 1 : 0) + (vorlesenKnopf && vorlesen && vorlesen.verfuegbar ? 1 : 0);
       R.knopfBreite = bw;
       R.obenBreite = Math.ceil(anzahl * bw + (anzahl - 1) * 2 + 2 + 3);
       R.knopfAnzahl = anzahl;
@@ -823,6 +1109,7 @@
       try {
         if (ton) {
           st.toene.forEach(function (n) { ton.spiele(n); });
+          if (st.musik && st.musik.length) { st.musik.forEach(function (m) { if (ton.instrument) ton.instrument(m.art, m.n); }); }
           var sp = st.spieler, kb = st.karte.brunnen, pool = st.karte.orte.pool[0];
           var dB = Math.hypot(sp.x - (kb.x * 16 + 16), sp.y - (kb.y * 16 + 16));
           var dP = pool ? Math.hypot(sp.x - pool.x * 16, sp.y - pool.y * 16) : 999;
@@ -830,7 +1117,7 @@
           ton.tageszeit(st.uhr.minute / 60, st.abend);
         }
       } catch (err) { ok = false; melde('Ton', err); }
-      st.toene.length = 0;
+      st.toene.length = 0; if (st.musik) st.musik.length = 0;
       // ab v0.8: neue Sprechblase vorlesen, sonst leise plappern (beides nur mit Ton)
       try {
         if (st.blase && st.blase.nr !== letzteBlase) {
@@ -840,7 +1127,7 @@
           if (!gelesen && ton && !stumm && !(vorlesen && vorlesen.spricht)) ton.spiele('plapper_' + String(st.blase.sprecher || 'biel').toLowerCase());
         }
         if (st.abend && vorlesen && vorlesen.spricht && !st.blase) vorlesen.stopp();
-        zeigeAktion(); zeigeBuch();
+        zeigeAktion(); zeigeBuch(); zeigeEltern(); zeigeRuhig();
       } catch (err) { ok = false; melde('Vorlesen', err); }
       try { Dorf.Render.zeichne(R, st); } catch (err) { ok = false; melde('Zeichnen', err); }
       try { st.eingabe.ende(); } catch (err) { ok = false; }
@@ -850,10 +1137,12 @@
       if (st.speichernJetzt || speicherUhr >= SPEICHER_TAKT) { try { sichere(); } catch (err) { speicherUhr = 0; } }
     }
     win.requestAnimationFrame(frame);
-    return { st: st, R: R, fehler: fehler, sichere: sichere, vorlesen: vorlesen, ton: ton };
+    return { st: st, R: R, fehler: fehler, sichere: sichere, vorlesen: vorlesen, ton: ton, zoom: Z };
   }
 
-  Dorf.Spiel = { STANDARD_SEED: STANDARD_SEED, VERSION: VERSION, KOCHDAUER: KOCHDAUER, PORTIONEN: PORTIONEN, erstelle: erstelle, schritt: schritt, sage: sage, klick: klick, klickBild: klickBild, kochen: kochen, streichle: streichle, tierPlatz: tierPlatz, oeffneMenue: oeffneMenue, zumHerd: zumHerd, frageAuf: frageAuf, neuAnfangen: neuAnfangen, rette: rette, naechstesZiel: naechstesZiel, kontext: kontext, tueKontext: tueKontext, sammle: sammle, FLUG_KORB: FLUG_KORB, AKTION_PULS: AKTION_PULS, AKTION_NAME: AKTION_NAME, FRAGE: FRAGE, ABEND_SPERRE: ABEND_SPERRE, LAMPEN: LAMPEN, TIPP_DAUER: TIPP_DAUER, SPEICHER_TAKT: SPEICHER_TAKT, menueKarten: menueKarten, MENUE: MENUE, TAFEL_MAX: TAFEL_MAX, starte: starte, ABEND: ABEND, abendHerzen: abendHerzen, BUCH: BUCH, BUCH_SEITEN: BUCH_SEITEN, ALBUM_SEITE: ALBUM_SEITE, MENUE_BUCH: MENUE_BUCH, oeffneBuch: oeffneBuch, schliesseBuch: schliesseBuch, blaettere: blaettere, WACKEL: WACKEL, MENUE_ZU: MENUE_ZU, gaehnen: gaehnen, GAEHN: GAEHN };
+  Dorf.Spiel = { STANDARD_SEED: STANDARD_SEED, VERSION: VERSION, KOCHDAUER: KOCHDAUER, PORTIONEN: PORTIONEN, erstelle: erstelle, schritt: schritt, sage: sage, klick: klick, klickBild: klickBild, kochen: kochen, streichle: streichle, tierPlatz: tierPlatz, oeffneMenue: oeffneMenue, zumHerd: zumHerd, frageAuf: frageAuf, neuAnfangen: neuAnfangen, rette: rette, naechstesZiel: naechstesZiel, kontext: kontext, tueKontext: tueKontext, sammle: sammle, FLUG_KORB: FLUG_KORB, AKTION_PULS: AKTION_PULS, AKTION_NAME: AKTION_NAME, FRAGE: FRAGE, ABEND_SPERRE: ABEND_SPERRE, LAMPEN: LAMPEN, TIPP_DAUER: TIPP_DAUER, SPEICHER_TAKT: SPEICHER_TAKT, menueKarten: menueKarten, MENUE: MENUE, TAFEL_MAX: TAFEL_MAX, starte: starte, ABEND: ABEND, abendHerzen: abendHerzen, BUCH: BUCH, BUCH_SEITEN: BUCH_SEITEN, ALBUM_SEITE: ALBUM_SEITE, MENUE_BUCH: MENUE_BUCH, oeffneBuch: oeffneBuch, schliesseBuch: schliesseBuch, blaettere: blaettere, WACKEL: WACKEL, MENUE_ZU: MENUE_ZU, gaehnen: gaehnen, GAEHN: GAEHN,
+    waehleProfil: waehleProfil, oeffneWahl: oeffneWahl, oeffneEltern: oeffneEltern, schliesseEltern: schliesseEltern, elternTat: elternTat, musiziere: musiziere,
+    wahlKarten: wahlKarten, ELTERN: ELTERN, ELTERN_HALT: ELTERN_HALT, ladeProfil: ladeProfil, heute: heute, tagGesperrt: tagGesperrt, HERZCHEN_MAX: HERZCHEN_MAX, NOTEN_MAX: NOTEN_MAX };
 
   if (typeof g.document !== 'undefined' && typeof g.window !== 'undefined' && g.document.getElementById) {
     g.window.addEventListener('load', function () { Dorf.Spiel.laufend = starte(g.document, g.window); });

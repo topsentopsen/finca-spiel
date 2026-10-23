@@ -68,22 +68,24 @@
     return true;
   }
 
-  function lade(sp) {
+  // ab v0.10: schluessel optional (jedes Profil hat seinen eigenen Spielstand, siehe profile.js)
+  function lade(sp, schluessel) {
     if (!sp) return null;
     try {
-      var roh = sp.getItem(SCHLUESSEL);
+      var roh = sp.getItem(schluessel || SCHLUESSEL);
       if (!roh || roh.length > 20000) return null;
       var d = JSON.parse(roh);
       return d && typeof d === 'object' && d.format === FORMAT ? d : null;
     } catch (e) { return null; }
   }
-  function schreibe(sp, st) {
+  function schreibe(sp, st, schluessel) {
     if (!sp) return false;
-    try { sp.setItem(SCHLUESSEL, JSON.stringify(daten(st))); return true; } catch (e) { return false; }
+    try { sp.setItem(schluessel || SCHLUESSEL, JSON.stringify(daten(st))); return true; } catch (e) { return false; }
   }
-  function loesche(sp) {
+  function loesche(sp, schluessel) {
     if (!sp) return false;
-    try { if (sp.removeItem) sp.removeItem(SCHLUESSEL); else sp.setItem(SCHLUESSEL, ''); return true; } catch (e) { return false; }
+    var k = schluessel || SCHLUESSEL;
+    try { if (sp.removeItem) sp.removeItem(k); else sp.setItem(k, ''); return true; } catch (e) { return false; }
   }
 
   Dorf.Speicher = { SCHLUESSEL: SCHLUESSEL, FORMAT: FORMAT, speicherVon: speicherVon, daten: daten, anwenden: anwenden, lade: lade, schreibe: schreibe, loesche: loesche };

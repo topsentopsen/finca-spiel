@@ -49,18 +49,19 @@
   }
   function neuerTag(st) { st.heute = {}; st.neuerSticker = null; }
 
-  function lade(sp) {
+  // ab v0.10: schluessel optional (ein Album pro Profil)
+  function lade(sp, schluessel) {
     try {
-      var roh = sp && sp.getItem(SCHLUESSEL); if (!roh) return {};
+      var roh = sp && sp.getItem(schluessel || SCHLUESSEL); if (!roh) return {};
       var d = JSON.parse(roh), a = {};
       if (!d || typeof d !== 'object') return {};
       LISTE.forEach(function (s) { var v = d[s.id]; if (typeof v === 'number' && isFinite(v) && v > 0) a[s.id] = Math.floor(v); });
       return a;
     } catch (e) { return {}; }
   }
-  function schreibe(sp, album) {
-    try { if (!sp) return false; sp.setItem(SCHLUESSEL, JSON.stringify(album || {})); return true; } catch (e) { return false; }
+  function schreibe(sp, album, schluessel) {
+    try { if (!sp) return false; sp.setItem(schluessel || SCHLUESSEL, JSON.stringify(album || {})); return true; } catch (e) { return false; }
   }
 
   Dorf.Sticker = { LISTE: LISTE, SCHLUESSEL: SCHLUESSEL, hole: hole, anzahl: anzahl, merke: merke, waehle: waehle, vergib: vergib, neuerTag: neuerTag, lade: lade, schreibe: schreibe };
-})(typeof window !== 'undefined' ? window : globalThis);
+})(globalThis);
