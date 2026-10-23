@@ -3,7 +3,7 @@
 'use strict';
 var fs = require('fs'), path = require('path'), vm = require('vm');
 
-var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'garten', 'glueck', 'gaeste', 'tiere', 'speicher', 'hinweise', 'render', 'ton', 'main'];
+var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'garten', 'glueck', 'gaeste', 'tiere', 'speicher', 'hinweise', 'vorlesen', 'render', 'ton', 'main'];
 
 function ladeKontext(extra) {
   var ctx = { console: console, Math: Math };
@@ -197,12 +197,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.7', function () {
+test('Version: sichtbares Label ist v0.8', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.7');
+  gleich(D.VERSION, 'v0.8');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.7') >= 0, 'Titel enthaelt v0.7');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.7') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.8') >= 0, 'Titel enthaelt v0.8');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.8') >= 0, n + ' eingebunden'); });
 });
 test('Debug: F1 ist frei, Debug liegt auf Backquote', function () {
   var D = ladeKontext().Dorf;
@@ -579,12 +579,13 @@ test('Gerichte: Gast nimmt sein Lieblingsgericht, Ensaïmada gibt Spiellaune, Tu
 });
 
 // ---------- Knoepfe, Touch und Vollbild (v0.3) ----------
-test('Knoepfe: Ton, Vollbild, Sprechen und Kochen im HTML, keine fremden Quellen', function () {
+test('Knoepfe: Ton, Vollbild, Vorlesen und ein Aktionsknopf im HTML, keine fremden Quellen', function () {
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  ['ton-knopf', 'vollbild-knopf', 'knopf-sprechen', 'knopf-kochen'].forEach(function (id) {
+  ['ton-knopf', 'vollbild-knopf', 'knopf-aktion', 'vorlesen-knopf'].forEach(function (id) {
     wahr(new RegExp('<button id="' + id + '"[^>]*aria-label="').test(html), id + ' mit Beschriftung');
   });
-  wahr(/>\s*Sprechen\s*</.test(html) && /<\/svg>\s*Kochen\s*</.test(html), 'Knoepfe sind beschriftet');
+  wahr(html.indexOf('knopf-sprechen') < 0 && html.indexOf('knopf-kochen') < 0, 'alte zwei Knoepfe sind weg');
+  ['reden', 'streicheln', 'fuettern', 'ernten', 'sammeln', 'kochen', 'weiter'].forEach(function (a) { wahr(html.indexOf('class="i-' + a + '"') >= 0, 'Bild fuer ' + a); });
   wahr(!/https?:\/\//.test(html.replace(/http:\/\/www\.w3\.org\/2000\/svg/g, '')), 'keine externen Adressen');
   DATEIEN.forEach(function (n) { wahr(!/https?:\/\//.test(fs.readFileSync(path.join(__dirname, '..', 'js', n + '.js'), 'utf8')), n + ' ohne Netz'); });
 });
@@ -597,7 +598,7 @@ test('Smoke: Taste M, Lautsprecher-Knopf, Touch-Knoepfe und Vollbild im Browser'
       klick: function () { (l.click || []).forEach(function (f) { f({ preventDefault: function () {} }); }); },
       width: 320, height: 176, getContext: function () { return fakeCtx(); }, getBoundingClientRect: function () { return { left: 0, top: 0, width: 640, height: 352 }; } };
   }
-  var els = {}; ['spiel', 'ui', 'rahmen', 'ton-knopf', 'vollbild-knopf', 'knopf-sprechen', 'knopf-kochen'].forEach(function (id) { els[id] = el(id); });
+  var els = {}; ['spiel', 'ui', 'rahmen', 'ton-knopf', 'vollbild-knopf', 'knopf-aktion', 'vorlesen-knopf'].forEach(function (id) { els[id] = el(id); });
   var voll = 0, queue = [], listener = {}, sp = fakeSpeicher();
   var win = {
     innerWidth: 640, innerHeight: 400, devicePixelRatio: 1, localStorage: sp, navigator: { maxTouchPoints: 5 },
@@ -622,14 +623,21 @@ test('Smoke: Taste M, Lautsprecher-Knopf, Touch-Knoepfe und Vollbild im Browser'
   els['ton-knopf'].klick();
   gleich(h.st.ton.stumm, false, 'Lautsprecher-Knopf schaltet wieder an'); gleich(els['ton-knopf'].attr['aria-pressed'], 'false');
   els['vollbild-knopf'].klick(); gleich(voll, 1, 'Vollbild angefragt');
-  els['knopf-kochen'].klick(); frames(1);
-  wahr(h.st.spieler.ziel, 'Kochknopf: Biel laeuft zum Herd');
-  frames(60 * 20);
-  wahr(h.st.menue, 'Kochmenue offen');
-  els['knopf-kochen'].klick(); frames(1);
-  wahr(h.st.kochen, 'Kochknopf waehlt');
-  els['knopf-sprechen'].klick(); frames(1);
-  wahr(h.st.blase, 'Sprechknopf wie Taste E');
+  // ab v0.8: ein Knopf, der das Passende tut. Am Herd: Menue, dann kochen
+  var herd = h.st.karte.orte.herd[0];
+  h.st.gaeste.forEach(function (g) { g.x = 2 * 16; g.y = 30 * 16; });
+  h.st.spieler.x = herd.x * 16 + 8; h.st.spieler.y = herd.y * 16 + 8; frames(2);
+  gleich(els['knopf-aktion'].attr['data-art'], 'kochen', 'Knopf zeigt Kochen');
+  els['knopf-aktion'].klick(); frames(1);
+  wahr(h.st.menue, 'Aktionsknopf am Herd oeffnet das Menue');
+  frames(30);
+  els['knopf-aktion'].klick(); frames(1);
+  wahr(h.st.kochen, 'Aktionsknopf im Menue waehlt');
+  frames(60 * 6);
+  var mia = h.st.gaeste[0]; mia.x = h.st.spieler.x + 10; mia.y = h.st.spieler.y; frames(2);
+  gleich(els['knopf-aktion'].attr['data-art'], 'reden', 'Knopf zeigt Reden');
+  els['knopf-aktion'].klick(); frames(1);
+  wahr(h.st.blase, 'Aktionsknopf wie Taste E');
 });
 test('Skalierung: kleines Handy bekommt krumme Skalierung statt winzig', function () {
   function fakeCtx() { return new Proxy({}, { get: function (t, k) { if (k in t) return t[k]; return function () { return { width: 4 }; }; }, set: function (t, k, v) { t[k] = v; return true; } }); }
@@ -653,7 +661,8 @@ test('Glueck: Herzen fuer Reden, Essen und Lieblingsgericht, mit Pause und Oberg
   st.zeit += 13;
   gleich(G.gib(st, mia, 'reden'), 1, 'nach der Pause wieder');
   gleich(st.toene.filter(function (t) { return t === 'herz'; }).length, 1, 'neues Herz klingt');
-  gleich(st.herzchen.length, 1, 'Herzchen steigt auf');
+  gleich(st.herzchen.filter(function (z) { return z.klein; }).length, 4, 'vier kleine Herzchen steigen auf');
+  gleich(st.herzFlug.length, 1, 'ein Herz fliegt zum Bild oben'); gleich(st.herzFlug[0].id, mia.id);
   var a = G.gib(st, mia, 'essen'), b = G.gib(st, mia, 'liebling');
   wahr(G.GRUND.liebling.menge > G.GRUND.essen.menge, 'Lieblingsgericht macht gluecklicher');
   wahr(a + b >= 1);
@@ -818,7 +827,7 @@ test('Garten: Beet mit Tomaten und Karotten, Orangenbaum und Oliven, alles reif 
     var ok = !k.blockiert(p.x, p.y) || [[0, 1], [1, 0], [-1, 0], [0, -1]].some(function (d) { return !k.blockiert(p.x + d[0], p.y + d[1]) && D.Pfad.suche(k, 19, 18, p.x + d[0], p.y + d[1]); });
     wahr(ok, p.art + ' erreichbar');
   });
-  gleich(JSON.stringify(st.vorrat), JSON.stringify({ tomate: 0, karotte: 0, orange: 0, olive: 0 }), 'Korb leer am Anfang');
+  gleich(JSON.stringify(st.vorrat), JSON.stringify({ tomate: 0, karotte: 0, orange: 0, olive: 0, ei: 0 }), 'Korb leer am Anfang');
 });
 test('Garten: Ernten mit E, waechst gemuetlich nach, voller Korb und neuer Tag', function () {
   var D = ladeKontext().Dorf, GA = D.Garten, st = D.Spiel.erstelle({ seed: 1 });
@@ -962,9 +971,11 @@ test('Drei Gaeste: Herzen im HUD, Korb, Menue mit Zutaten und Abend zeichnen ohn
   var namen = R.letzteHud.gaeste.map(function (g) { return g.name; });
   ['Mia', 'Jonas', 'Padrina'].forEach(function (n) { wahr(namen.indexOf(n) >= 0, n + ' im HUD'); });
   ['Mia', 'Jonas', 'Padrina'].forEach(function (n) { wahr(texte.indexOf(n) < 0, n + ' steht nicht als Text im HUD'); });
-  wahr(texte.indexOf('2') >= 0, 'Korb zeigt Anzahl');
+  gleich(R.letzteHud.korb.gezeigt.tomate, 2, 'Korb zeigt zwei Tomaten als Bild');
+  wahr(texte.indexOf('2') < 0, 'keine Ziffer im Korb');
   D.Spiel.sage(st, 'Padrina', 'Bon dia, fillet!'); texte.length = 0; D.Render.zeichne(R, st);
-  wahr(texte.indexOf('Padrina') >= 0);
+  wahr(texte.indexOf('Padrina') < 0, 'Sprechblase ohne Namen');
+  wahr(R.letzteBlase && R.letzteBlase.sprecher === 'Padrina' && R.letzteBlase.bilder.length >= 1, 'Bilderblase bei Padrina');
   D.Spiel.oeffneMenue(st); texte.length = 0; D.Render.zeichne(R, st);
   wahr(texte.indexOf('geht immer') >= 0, 'Pa amb oli geht immer');
   wahr(texte.indexOf('alles da') >= 0, 'Tumbet: Tomaten da');
@@ -1009,13 +1020,14 @@ function starteFake(o) {
       feuer: function (n, ev) { (l[n] || []).forEach(function (f) { f(ev); }); },
       width: 320, height: 176, getContext: function () { return o.ctx || fakeProxyCtx(zaehler); }, getBoundingClientRect: function () { return { left: 0, top: 0, width: 640, height: 352 }; } };
   }
-  var els = {}; ['spiel', 'ui', 'rahmen', 'ton-knopf', 'vollbild-knopf', 'knopf-sprechen', 'knopf-kochen', 'neu-knopf'].forEach(function (id) { els[id] = el(id); });
+  var els = {}; ['spiel', 'ui', 'rahmen', 'ton-knopf', 'vollbild-knopf', 'knopf-aktion', 'vorlesen-knopf', 'neu-knopf'].forEach(function (id) { els[id] = el(id); });
   var queue = [], listener = {}, docL = {}, sp = o.speicher || fakeSpeicher();
   var win = {
     innerWidth: 640, innerHeight: 400, devicePixelRatio: 1, localStorage: sp, location: { search: o.suche || '' },
     addEventListener: function (n, f) { (listener[n] = listener[n] || []).push(f); },
     requestAnimationFrame: function (f) { queue.push(f); }, setInterval: function () { return 1; }
   };
+  if (o.fenster) Object.keys(o.fenster).forEach(function (k) { win[k] = o.fenster[k]; });
   var doc = { getElementById: function (id) { return els[id] || null; }, documentElement: {}, addEventListener: function (n, f) { (docL[n] = docL[n] || []).push(f); }, hidden: false };
   if (o.leinwand) doc.createElement = function () { var c = el('neu'); c.getContext = function () { return fakeProxyCtx(zaehler); }; return c; };
   var warnungen = [];
@@ -1035,7 +1047,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.7'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.8'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -1411,7 +1423,8 @@ test('HUD ohne Lesen: Tagesbogen, Gesichter mit Herzen, Korb, kein Uhrzeit Text,
   var hud = p.R.letzteHud;
   gleich(hud.gaeste.length, 3); gleich(hud.gaeste[0].herzen, 5, 'Mia voll');
   wahr(p.log.texte.every(function (t) { return !/\d\d:\d\d/.test(t) && !/^Tag \d/.test(t); }), 'keine Uhrzeit, kein Tag als Text');
-  wahr(p.log.texte.indexOf('3') >= 0, 'Korb zeigt Zahl');
+  gleich(hud.korb.gezeigt.tomate, 3, 'Korb zeigt drei Tomaten als Bild');
+  wahr(p.log.texte.indexOf('3') < 0, 'keine Ziffer');
   // Tipp-Kreis bei jedem Tippen, verschwindet nach kurzer Zeit
   D.Spiel.klickBild(st, 100, 100, true);
   gleich(st.tipps.length, 1);
@@ -1432,6 +1445,282 @@ test('Tagesende: Kreis schliesst sich um Biel, danach Bona nit Bild, Neu-Frage o
   wahr(p.log.texte.indexOf('Bona nit! Tag geschafft') >= 0, 'dann die Abendszene');
   var src = require('fs').readFileSync(require('path').join(__dirname, '..', 'js', 'render.js'), 'utf8');
   wahr(!/kreuz\(c, k\.x/.test(src), 'Nein Knopf ohne Kreuz');
+});
+
+// ---------- v0.8: Figuren, Bilderblasen, ein Knopf, Herzflug, Korb, Huehner, Vorlesen ----------
+function wegMitGaesten(st) { st.gaeste.forEach(function (g) { g.x = -2000; g.y = -2000; }); }
+function stelle(st, x, y) { st.spieler.x = x; st.spieler.y = y; st.spieler.ziel = null; st.spieler.pfad = []; }
+test('Ein Knopf: Reihenfolge Gast, Tier, Ei vor Huhn, Pflanze, Ei, Herd, Menue, Abend', function () {
+  var D = ladeKontext().Dorf, S = D.Spiel, st = S.erstelle({ seed: 1 });
+  var mia = st.gaeste[0];
+  stelle(st, mia.x + 8, mia.y);
+  gleich(S.kontext(st).art, 'reden', 'Gast daneben: reden'); gleich(S.kontext(st).ziel, mia);
+  wegMitGaesten(st);
+  var esel = st.tiere.esel;
+  stelle(st, esel.x + 10, esel.y);
+  st.vorrat.karotte = 0; gleich(S.kontext(st).art, 'streicheln', 'Esel ohne Karotte: streicheln');
+  st.vorrat.karotte = 1; gleich(S.kontext(st).art, 'fuettern', 'Esel mit Karotte: fuettern');
+  var huhn = st.tiere.huehner[0], ei = st.tiere.eier[0];
+  wahr(ei, 'Morgens liegt ein Ei');
+  stelle(st, ei.x, ei.y + 4); huhn.x = ei.x + 6; huhn.y = ei.y;
+  gleich(S.kontext(st).art, 'sammeln', 'Ei geht vor dem Huhn daneben');
+  st.tiere.eier.length = 0;
+  gleich(S.kontext(st).art, 'streicheln', 'ohne Ei wird das Huhn gestreichelt');
+  st.tiere.huehner.forEach(function (h) { h.x = -2000; });
+  var pf = st.garten.liste.filter(function (p) { return p.reif; })[0], pp = D.Garten.punkt(pf);
+  stelle(st, pp.x, pp.y + 6);
+  if (D.Tiere.naechstes(st.tiere, st.spieler)) { esel.x = -2000; st.tiere.gecko.x = -2000; }
+  gleich(S.kontext(st).art, 'ernten', 'reife Pflanze: ernten');
+  var herd = st.karte.orte.herd[0];
+  stelle(st, herd.x * 16 + 8, herd.y * 16 + 8);
+  gleich(S.kontext(st).art, 'kochen', 'am Herd: kochen');
+  wahr(S.tueKontext(st, S.kontext(st)) && st.menue, 'Knopf oeffnet das Menue');
+  gleich(S.kontext(st).art, 'kochen', 'im Menue: waehlen');
+  st.menue = null; st.abend = true; gleich(S.kontext(st).art, 'weiter', 'Abend: weiter');
+  st.abend = false; st.frage = { wahl: 0, t: 0 }; gleich(S.kontext(st), null, 'Rueckfrage: Knopf ist weg');
+  st.frage = null;
+  // irgendwo im Gras ohne alles: nichts zu tun
+  var leer = null;
+  for (var y = 1; y < st.karte.h - 1 && !leer; y++) for (var x = 1; x < st.karte.w - 1 && !leer; x++) {
+    if (st.karte.blockiert(x, y)) continue;
+    stelle(st, x * 16 + 8, y * 16 + 8); if (!S.kontext(st)) leer = { x: x, y: y };
+  }
+  wahr(leer, 'es gibt Stellen ohne Aktion'); gleich(S.tueKontext(st, null), false);
+});
+test('Ein Knopf im Browser: Bild wechselt, ohne Ziel weg, pulst nur bis er benutzt wurde', function () {
+  var a = starteFake({ suche: '?touch=1' }), st = a.h.st, k = a.els['knopf-aktion'], S = a.D.Spiel;
+  wegMitGaesten(st);
+  st.tiere.liste.forEach(function (t) { t.x = -2000; }); st.tiere.eier.length = 0;
+  st.garten.liste.forEach(function (p) { p.reif = false; p.wachs = 0; });
+  stelle(st, 3 * 16 + 8, 18 * 16 + 8); a.frames(2);
+  if (S.kontext(st) === null) {
+    wahr(/\bleer\b/.test(k.className), 'ohne Ziel leer: ' + k.className);
+    gleich(k.attr['aria-hidden'], 'true');
+  }
+  var mia = st.gaeste[0]; mia.x = st.spieler.x + 8; mia.y = st.spieler.y; a.frames(2);
+  wahr(/art-reden/.test(k.className) && /\bpuls\b/.test(k.className), 'Reden mit Puls: ' + k.className);
+  gleich(k.attr['aria-label'], S.AKTION_NAME.reden);
+  for (var i = 0; i < S.AKTION_PULS; i++) { k.klick(); a.frames(2); st.blase = null; }
+  a.frames(2);
+  wahr(/art-reden/.test(k.className) && !/\bpuls\b/.test(k.className), 'nach dem Lernen kein Puls mehr: ' + k.className);
+});
+test('Huehner und Eier: zwei Huehner, Eier am Morgen, nie mehr als drei, gleich bei gleichem Seed', function () {
+  var D = ladeKontext().Dorf;
+  function lauf(seed) {
+    var st = D.Spiel.erstelle({ seed: seed }), max = 0, gelegt = 0;
+    for (var i = 0; i < 60 * 20 * 6; i++) { D.Spiel.schritt(st, 1 / 20); max = Math.max(max, st.tiere.eier.length); if (i === 2400) st.tiere.eier.length = 0; }
+    gelegt = st.tiere.eiNr - 2;
+    return { st: st, max: max, gelegt: gelegt, eier: JSON.stringify(st.tiere.eier.map(function (e) { return [e.x, e.y]; })), esel: [st.tiere.esel.x, st.tiere.esel.y].join(','), huhn: st.tiere.huehner.map(function (h) { return Math.round(h.x) + ',' + Math.round(h.y); }).join(' ') };
+  }
+  var st0 = D.Spiel.erstelle({ seed: 4 });
+  gleich(st0.tiere.huehner.length, 2); gleich(st0.tiere.eier.length, 2, 'zwei Eier am Morgen');
+  wahr(st0.tiere.huehner[0].feder !== st0.tiere.huehner[1].feder, 'ein weisses und ein braunes Huhn');
+  var a = lauf(4), b = lauf(4);
+  wahr(a.max <= D.Tiere.EIER_MAX, 'hoechstens drei Eier: ' + a.max);
+  wahr(a.gelegt >= 2, 'Huehner legen neue Eier: ' + a.gelegt);
+  gleich(a.eier, b.eier, 'gleicher Seed, gleiche Eier'); gleich(a.huhn, b.huhn, 'gleiche Huehnerwege'); gleich(a.esel, b.esel);
+  // Huehner haben eigenen Zufall: ohne Huehner laeuft Bruna genau gleich
+  var c = D.Spiel.erstelle({ seed: 4 }), d = D.Spiel.erstelle({ seed: 4 });
+  d.tiere.huehner.forEach(function (h) { h.lege = 1; });
+  for (var i = 0; i < 1200; i++) { D.Spiel.schritt(c, 1 / 20); D.Spiel.schritt(d, 1 / 20); }
+  gleich([c.tiere.esel.x, c.tiere.esel.y].join(','), [d.tiere.esel.x, d.tiere.esel.y].join(','), 'Esel unabhaengig von den Huehnern');
+  gleich(c.gaeste.map(function (g) { return Math.round(g.x); }).join(','), d.gaeste.map(function (g) { return Math.round(g.x); }).join(','), 'Gaeste unabhaengig');
+  // neuer Tag: wieder zwei frische Eier
+  D.Tiere.neuerTag(a.st.tiere, a.st.karte); gleich(a.st.tiere.eier.length, 2);
+  // Stall steht im Huehnerhof und ist nicht begehbar
+  wahr(st0.karte.stall && st0.karte.blockiert(st0.karte.stall.x, st0.karte.stall.y), 'Stall blockiert');
+});
+test('Ei sammeln: fliegt in den Korb, Korb fuellt sich sichtbar, ohne Ziffern, ab fuenf ein Plus', function () {
+  var D = ladeKontext().Dorf, S = D.Spiel, st = S.erstelle({ seed: 2 }), p = proxyR();
+  wegMitGaesten(st);
+  var ei = st.tiere.eier[0];
+  stelle(st, ei.x, ei.y + 4);
+  gleich(S.sammle(st, ei), 1);
+  gleich(st.vorrat.ei, 1); gleich(st.tiere.eier.indexOf(ei), -1, 'Ei liegt nicht mehr im Gras');
+  gleich(st.flieger.length, 1); gleich(st.flieger[0].art, 'ei');
+  wahr(st.blase && st.blase.bilder.indexOf('ei') >= 0, 'Biel zeigt ein Ei-Bild');
+  D.Render.zeichne(p.R, st);
+  gleich(p.R.letzteHud.korb.gezeigt.ei, 0, 'waehrend des Flugs noch nicht im Korb');
+  for (var i = 0; i < 40; i++) S.schritt(st, 1 / 60);
+  gleich(st.flieger.length, 0, 'gelandet'); wahr(st.korbPuls.ei > 0, 'Korbfach hopst');
+  D.Render.zeichne(p.R, st);
+  gleich(p.R.letzteHud.korb.gezeigt.ei, 1, 'jetzt liegt es im Korb');
+  st.vorrat.ei = 6; st.vorrat.tomate = 3; p.log.texte.length = 0;
+  D.Render.zeichne(p.R, st);
+  var k = p.R.letzteHud.korb;
+  gleich(k.gezeigt.ei, 4, 'hoechstens vier sichtbar'); wahr(k.plus.ei, 'Plus bei mehr'); wahr(!k.plus.tomate);
+  gleich(k.gezeigt.tomate, 3);
+  wahr(p.log.texte.every(function (t) { return !/^\d+$/.test(String(t)); }), 'keine Zahl im Bild: ' + p.log.texte.join('|'));
+  wahr(k.x < 40 && k.y > 120, 'Korb unten links');
+  // voller Korb: freundlich, das Ei bleibt liegen
+  st.vorrat.ei = D.Garten.VORRAT_MAX; var e2 = st.tiere.eier[0];
+  gleich(S.sammle(st, e2), 0); wahr(st.tiere.eier.indexOf(e2) >= 0);
+  // Tippen aufs Ei: Biel geht hin und hebt es auf
+  st.vorrat.ei = 0; stelle(st, e2.x - 60, e2.y);
+  S.klick(st, e2.x, e2.y - 3);
+  for (var j = 0; j < 60 * 8 && st.tiere.eier.indexOf(e2) >= 0; j++) S.schritt(st, 1 / 60);
+  gleich(st.tiere.eier.indexOf(e2), -1, 'nach dem Tippen eingesammelt'); gleich(st.vorrat.ei, 1);
+});
+test('Ei im Rezept: nie Pflicht, mit Ei gibt es einen Teller mehr, Pa amb oli braucht keins', function () {
+  var D = ladeKontext().Dorf, S = D.Spiel, Ga = D.Garten, Ge = D.Gerichte;
+  var v = { tomate: 0, karotte: 0, orange: 1, olive: 0, ei: 0 };
+  var z = Ga.pruefe(v, Ge.hole('ensaimada'));
+  wahr(z.ok && !z.bonus, 'Ensaimada geht ohne Ei');
+  v.ei = 1; z = Ga.pruefe(v, Ge.hole('ensaimada')); wahr(z.ok && z.bonus, 'mit Ei als Bonus');
+  v.orange = 0; z = Ga.pruefe(v, Ge.hole('ensaimada')); wahr(!z.ok && !z.fehlt.ei, 'fehlt nur die Orange, nie das Ei');
+  wahr(!Ga.pruefe(v, Ge.hole('paamboli')).bonus, 'Pa amb oli hat keinen Ei Bonus');
+  function koche(mitEi) {
+    var st = S.erstelle({ seed: 1 }); wegMitGaesten(st);
+    st.vorrat.tomate = 2; st.vorrat.ei = mitEi ? 1 : 0; st.teller.length = 0;
+    wahr(S.kochen(st, 'tumbet'), 'Tumbet kocht');
+    gleich(st.vorrat.ei, 0, 'Ei verbraucht oder nie da'); gleich(st.vorrat.tomate, 0);
+    for (var i = 0; i < 60 * 12 && st.kochen; i++) S.schritt(st, 1 / 60);
+    return st.teller.length;
+  }
+  gleich(koche(true), koche(false) + 1, 'mit Ei ein Teller mehr');
+  var st = S.erstelle({ seed: 1 }); st.vorrat.ei = 2; S.kochen(st, 'paamboli'); gleich(st.vorrat.ei, 2, 'Pa amb oli laesst die Eier im Korb');
+});
+test('Bilderblase: kein Name, keine Schrift, ploppt auf, bleibt im Bild, Wunschblase macht Platz', function () {
+  var D = ladeKontext().Dorf, S = D.Spiel, st = S.erstelle({ seed: 1 }), p = proxyR();
+  var mia = st.gaeste[0];
+  st.kamera.x = Math.max(0, mia.x - 160); st.kamera.y = Math.max(0, mia.y - 100);
+  S.sage(st, 'Mia', 'Bon dia! (Guten Morgen!)', 3, ['sonne', 'lachen']);
+  D.Render.zeichne(p.R, st);
+  var b = p.R.letzteBlase;
+  wahr(b, 'Blase gezeichnet'); gleich(b.sprecher, 'Mia'); gleich(b.bilder.join(','), 'sonne,lachen');
+  nah(b.skala, 0.6, 1e-9, 'startet klein');
+  wahr(p.log.texte.every(function (t) { return !/Mia|Bon dia|Guten/.test(String(t)); }), 'weder Name noch Satz als Text');
+  wahr(b.x >= 2 && b.x + b.w <= D.Render.W - 2 && b.y >= 2, 'im Bild');
+  S.schritt(st, 0.15); D.Render.zeichne(p.R, st); nah(p.R.letzteBlase.skala, 1.05, 0.02, 'kurz etwas groesser');
+  S.schritt(st, 0.2); D.Render.zeichne(p.R, st); gleich(p.R.letzteBlase.skala, 1, 'dann normal');
+  wahr(p.R.letzteHud.gaeste[0].spricht && p.R.letzteHud.gaeste[0].skala > 1.1, 'Bild von Mia oben leuchtet');
+  // Biel ganz oben am Rand: Blase weicht zur Seite aus, nicht unter die Leiste
+  stelle(st, 10 * 16, 2 * 16 + 12); st.kamera.y = 0; st.kamera.x = 0;
+  S.sage(st, 'Biel', 'Hallo', 3, ['herz', 'herz', 'stern', 'mond']);
+  D.Render.zeichne(p.R, st); b = p.R.letzteBlase;
+  gleich(b.bilder.length, 3, 'hoechstens drei Bilder'); var hudR = 60 + st.gaeste.length * 36 - 14;
+  wahr(b.y >= 30 || (b.x >= hudR && b.y >= 12), 'nicht unter Gesichtern oder Hilfe: ' + b.x + ',' + b.y);
+  wahr(b.seite !== 0 && b.y <= 2 * 16 + 12, 'neben dem Kopf, nicht weit darunter: ' + b.y);
+  // Sprecher oben links unter den Gesichtern: Blase bleibt unter der Leiste
+  stelle(st, 3 * 16, 1 * 16 + 12); S.sage(st, 'Biel', 'Hallo', 3, ['herz']); D.Render.zeichne(p.R, st); b = p.R.letzteBlase;
+  wahr(b.x >= hudR || b.y >= 30, 'nicht unter den Gesichtern: ' + b.x + ',' + b.y);
+  // jedes Bild, das das Spiel benutzt, kann gezeichnet werden
+  var quelle = fs.readFileSync(path.join(__dirname, '..', 'js', 'main.js'), 'utf8') + fs.readFileSync(path.join(__dirname, '..', 'js', 'gaeste.js'), 'utf8') + fs.readFileSync(path.join(__dirname, '..', 'js', 'tiere.js'), 'utf8');
+  var bilder = {};
+  (quelle.match(/\[('[a-z:]+'(?:,\s*'[a-z:]+')*)\]/g) || []).forEach(function (m) { (m.match(/'[a-z:]+'/g) || []).forEach(function (w) { bilder[w.slice(1, -1)] = 1; }); });
+  ['gericht:paamboli', 'gericht:tumbet', 'gericht:ensaimada', 'ei', 'huhn', 'korb', 'sonne', 'teller', 'topf'].forEach(function (n) { wahr(D.Render.kenntSymbol(n), n + ' bekannt'); });
+  Object.keys(D.Gaeste.FREI_BILDER).forEach(function (id) { D.Gaeste.FREI_BILDER[id].forEach(function (l) { l.forEach(function (n) { wahr(D.Render.kenntSymbol(n), 'Bild ' + n); }); }); });
+  Object.keys(D.Tiere.BILDER).forEach(function (n) { D.Tiere.BILDER[n].forEach(function (x) { wahr(D.Render.kenntSymbol(x), 'Tierbild ' + x); }); });
+  wahr(Object.keys(bilder).length > 10);
+});
+test('Herzflug: Herzchen steigen, ein Herz fliegt zum Bild oben, erst dann zaehlt es, Bild ploppt', function () {
+  var D = ladeKontext().Dorf, S = D.Spiel, st = S.erstelle({ seed: 3 }), p = proxyR(), mia = st.gaeste[0];
+  var vorher = D.Glueck.herzen(mia);
+  mia.glueck = (vorher + 1) * D.Glueck.PRO_HERZ - 1;
+  var neu = 0; for (var i = 0; i < 5 && !neu; i++) { neu = D.Glueck.gib(st, mia, 'liebling'); st.zeit += 30; }
+  wahr(neu >= 1, 'neues Herz'); var n = D.Glueck.herzen(mia);
+  gleich(st.herzFlug.length, neu); wahr(mia.hop > 0, 'Mia huepft');
+  wahr(st.herzchen.length <= 40, 'hoechstens 40 Teilchen');
+  D.Render.zeichne(p.R, st);
+  gleich(p.R.letzteHud.gaeste[0].gezeigt, n - neu, 'oben noch das alte Herz');
+  for (var k = 0; k < 120 && st.herzFlug.length; k++) S.schritt(st, 1 / 60);
+  gleich(st.herzFlug.length, 0, 'angekommen'); wahr(st.chipPuls[mia.id] > 0, 'Bild ploppt');
+  S.schritt(st, 0.1); D.Render.zeichne(p.R, st);
+  gleich(p.R.letzteHud.gaeste[0].gezeigt, n); wahr(p.R.letzteHud.gaeste[0].skala > 1, 'groesser beim Ankommen');
+  for (k = 0; k < 40; k++) S.schritt(st, 1 / 60);
+  D.Render.zeichne(p.R, st); gleich(p.R.letzteHud.gaeste[0].skala, 1, 'dann wieder normal');
+  // tausend Herzen auf einmal: Teilchen bleiben begrenzt
+  st.gaeste.forEach(function (g) { g.glueck = 0; g.glueckPause = {}; });
+  for (var j = 0; j < 200; j++) { st.zeit += 30; st.gaeste.forEach(function (g) { D.Glueck.gib(st, g, 'liebling'); }); }
+  wahr(st.herzchen.length <= 40, 'Teilchen begrenzt: ' + st.herzchen.length);
+});
+test('Neue Figuren: jede Figur eigene Form, gezeichnet ohne Fehler in allen Richtungen', function () {
+  var D = ladeKontext().Dorf, Rn = D.Render, st = D.Spiel.erstelle({ seed: 1 }), p = proxyR();
+  var formen = [Rn.BIEL].concat(st.gaeste.map(function (g) { return g.aussehen; }));
+  var hoehen = formen.map(function (a) { return Rn.masse(a).hoehe; });
+  wahr(hoehen[1] < hoehen[0] && hoehen[1] < hoehen[2], 'Mia ist die Kleinste: ' + hoehen.join(','));
+  gleich(formen.map(function (a) { return a.form; }).join(','), 'biel,mia,jonas,padrina');
+  formen.forEach(function (a) { ['unten', 'oben', 'links', 'rechts'].forEach(function (d) { [0, 1, 2, 3].forEach(function (f) {
+    var r = Rn.zeichnePerson(p.R.ctx, 100, 100, a, d, f, { zeit: f * 0.3, hop: f % 2 });
+    wahr(r && r.oben < 100 && r.hoehe > 10, a.form + ' ' + d);
+  }); }); });
+  wahr(st.gaeste[2].aussehen.stock && st.gaeste[2].aussehen.rock, 'Padrina mit Stock und Rock');
+  wahr(st.gaeste[1].aussehen.brille, 'Jonas mit Brille');
+});
+test('Vorlesen: ohne Stimme still, deutsche Stimme ruhig, erst nach dem ersten Tippen, stumm heisst still', function () {
+  var V = ladeKontext().Dorf.Vorlesen;
+  function fakeSS(stimmen) {
+    var log = { gesagt: [], cancel: 0 };
+    return { log: log, ss: { getVoices: function () { return stimmen; }, cancel: function () { log.cancel++; }, speak: function (u) { log.gesagt.push(u); }, addEventListener: function () {} } };
+  }
+  function U(t) { this.text = t; }
+  function fenster(ss) { var l = {}; return { l: l, speechSynthesis: ss, SpeechSynthesisUtterance: U, addEventListener: function (n, f) { (l[n] = l[n] || []).push(f); } }; }
+  // gar nichts da
+  var v0 = V.erstelle({}, fakeSpeicher());
+  gleich(v0.verfuegbar, false); gleich(v0.sage('Hallo', 'Biel', false), false); v0.stopp(); v0.umschalten();
+  wahr(!V.erstelle(null, null).verfuegbar, 'ohne Fenster kein Fehler');
+  // nur englische Stimme
+  var en = fakeSS([{ lang: 'en-US', name: 'X' }]);
+  gleich(V.erstelle(fenster(en.ss), fakeSpeicher()).verfuegbar, false, 'ohne deutsche Stimme kein Knopf');
+  // deutsche Stimme
+  var de = fakeSS([{ lang: 'en-US' }, { lang: 'de-AT', localService: true }, { lang: 'de-DE', localService: true, name: 'Anna' }]), w = fenster(de.ss), sp = fakeSpeicher();
+  var v = V.erstelle(w, sp);
+  wahr(v.verfuegbar && v.an, 'verfuegbar und an'); gleich(v.stimme.name, 'Anna', 'Stimme aus Deutschland');
+  gleich(v.sage('Hallo', 'Biel', false), false, 'nicht vor dem ersten Tippen');
+  w.l.pointerdown[0]();
+  wahr(v.sage('Bon dia! (Guten Morgen!)', 'Mia', false), 'jetzt liest es');
+  var u = de.log.gesagt[0];
+  gleich(u.text, 'Bon dia! Guten Morgen!'); gleich(u.lang, 'de-DE'); wahr(u.rate < 1, 'ruhig'); wahr(u.pitch > 1, 'Mia etwas hoeher');
+  var c0 = de.log.cancel;
+  gleich(v.sage('Noch was', 'Jonas', true), false, 'stumm: nichts'); wahr(de.log.cancel > c0, 'stumm haelt an');
+  v.setze(false); gleich(sp.d['finca.vorlesen'], 'aus', 'gemerkt'); gleich(v.sage('x', 'Biel', false), false);
+  gleich(V.erstelle(w, sp).an, false, 'beim naechsten Mal aus'); v.setze(true); gleich(V.erstelle(w, sp).an, true);
+  var lang = V.saeubere(new Array(60).join('Ein Satz ')); wahr(lang.length <= V.MAX_ZEICHEN + 1, 'kurz');
+  gleich(V.saeubere('Ein Ei! (ou) Das kommt in den Korb.'), 'Ein Ei! ou. Das kommt in den Korb.');
+  // kaputte Stimme wirft: Spiel laeuft weiter
+  var kaputt = fenster({ getVoices: function () { return [{ lang: 'de-DE' }]; }, cancel: function () { throw new Error('x'); }, speak: function () { throw new Error('y'); } });
+  var vk = V.erstelle(kaputt, fakeSpeicher()); kaputt.l.click[0]();
+  gleich(vk.sage('Hallo', 'Biel', false), false, 'Fehler werden geschluckt');
+});
+test('Vorlesen im Spiel: Knopf nur mit Stimme, Ton aus heisst nicht vorlesen, Knopf holt den Ton zurueck', function () {
+  var gesagt = [], cancel = 0;
+  function U(t) { this.text = t; }
+  var ss = { getVoices: function () { return [{ lang: 'de-DE', localService: true }]; }, cancel: function () { cancel++; }, speak: function (u) { gesagt.push(u.text); } };
+  var au = fakeAudio();
+  var a = starteFake({ fenster: { speechSynthesis: ss, SpeechSynthesisUtterance: U, AudioContext: au.AC } });
+  var st = a.h.st, kn = a.els['vorlesen-knopf'];
+  a.frames(2);
+  gleich(kn.style.display, '', 'Knopf sichtbar');
+  (a.listener.pointerdown || []).forEach(function (f) { f({}); });
+  var ton = a.h.ton;
+  wahr(ton && !ton.stumm, 'Ton an');
+  a.D.Spiel.sage(st, 'Biel', 'Hallo Bruna.', 3, ['esel', 'herz']); a.frames(2);
+  gleich(gesagt[gesagt.length - 1], 'Hallo Bruna.', 'vorgelesen');
+  // Ton aus: Vorlesen haelt an und liest nichts Neues
+  var c0 = cancel; ton.umschalten(); a.frames(1); wahr(cancel > c0, 'Stummschalten stoppt die Stimme');
+  var n0 = gesagt.length; a.D.Spiel.sage(st, 'Biel', 'Psst.', 3); a.frames(2); gleich(gesagt.length, n0, 'stumm: nichts vorgelesen');
+  wahr(/\bstumm\b/.test(kn.className), 'Knopf zeigt stumm');
+  // Vorlesen-Knopf bei Ton aus: Ton kommt mit an
+  kn.klick(); a.frames(1); gleich(ton.stumm, false, 'Ton wieder an'); wahr(st.vorlesen.an);
+  kn.klick(); a.frames(1); gleich(st.vorlesen.an, false, 'Vorlesen aus'); gleich(a.sp.d['finca.vorlesen'], 'aus');
+  n0 = gesagt.length; a.D.Spiel.sage(st, 'Biel', 'Leise.', 3); a.frames(2); gleich(gesagt.length, n0, 'aus: nichts vorgelesen');
+  // ohne Stimme: Knopf weg, Spiel laeuft
+  var b = starteFake(); b.frames(3);
+  gleich(b.els['vorlesen-knopf'].style.display, 'none', 'ohne Stimme kein Knopf');
+  wahr(!b.h.st.vorlesen || !b.h.st.vorlesen.verfuegbar);
+});
+test('Tagesgrenze v0.8: mit Huehnern, Eiern, Knopf und Herzflug endet der Tag spaetestens nach 15 Minuten', function () {
+  var D = ladeKontext().Dorf, S = D.Spiel, st = S.erstelle({ seed: 8 }), sek = 0, r = D.RNG.erstelle(5), gesammelt = 0;
+  st.uhr.mindestMinuten = st.uhr.mindestMinuten;
+  while (!st.abend && sek < 1200) {
+    if (r.next() < 0.02) { var k = S.kontext(st); if (k && k.art === 'sammeln') gesammelt++; S.tueKontext(st, k); }
+    if (r.next() < 0.01 && st.menue) S.kochen(st, D.Gerichte.REIHE[Math.floor(r.next() * 3)]);
+    if (r.next() < 0.005) { var e = st.tiere.eier[0]; if (e) S.klick(st, e.x, e.y - 3); }
+    // die Uhr wird angehalten (als wuerde das Kind die ganze Zeit Fragen offen lassen)
+    if (st.uhr.minute > 20 * 60) st.uhr.minute = 20 * 60;
+    S.schritt(st, 0.05); sek += 0.05;
+  }
+  wahr(st.abend, 'Abend erreicht'); wahr(sek <= 15 * 60 + 0.1, 'nach ' + Math.round(sek) + ' s');
 });
 
 // ---------- Ausfuehren ----------

@@ -272,6 +272,14 @@
       else if (name === 'hmm') { ton(392, j, 0.18, 0.03, 'triangle', 349.2); ton(349.2, j + 0.2, 0.26, 0.025, 'triangle', 392); }
       else if (name === 'licht') { ton(1568, j, 0.5, 0.016); ton(2349.3, j + 0.07, 0.6, 0.011); }   // ab v0.7: eine Laterne geht an
       else if (name === 'plopp') ton(988, j, 0.08, 0.025, 'sine', 1480);
+      // ab v0.8: Huhn gackert, ein Ei liegt im Gras, Plappern zur Sprechblase (wenn nicht vorgelesen wird)
+      else if (name === 'gack') { ton(740, j, 0.07, 0.03, 'triangle', 620); ton(784, j + 0.1, 0.07, 0.03, 'triangle', 660); ton(988, j + 0.22, 0.12, 0.028, 'triangle', 700); }
+      else if (name === 'ei') { ton(1175, j, 0.1, 0.022, 'sine', 1568); ton(1568, j + 0.09, 0.3, 0.016); }
+      else if (name.indexOf('plapper_') === 0) {
+        var PL = { mia: [880, 0.075], jonas: [262, 0.1], padrina: [392, 0.15], biel: [523, 0.09] }[name.slice(8)];
+        if (!PL) return false;
+        [0, 1, 2, 3].forEach(function (k) { var f = PL[0] * [1, 1.12, 0.94, 1.06][k]; ton(f, j + k * PL[1], PL[1] * 0.8, 0.018, 'triangle', f * 0.92); });
+      }
       else if (name === 'neu') { [783.99, 659.25, 523.25, 659.25, 783.99].forEach(function (f, i) { ton(f, j + i * 0.11, 0.5, 0.03); }); }
       else if (name === 'feier') { [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach(function (f, i) { ton(f, j + i * 0.16, 1.1, 0.04); }); }
       else if (name === 'nacht') { ton(783.99, j, 1.0, 0.035); ton(659.25, j + 0.3, 1.0, 0.03); ton(523.25, j + 0.6, 1.4, 0.03); }

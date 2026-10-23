@@ -1,6 +1,6 @@
 /* Hinweise ohne Lesen (ab v0.6): Tobis Kinder koennen noch nicht lesen. Wenn eine Weile nichts passiert,
    zeigt eine huepfende Hand mit pulsierendem Ring und einem kleinen Bild, was man als Naechstes tun kann:
-   Sprechblase = mit einem Gast reden, Frucht = ernten, Topf = kochen, Karotte = Bruna fuettern, Sonne = neuer Tag.
+   Sprechblase = mit einem Gast reden, Frucht = ernten, Topf = kochen, Karotte = Bruna fuettern, Ei = Ei einsammeln, Sonne = neuer Tag.
    Beim ersten Mal kommt der Hinweis schnell, wenn etwas schon oft geklappt hat, erst nach laengerer Pause. */
 (function (g) {
   'use strict';
@@ -69,6 +69,9 @@
     // abwechselnd: wer weniger Herzen hat, bekommt zuerst Besuch, sonst Garten
     if (traurig && (!pf || (traurig.glueck || 0) <= 40)) return { art: 'reden', x: traurig.x, y: traurig.y - (Dorf.Gaeste.sitzt(traurig) ? 14 : 0) - 28, bild: 'reden', gast: traurig };
     if (pf) return pflanzenZiel(pf);
+    // ab v0.8: noch kein Ei im Korb, aber im Gras liegt eins
+    var eier = (st.tiere && st.tiere.eier) || [];
+    if (!V.ei && eier.length) { var e0 = eier[0]; return { art: 'sammeln', x: e0.x, y: e0.y - 16, bild: 'ei', ei: e0 }; }
     if (traurig) return { art: 'reden', x: traurig.x, y: traurig.y - (Dorf.Gaeste.sitzt(traurig) ? 14 : 0) - 28, bild: 'reden', gast: traurig };
     return null;
   }

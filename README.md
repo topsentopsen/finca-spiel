@@ -1,4 +1,4 @@
-# Finca v0.7
+# Finca v0.8
 
 A small browser game with a handheld look, written in pure JavaScript. There is no build, no npm and there are no external assets. Music and sounds are generated in code with WebAudio.
 
@@ -17,13 +17,15 @@ Optional: `index.html?seed=12345` uses a different seed for flowers and guest de
 | Click / tap Bruna with a carrot in the basket | Feed her the carrot: she munches happily and nearby guests get an extra heart |
 | Click / tap the stove | Walk to the stove and open the cooking menu |
 | Arrow keys / WASD | Walk as Biel (cancels a click path) |
-| E | Talk to a nearby guest, pet or feed a nearby animal, harvest a nearby plant, open the cooking menu at the stove, or close the dialog |
+| E | Do the fitting action nearby: pick up an egg, talk to a nearby guest, pet or feed a nearby animal, harvest a nearby plant, open the cooking menu at the stove, or close the dialog |
 | K | Cook: walk to the stove and open the cooking menu (press again to confirm) |
 | In the cooking menu | 1, 2, 3 or tap a card to cook; arrow keys and E / Enter to choose; Esc or tap outside to go back |
 | Round arrow button (top right) | Start over: a friendly question with two big picture buttons, "Nein" is preselected (arrows and Enter, or Esc to close) |
 | M or speaker button (top right) | Music and sounds on or off (saved in the browser) |
 | Fullscreen button (top right) | Fullscreen on or off |
-| Sprechen / Kochen buttons | Big round buttons on phones and tablets, same as E and K |
+| Action button | One big round button on phones and tablets (bottom right). Its picture shows what it will do right now (egg, talk, pet, harvest, cook) and it does exactly that, same as E |
+| Click / tap a hen or an egg | Walk there and collect the egg into the basket |
+| Read aloud button (top right) | Only shown if the browser has a German voice. Short calm lines are read aloud; off when the sound is off, pressing it while muted turns the sound back on (saved in the browser) |
 | Enter / Space / tap | Close the dialog; after "Bona nit!" start the next day |
 | Backquote (the key left of 1) | Toggle the debug overlay (FPS, seed, needs, paths) |
 
@@ -103,15 +105,17 @@ Developer helpers: `?start=x,y` places Biel on a tile, `?debug=1` opens the debu
 - `js/hinweise.js` – picture hints for children who cannot read yet (what to do next, when to show it)
 - `js/render.js` – drawing (cached background, tiles, sprites, HUD, hints, dialog, debug)
 - `js/ton.js` – WebAudio music (plucked guitar-like loop in A minor, 66 BPM, Karplus-Strong) and soft sound effects, evening variant with crossfade, crickets at night, mute toggle
+- `js/vorlesen.js` – optional read aloud with the browser's built in speechSynthesis (German voice only, slow and calm, only after the first tap, silent when muted)
 - `js/main.js` – game loop with error guard, cooking menu, start over question, saving, buttons, fullscreen
 
 ## Tests
 ```
 node tests/run.js
 ```
-Uses only Node's built-in `vm` module. Nothing has to be installed. 85 tests, including a ten day soak test with random taps, keys, start over questions and a save and load every day.
+Uses only Node's built-in `vm` module. Nothing has to be installed. 96 tests, including a ten day soak test with random taps, keys, start over questions and a save and load every day.
 
 ## Version history
+- **v0.8** (23.10.2026): redrawn figures with their own shapes (Mia small with pigtails, Jonas broad with glasses, Padrina with a bun, skirt and walking stick, Biel with a straw hat), a small hop while talking. Speech bubbles show only pictures, no names and no text, and pop in next to the speaker; the speaker's face at the top glows. One context button on touch devices whose picture shows the fitting action. Hearts fly from the guest up to their face before they count, and the basket in the bottom left visibly fills with the harvested items. Hens with a little coop lay eggs; an egg is a new ingredient that is never required: in Ensaïmada and Tumbet it adds one extra plate. Optional read aloud with the browser's own German voice. The 15 minute day limit stays and is tested again with hens, eggs and flying hearts.
 - **v0.7** (23.10.2026): new look after a design review. Calmer pastel palette with darker, quieter ground and stronger character colors, outlines in the color of each object, silver green olive trees, a wooden frame around the garden bed, sparse courtyard stones and a stone ring around the well. Light is now multiplied with a color per time of day, and at dusk windows, five lanterns, the stove and a little lantern in Biel's hand glow. Text free HUD with day arc, guest faces and hearts. Biel with a straw hat and a ring under his feet, tap ring, rounded system font, round buttons with colored rims, a play triangle instead of a green cross on "Nein". Hard limit of 15 real minutes per game day with a visible dusk and a closing circle before "Bona nit".
 - **v0.6** (23.10.2026): polish and stability. Saved game in the browser (day, hearts, basket, clock, garden, table) with a format number, gentle "Neu anfangen" button with a picture question, sound setting kept. Picture hints for children who cannot read yet: pulsing arrow with an icon bubble after a short pause, thought bubble for missing ingredients, fruit flying into the basket, wiggling unripe plants, pulsing sun in the evening, new soft sounds. Error guard so the loop never freezes, evening tap lock, double tap filter, bigger touch buttons and a layout for small phones held sideways. Background drawn once and cached. Rounder Padrina with a pink hair band. Ten day soak test.
 - **v0.5** (23.10.2026): small garden bed with tomatoes and carrots plus an orange tree and olive trees, harvest by click, tap or E, plants grow back gently during the day and are all ripe again each morning. Dishes use ingredients but stay forgiving: Pa amb oli always works from a small basic stock, fresh ingredients give an extra plate. Feed Bruna carrots for a cute munching reaction and an extra heart for nearby guests. Third guest Padrina, a grandmother who loves the couch and Pa amb oli, with her own sayings; the daily goal now counts all three guests.

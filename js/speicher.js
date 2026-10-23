@@ -24,7 +24,7 @@
       var b = gs.beduerfnisse;
       d.gaeste[gs.id] = { glueck: Math.round(gs.glueck || 0), satt: Math.round(b.satt), spielen: Math.round(b.spielen), ruhe: Math.round(b.ruhe) };
     });
-    Dorf.Garten.REIHE.forEach(function (a) { d.vorrat[a] = st.vorrat[a] || 0; });
+    Dorf.Garten.ZUTATEN.forEach(function (a) { d.vorrat[a] = st.vorrat[a] || 0; });
     st.garten.liste.forEach(function (p) { d.garten.push(p.reif ? 1 : Math.round(p.wachs * 100) / 100); });
     if (st.ton) d.stumm = !!st.ton.stumm;
     return d;
@@ -47,7 +47,7 @@
       b.satt = zahl(x.satt, 0, 100, b.satt); b.spielen = zahl(x.spielen, 0, 100, b.spielen);
       if (b.ruhe !== undefined) b.ruhe = zahl(x.ruhe, 0, 100, b.ruhe);
     });
-    if (d.vorrat && typeof d.vorrat === 'object') Dorf.Garten.REIHE.forEach(function (a) { st.vorrat[a] = Math.floor(zahl(d.vorrat[a], 0, MAXV, 0)); });
+    if (d.vorrat && typeof d.vorrat === 'object') Dorf.Garten.ZUTATEN.forEach(function (a) { st.vorrat[a] = Math.floor(zahl(d.vorrat[a], 0, MAXV, 0)); });
     if (Array.isArray(d.garten)) st.garten.liste.forEach(function (p, i) {
       var w = zahl(d.garten[i], 0, 1, 1); p.wachs = w; p.reif = w >= 1;
     });
@@ -60,6 +60,7 @@
       st.gaeste.forEach(function (gs) { gs.beduerfnisse.satt = 60; if (gs.beduerfnisse.ruhe !== undefined) gs.beduerfnisse.ruhe = 80; });
       if (G) G.neuerTag(st);
       Dorf.Garten.neuerTag(st.garten);
+      if (Dorf.Tiere && Dorf.Tiere.neuerTag) Dorf.Tiere.neuerTag(st.tiere, st.karte);
     }
     return true;
   }

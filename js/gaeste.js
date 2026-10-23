@@ -10,12 +10,12 @@
 
   var DEFS = {
     mia: { name: 'Mia', alter: 7, liebling: 'ensaimada', profil: { satt: 1.3, spielen: 1.4, ruhe: 0.6 }, start: { satt: 55, spielen: 45, ruhe: 85 },
-      aussehen: { kind: true, haut: '#f3c29b', haar: '#e07a4a', haarGlanz: '#f0a070', bart: null, zoepfe: true, hemd: '#ff7fa6', hemd2: '#e45f8a', hose: '#ff7fa6', schuhe: '#ffffff', farbe: '#ff7fa0' } },
+      aussehen: { form: 'mia', kind: true, haut: '#f3c29b', haar: '#e07a4a', haarGlanz: '#f0a070', bart: null, zoepfe: true, hemd: '#ff7fa6', hemd2: '#e45f8a', hose: '#ff7fa6', schuhe: '#ffffff', farbe: '#ff7fa0' } },
     jonas: { name: 'Jonas', alter: 41, liebling: 'tumbet', profil: { satt: 1.0, spielen: 0.8, ruhe: 1.2 }, start: { satt: 34, spielen: 70, ruhe: 50 },
-      aussehen: { kind: false, haut: '#eab48c', haar: '#9a6a3e', bart: null, hemd: '#4fc0b0', hemd2: '#33998e', hose: '#d9b77a', schuhe: '#5a4a44', farbe: '#4fb594' } },
+      aussehen: { form: 'jonas', kind: false, haut: '#eab48c', haar: '#9a6a3e', haarGlanz: '#c08a58', bart: null, brille: '#4a3560', hemd: '#4fc0b0', hemd2: '#33998e', hose: '#d9b77a', schuhe: '#5a4a44', farbe: '#4fb594' } },
     // ab v0.5: Padrina, die Oma. Liebt das Sofa, geht gemuetlich und mag Pa amb oli wie frueher
     padrina: { name: 'Padrina', alter: 78, liebling: 'paamboli', tempo: 28, profil: { satt: 0.9, spielen: 0.4, ruhe: 1.6 }, start: { satt: 50, spielen: 80, ruhe: 42 },
-      aussehen: { kind: false, haut: '#f0c4a4', haar: '#cfc8da', haarGlanz: '#f4f1f8', bart: null, dutt: true, brille: '#7a5a9a', hemd: '#b9a3f5', hemd2: '#8a6fc8', hose: '#5a4370', schuhe: '#7a6a8a', farbe: '#a77fd6' } }
+      aussehen: { form: 'padrina', kind: false, stock: true, rock: '#8a6fc8', haut: '#f0c4a4', haar: '#cfc8da', haarGlanz: '#f4f1f8', bart: null, dutt: true, brille: '#7a5a9a', hemd: '#b9a3f5', hemd2: '#8a6fc8', hose: '#5a4370', schuhe: '#7a6a8a', farbe: '#a77fd6' } }
   };
   var REIHE = ['mia', 'jonas', 'padrina'];
 
@@ -168,13 +168,36 @@
       frei: ['Bon dia, fillet! (Guten Morgen, mein Kleiner!)', 'Hast du schon die Tomaten im Garten gesehen?', 'Bruna ist ein gutes Eselchen.', 'Poc a poc. (Immer schön langsam.) So sagt man hier.']
     }
   };
-  function spruch(gast, rng) {
+  // ab v0.8: Bilder fuer die Sprechblase. Kinder lesen noch nicht, die Bilder erzaehlen dasselbe wie der Satz.
+  var BILDER = {
+    tafel: function (g) { return ['teller', 'frage']; },
+    pool: function () { return ['welle', 'ball']; },
+    aktiv_pool: function () { return ['welle', 'lachen']; },
+    aktiv_tafel: function () { return ['teller', 'herz']; },
+    couch: function () { return ['kissen', 'zzz']; },
+    aktiv_couch: function () { return ['kissen', 'herz']; },
+    portion: function (g) { return ['gericht:' + g.portion, 'herz']; }
+  };
+  var FREI_BILDER = {
+    mia: [['sonne', 'ball'], ['gecko', 'lachen'], ['esel', 'frage']],
+    jonas: [['tasse', 'herz'], ['welle', 'lachen'], ['haus', 'stern']],
+    padrina: [['sonne', 'herz'], ['tomate', 'frage'], ['esel', 'herz'], ['schnecke', 'lachen']]
+  };
+  var WUNSCH_GERICHT = { mia: 'ensaimada', jonas: 'paamboli', padrina: 'paamboli' };
+  function spruchInfo(gast, rng) {
     var s = SPRUECHE[gast.id], key;
     if (gast.zustand === 'aktiv') key = (gast.ziel === 'tafel' && gast.portion) ? 'portion_' + gast.portion : 'aktiv_' + gast.ziel;
     else if (gast.ziel === 'tafel' || gast.ziel === 'pool' || gast.ziel === 'couch') key = gast.ziel;
     else key = 'frei';
-    return rng.pick(s[key] || s.frei);
+    var liste = s[key] ? s[key] : s.frei, k = s[key] ? key : 'frei';
+    var text = rng.pick(liste), bilder;
+    if (k === 'frei') bilder = (FREI_BILDER[gast.id] || [])[liste.indexOf(text)] || ['lachen'];
+    else if (k.indexOf('portion_') === 0) bilder = BILDER.portion(gast);
+    else if (k === 'tafel') bilder = ['gericht:' + (WUNSCH_GERICHT[gast.id] || 'paamboli'), 'frage'];
+    else bilder = BILDER[k] ? BILDER[k](gast) : ['lachen'];
+    return { text: text, bilder: bilder };
   }
+  function spruch(gast, rng) { return spruchInfo(gast, rng).text; }
 
-  Dorf.Gaeste = { REIHE: REIHE, TEMPO: TEMPO, BASIS: BASIS, PORTION_BONUS: PORTION_BONUS, DEFS: DEFS, erstelle: erstelle, nimmTeller: nimmTeller, abfall: abfall, entscheide: entscheide, plane: plane, update: update, symbol: symbol, spruch: spruch, tileVon: tileVon, sitzt: sitzt };
+  Dorf.Gaeste = { REIHE: REIHE, TEMPO: TEMPO, BASIS: BASIS, PORTION_BONUS: PORTION_BONUS, DEFS: DEFS, erstelle: erstelle, nimmTeller: nimmTeller, abfall: abfall, entscheide: entscheide, plane: plane, update: update, symbol: symbol, spruch: spruch, spruchInfo: spruchInfo, FREI_BILDER: FREI_BILDER, tileVon: tileVon, sitzt: sitzt };
 })(globalThis);

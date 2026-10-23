@@ -3,12 +3,15 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.7';
+  var VERSION = 'v0.8';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
   var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
   var ABEND_SPERRE = 1.5;     // Sekunden nach Abendbeginn, in denen Tippen noch nicht zum naechsten Tag springt
   var SPEICHER_TAKT = 5;      // alle 5 Sekunden wird der Spielstand gesichert
+  var FLUG_KORB = 0.6;        // ab v0.8: so lange fliegt eine Frucht oder ein Ei in den Korb unten links
+  var AKTION_PULS = 3;        // der grosse Knopf pulsiert nur bei den ersten drei Malen
+  var AKTION_NAME = { reden: 'Reden', streicheln: 'Streicheln', fuettern: 'Füttern', ernten: 'Ernten', sammeln: 'Ei aufheben', kochen: 'Kochen', weiter: 'Neuer Tag' };
   Dorf.VERSION = VERSION;
 
   function erstelle(opts) {
@@ -22,6 +25,8 @@
       herzchen: [], tagesziel: { erreicht: false, neu: false },
       // ab v0.6: Rueckfrage "Neu anfangen", fliegende Ernte, Gedankenblase von Biel, Hinweise ohne Lesen
       spielzeit: 0, seed: seed, frage: null, flieger: [], denk: null, wunsch: null, korbPuls: {}, gelernt: {},
+      // ab v0.8: Herzen fliegen zum Bild des Gastes oben, Bild huepft kurz, Sprechblasen zaehlen mit (fuers Vorlesen)
+      herzFlug: [], chipPuls: {}, blasenNr: 0, aktionGenutzt: 0,
       hinweis: Dorf.Hinweise ? Dorf.Hinweise.erstelle() : null,
       eingabe: opts.eingabe || Dorf.Eingabe.erstelle(null),
       spieler: Dorf.Spieler.erstelle(karte.start.biel),
@@ -33,11 +38,15 @@
     st.vorrat = Dorf.Garten.leererVorrat();
     st.tiere = Dorf.Tiere.erstelle(karte, seed);
     Dorf.Kamera.sofort(st.kamera, st.spieler.x, st.spieler.y - 12);
-    sage(st, 'Biel', 'Bon dia! (Guten Morgen!) Willkommen auf der Finca.', 5);
+    sage(st, 'Biel', 'Bon dia! (Guten Morgen!) Willkommen auf der Finca.', 5, ['sonne', 'lachen']);
     return st;
   }
 
-  function sage(st, sprecher, text, dauer) { st.blase = { sprecher: sprecher, text: text, rest: dauer || 3.5 }; }
+  // Sprechblase (ab v0.8 nur mit Bildern, ohne Namensschild). text bleibt fuer das Vorlesen und die Tests.
+  function sage(st, sprecher, text, dauer, bilder) {
+    st.blasenNr = (st.blasenNr || 0) + 1;
+    st.blase = { sprecher: sprecher, text: text, rest: dauer || 3.5, dauer: dauer || 3.5, t: 0, nr: st.blasenNr, bilder: (bilder && bilder.length ? bilder : ['lachen']).slice(0, 3) };
+  }
   // Geraeusch fuer den Browser vormerken (Spiellogik bleibt ohne WebAudio testbar)
   function klang(st, name) { st.toene.push(name); if (st.toene.length > 32) st.toene.shift(); }
 
@@ -76,7 +85,8 @@
     var best = null, bd = rad;
     function pruef(d, z) { if (d < bd) { bd = d; best = z; } }
     st.gaeste.forEach(function (gs) { var gy = gs.y - (Dorf.Gaeste.sitzt(gs) ? 14 : 0) - 10; pruef(Math.hypot(wx - gs.x, wy - gy) - 4, { gast: gs }); });
-    st.tiere.liste.forEach(function (t) { var e = t.art === 'esel'; pruef(Math.hypot(wx - t.x, wy - (t.y - (e ? 10 : 2))) - (e ? 8 : 2), { tier: t }); });
+    st.tiere.liste.forEach(function (t) { var e = t.art === 'esel', h = t.art === 'huhn'; pruef(Math.hypot(wx - t.x, wy - (t.y - (e ? 10 : (h ? 5 : 2)))) - (e ? 8 : (h ? 3 : 2)), { tier: t }); });
+    (st.tiere.eier || []).forEach(function (ei) { pruef(Math.hypot(wx - ei.x, wy - (ei.y - 3)) - 1, { ei: ei }); });
     st.garten.liste.forEach(function (p) { var q = Dorf.Garten.punkt(p); pruef(Math.hypot(wx - q.x, wy - (q.y - (p.baum ? 14 : 6))) - (p.baum ? 6 : 3), { pflanze: p }); });
     pruef(Math.hypot(wx - HERD_MITTE.x, wy - HERD_MITTE.y) - 12, { herd: true });
     return best;
@@ -94,14 +104,20 @@
     if (st.menue) { schliesseMenue(st); return 'zurueck'; }
     var karte = st.karte, K = karte.kachel, T = Dorf.Karte.T;
     var tx = Math.floor(wx / K), ty = Math.floor(wy / K), sp = st.spieler, ziel = null, aktion = null;
-    var gast = gastAn(st, wx, wy), tier = gast ? null : Dorf.Tiere.an(st.tiere, wx, wy);
-    var pf = (gast || tier) ? null : Dorf.Garten.an(st.garten, tx, ty);
-    var herd = !gast && !tier && !pf && karte.tile(tx, ty) === T.HERD;
-    if (!gast && !tier && !pf && !herd) {
+    var gast = gastAn(st, wx, wy), ei = gast ? null : Dorf.Tiere.eiAn(st.tiere, wx, wy, 6);
+    var tier = (gast || ei) ? null : Dorf.Tiere.an(st.tiere, wx, wy);
+    var pf = (gast || tier || ei) ? null : Dorf.Garten.an(st.garten, tx, ty);
+    var herd = !gast && !tier && !pf && !ei && karte.tile(tx, ty) === T.HERD;
+    if (!gast && !tier && !pf && !herd && !ei) {
       var f = naechstesZiel(st, wx, wy, st.eingabe.touch ? 14 : 8);
-      if (f) { gast = f.gast || null; tier = f.tier || null; pf = f.pflanze || null; herd = !!f.herd; }
+      if (f) { gast = f.gast || null; tier = f.tier || null; pf = f.pflanze || null; herd = !!f.herd; ei = f.ei || null; }
     }
-    if (tier) {
+    if (ei) {
+      if (Math.hypot(ei.x - sp.x, ei.y - sp.y) <= Dorf.Tiere.EI_NAH) { sammle(st, ei); return 'sammeln'; }
+      tx = Math.floor(ei.x / K); ty = Math.floor(ei.y / K);
+      ziel = karte.blockiert(tx, ty) ? besterNachbar(st, tx, ty) : { x: tx, y: ty };
+      aktion = { art: 'sammeln', ei: ei };
+    } else if (tier) {
       if (Dorf.Tiere.nah(tier, sp)) { streichle(st, tier); return 'tier'; }
       ziel = tierPlatz(st, tier);
       aktion = { art: 'streicheln', tier: tier, versuche: 0 };
@@ -131,7 +147,8 @@
   function rede(st, gast) {
     var sp = st.spieler, dx = gast.x - sp.x, dy = gast.y - sp.y;
     if (Math.abs(dx) > Math.abs(dy)) sp.dir = dx < 0 ? 'links' : 'rechts'; else sp.dir = dy < 0 ? 'oben' : 'unten';
-    sage(st, gast.name, Dorf.Gaeste.spruch(gast, st.rng), 3.5);
+    var info = Dorf.Gaeste.spruchInfo(gast, st.rng);
+    sage(st, gast.name, info.text, 3.5, info.bilder);
     klang(st, 'glocke'); lerne(st, 'reden');
     if (Dorf.Glueck) Dorf.Glueck.gib(st, gast, 'reden');
   }
@@ -155,9 +172,9 @@
     if (Math.abs(dx) > Math.abs(dy)) sp.dir = dx < 0 ? 'links' : 'rechts'; else sp.dir = dy < 0 ? 'oben' : 'unten';
     if (tier.art === 'esel' && st.vorrat && st.vorrat.karotte > 0) return fuettere(st, tier);
     Dorf.Tiere.streichle(tier, sp);
-    st.herzchen.push({ x: tier.x, y: tier.y - (tier.art === 'esel' ? 22 : 8), t: 0, farbe: '#ff7fa0' });
-    klang(st, tier.art === 'esel' ? 'esel' : 'gecko');
-    sage(st, 'Biel', Dorf.Tiere.spruch(tier), 3.5);
+    st.herzchen.push({ x: tier.x, y: tier.y - (tier.art === 'esel' ? 22 : (tier.art === 'huhn' ? 14 : 8)), t: 0, farbe: '#ff7fa0' });
+    klang(st, tier.art === 'esel' ? 'esel' : (tier.art === 'huhn' ? 'gack' : 'gecko'));
+    sage(st, 'Biel', Dorf.Tiere.spruch(tier), 3.5, Dorf.Tiere.BILDER[tier.art] || ['herz']);
     if (Dorf.Glueck) st.gaeste.forEach(function (gs) { if (Math.hypot(gs.x - tier.x, gs.y - tier.y) < 72) Dorf.Glueck.gib(st, gs, 'tier'); });
     return true;
   }
@@ -169,7 +186,7 @@
     st.herzchen.push({ x: tier.x - 5, y: tier.y - 22, t: 0, farbe: '#ff7fa0' });
     st.herzchen.push({ x: tier.x + 6, y: tier.y - 26, t: -0.25, farbe: '#ffb3d1' });
     klang(st, 'mampf');
-    sage(st, 'Biel', Dorf.Tiere.fuetterSpruch(tier), 3.5);
+    sage(st, 'Biel', Dorf.Tiere.fuetterSpruch(tier), 3.5, ['esel', 'karotte', 'lachen']);
     if (Dorf.Glueck) st.gaeste.forEach(function (gs) { if (Math.hypot(gs.x - tier.x, gs.y - tier.y) < 112) Dorf.Glueck.gib(st, gs, 'fuettern'); });
     return true;
   }
@@ -179,19 +196,32 @@
     var sp = st.spieler, A = Dorf.Garten.ARTEN[p.art], q = Dorf.Garten.punkt(p), dx = q.x - sp.x, dy = q.y - sp.y;
     if (Math.abs(dx) > Math.abs(dy)) sp.dir = dx < 0 ? 'links' : 'rechts'; else if (Math.abs(dy) > 2) sp.dir = dy < 0 ? 'oben' : 'unten';
     if (!p.reif) {
-      sage(st, 'Biel', (p.baum ? 'Am Baum' : 'Im Beet') + ' wächst gerade noch alles nach. Bald ist es wieder reif!', 3);
+      sage(st, 'Biel', (p.baum ? 'Am Baum' : 'Im Beet') + ' wächst gerade noch alles nach. Bald ist es wieder reif!', 3, ['spross', 'sonne']);
       denke(st, ['spross'], 2.5); p.wackel = 0.4;
       return 0;
     }
-    if ((st.vorrat[p.art] || 0) >= Dorf.Garten.VORRAT_MAX) { sage(st, 'Biel', 'Mein Korb ist voll mit ' + A.mehrzahl + '. Erst mal kochen!', 3); denke(st, [p.art, 'topf'], 3); return 0; }
+    if ((st.vorrat[p.art] || 0) >= Dorf.Garten.VORRAT_MAX) { sage(st, 'Biel', 'Mein Korb ist voll mit ' + A.mehrzahl + '. Erst mal kochen!', 3, ['korb', p.art, 'topf']); denke(st, [p.art, 'topf'], 3); return 0; }
     var n = Dorf.Garten.ernte(st.garten, st.vorrat, p);
     // Die Frucht fliegt im Bogen in Biels Korb, die Pflanze wackelt
-    for (var f = 0; f < n; f++) st.flieger.push({ art: p.art, x: q.x + (f ? 4 : 0), y: q.y - (p.baum ? 22 : 8), t: -0.12 * f, dauer: 0.55 });
+    for (var f = 0; f < n; f++) st.flieger.push({ art: p.art, x: q.x + (f ? 4 : 0), y: q.y - (p.baum ? 22 : 8), t: -0.12 * f, dauer: FLUG_KORB });
     p.wackel = 0.5;
     klang(st, 'ernte'); lerne(st, 'ernten');
     if (st.wunsch === p.art) st.wunsch = null;
-    sage(st, 'Biel', (n === 1 ? 'Eine ' + A.name : n + ' ' + A.mehrzahl) + '! (' + A.wort + ')' + (p.art === 'karotte' ? ' Die mag Bruna.' : ''), 2.5);
+    sage(st, 'Biel', (n === 1 ? 'Eine ' + A.name : n + ' ' + A.mehrzahl) + '! (' + A.wort + ')' + (p.art === 'karotte' ? ' Die mag Bruna.' : ''), 2.5, [p.art, 'korb']);
     return n;
+  }
+
+  // ab v0.8: Ei aus dem Gras aufheben, es fliegt in den Korb
+  function sammle(st, ei) {
+    var sp = st.spieler, dx = ei.x - sp.x, dy = ei.y - sp.y;
+    if (Math.abs(dx) > Math.abs(dy)) sp.dir = dx < 0 ? 'links' : 'rechts'; else if (Math.abs(dy) > 2) sp.dir = dy < 0 ? 'oben' : 'unten';
+    if ((st.vorrat.ei || 0) >= Dorf.Garten.VORRAT_MAX) { sage(st, 'Biel', 'Mein Korb ist voll mit Eiern. Erst mal kochen!', 3, ['korb', 'ei', 'topf']); return 0; }
+    if (!Dorf.Tiere.nimmEi(st.tiere, ei)) return 0;
+    st.vorrat.ei = (st.vorrat.ei || 0) + 1;
+    st.flieger.push({ art: 'ei', x: ei.x, y: ei.y - 4, t: 0, dauer: FLUG_KORB });
+    klang(st, 'ernte'); lerne(st, 'sammeln');
+    sage(st, 'Biel', 'Ein Ei! (ou) Das kommt in den Korb.', 2.5, ['ei', 'korb']);
+    return 1;
   }
 
   function amHerd(st) {
@@ -200,8 +230,8 @@
   }
   // Kochen in zwei Schritten: erst das Menue mit den Gerichten, dann das gewaehlte Gericht.
   function oeffneMenue(st) {
-    if (st.kochen) { sage(st, 'Biel', 'Gleich fertig, es brutzelt schon.', 2.5); return false; }
-    if (st.teller.length >= TAFEL_MAX) { sage(st, 'Biel', 'Die Tafel ist schon voll gedeckt.', 3); return false; }
+    if (st.kochen) { sage(st, 'Biel', 'Gleich fertig, es brutzelt schon.', 2.5, ['topf', 'sanduhr']); return false; }
+    if (st.teller.length >= TAFEL_MAX) { sage(st, 'Biel', 'Die Tafel ist schon voll gedeckt.', 3, ['teller', 'teller', 'teller']); return false; }
     st.spieler.dir = 'oben';
     Dorf.Spieler.stoppe(st.spieler);
     st.menue = { wahl: st.letzteWahl || 0, t: 0 };
@@ -213,22 +243,25 @@
     var G = Dorf.Gerichte.hole(id || 'paamboli');
     st.menue = null;
     if (!G) return false;
-    if (st.kochen) { sage(st, 'Biel', 'Gleich fertig, es brutzelt schon.', 2.5); return false; }
-    if (st.teller.length >= TAFEL_MAX) { sage(st, 'Biel', 'Die Tafel ist schon voll gedeckt.', 3); return false; }
+    if (st.kochen) { sage(st, 'Biel', 'Gleich fertig, es brutzelt schon.', 2.5, ['topf', 'sanduhr']); return false; }
+    if (st.teller.length >= TAFEL_MAX) { sage(st, 'Biel', 'Die Tafel ist schon voll gedeckt.', 3, ['teller', 'teller', 'teller']); return false; }
     st.spieler.dir = 'oben';
     st.letzteWahl = Dorf.Gerichte.REIHE.indexOf(G.id);
     var z = Dorf.Garten.pruefe(st.vorrat, G);
     if (!z.ok) {
-      sage(st, 'Biel', 'Für ' + G.name + ' hole ich noch ' + Dorf.Garten.fehltText(z.fehlt) + ' aus dem Garten.', 4);
       // Bilder statt Text: Biel denkt an die fehlenden Zutaten, danach zeigt die Hand gleich zur Pflanze
       var bilder = []; Object.keys(z.fehlt).forEach(function (a) { for (var i = 0; i < Math.min(2, z.fehlt[a]); i++) bilder.push(a); });
+      sage(st, 'Biel', 'Für ' + G.name + ' hole ich noch ' + Dorf.Garten.fehltText(z.fehlt) + ' aus dem Garten.', 4, bilder.concat(['frage']).slice(0, 3));
       denke(st, bilder, 4);
       st.wunsch = Object.keys(z.fehlt)[0] || null;
       return false;
     }
-    if (z.frisch) Dorf.Garten.verbrauche(st.vorrat, G);
-    st.kochen = { rest: G.dauer, dauer: G.dauer, gericht: G.id, frisch: z.frisch && !!G.immer };
-    sage(st, 'Biel', 'Ich mache ' + G.name + ' (' + G.info + ')' + (st.kochen.frisch ? ' mit frischer Tomate und Olive!' : '.'), 3.5);
+    // ab v0.8: ein Ei ist nie Pflicht. Liegt eins im Korb, kommt es mit hinein und es gibt einen Teller mehr.
+    var mitEi = !!z.bonus;
+    if (z.frisch || mitEi) Dorf.Garten.verbrauche(st.vorrat, G, mitEi);
+    st.kochen = { rest: G.dauer, dauer: G.dauer, gericht: G.id, frisch: z.frisch && !!G.immer, ei: mitEi };
+    sage(st, 'Biel', 'Ich mache ' + G.name + ' (' + G.info + ')' + (st.kochen.frisch ? ' mit frischer Tomate und Olive!' : (mitEi ? ' mit einem frischen Ei!' : '.')), 3.5,
+      ['gericht:' + G.id, 'topf'].concat(mitEi ? ['ei'] : []));
     klang(st, 'kochen'); lerne(st, 'kochen');
     return true;
   }
@@ -309,6 +342,7 @@
   function ankunft(st, a) {
     if (!a) return;
     if (a.art === 'kochen' && amHerd(st)) oeffneMenue(st);
+    else if (a.art === 'sammeln') { if (st.tiere.eier.indexOf(a.ei) >= 0 && Math.hypot(a.ei.x - st.spieler.x, a.ei.y - st.spieler.y) <= Dorf.Tiere.EI_NAH + 6) sammle(st, a.ei); }
     else if (a.art === 'ernten') { if (Dorf.Garten.nah(a.pflanze, st.spieler)) ernte(st, a.pflanze); }
     else if (a.art === 'streicheln') {
       var t = a.tier;
@@ -329,6 +363,36 @@
       }
     }
     st.marker = null;
+  }
+
+  // ab v0.8: Was macht der eine grosse Knopf (und Taste E) gerade? Gleiche Reihenfolge wie vorher bei E:
+  // Gast in der Naehe, dann Tier (beim Huhn zuerst das Ei), dann reife Pflanze, dann Ei, dann Herd. null = es gibt gerade nichts zu tun.
+  function kontext(st) {
+    if (st.frage) return null;
+    if (st.abend) return { art: 'weiter' };
+    if (st.menue) return { art: 'kochen' };
+    var sp = st.spieler, naechster = null, best = 28;
+    st.gaeste.forEach(function (gs) { var d = Math.hypot(gs.x - sp.x, gs.y - (Dorf.Gaeste.sitzt(gs) ? 14 : 0) - sp.y); if (d < best) { best = d; naechster = gs; } });
+    if (naechster) return { art: 'reden', ziel: naechster };
+    var tier = Dorf.Tiere.naechstes(st.tiere, sp), eiNah = Dorf.Tiere.naechstesEi(st.tiere, sp);
+    // ein Ei direkt vor den Fuessen ist wichtiger als das Huhn daneben
+    if (tier && tier.art === 'huhn' && eiNah) return { art: 'sammeln', ziel: eiNah };
+    if (tier) return { art: (tier.art === 'esel' && st.vorrat.karotte > 0) ? 'fuettern' : 'streicheln', ziel: tier };
+    var pf = Dorf.Garten.naechste(st.garten, sp);
+    if (pf) return { art: 'ernten', ziel: pf };
+    if (eiNah) return { art: 'sammeln', ziel: eiNah };
+    if (amHerd(st)) return { art: 'kochen' };
+    return null;
+  }
+  function tueKontext(st, k) {
+    if (!k) return false;
+    if (k.art === 'reden') rede(st, k.ziel);
+    else if (k.art === 'streicheln' || k.art === 'fuettern') streichle(st, k.ziel);
+    else if (k.art === 'ernten') ernte(st, k.ziel);
+    else if (k.art === 'sammeln') sammle(st, k.ziel);
+    else if (k.art === 'kochen') oeffneMenue(st);
+    else return false;
+    return true;
   }
 
   // echt (ab v0.7): wirklich vergangene Sekunden, hoechstens 1 (laenger versteckter Tab zaehlt als Pause)
@@ -354,15 +418,17 @@
         st.gaeste.forEach(function (gs) { gs.beduerfnisse.satt = 60; if (gs.beduerfnisse.ruhe !== undefined) gs.beduerfnisse.ruhe = 80; });
         if (Dorf.Glueck) Dorf.Glueck.neuerTag(st);
         Dorf.Garten.neuerTag(st.garten);
-        st.herzchen.length = 0; st.flieger.length = 0; st.denk = null; st.wunsch = null; st.teller.length = Math.min(st.teller.length, TAFEL_MAX);
+        Dorf.Tiere.neuerTag(st.tiere, st.karte);
+        st.herzchen.length = 0; st.flieger.length = 0; st.herzFlug.length = 0; st.denk = null; st.wunsch = null; st.teller.length = Math.min(st.teller.length, TAFEL_MAX);
         lerne(st, 'weiter'); st.speichernJetzt = true;
-        sage(st, 'Biel', 'Bon dia! (Guten Morgen!) Tag ' + st.uhr.tag + ' beginnt.', 4);
+        sage(st, 'Biel', 'Bon dia! (Guten Morgen!) Tag ' + st.uhr.tag + ' beginnt.', 4, ['sonne', 'lachen']);
       }
       return;
     }
     var stunden = Dorf.Uhr.update(st.uhr, dt, Dorf.Uhr.mindestMinuten(st.uhr, st.spielzeit, echt));
     st.gaeste.forEach(function (gs) { Dorf.Gaeste.update(gs, st, dt, stunden); });
     Dorf.Tiere.update(st.tiere, st.karte, dt);
+    if (st.tiere.neuesEi) { st.tiere.neuesEi = 0; klang(st, 'gack'); }
     Dorf.Garten.update(st.garten, stunden);
     for (var hz = st.herzchen.length - 1; hz >= 0; hz--) { st.herzchen[hz].t += dt; if (st.herzchen[hz].t > 1.4) st.herzchen.splice(hz, 1); }
     if (st.herzchen.length > 40) st.herzchen.splice(0, st.herzchen.length - 40);
@@ -372,13 +438,20 @@
       if (fg.t >= fg.dauer) { st.flieger.splice(fl, 1); st.korbPuls[fg.art] = 0.45; klang(st, 'plopp'); }
     }
     Object.keys(st.korbPuls).forEach(function (a) { st.korbPuls[a] -= dt; if (st.korbPuls[a] <= 0) delete st.korbPuls[a]; });
+    // ab v0.8: Herz im Flug zum Gastbild oben. Kommt es an, huepft das Bild und zeigt das neue Herz
+    for (var hf = st.herzFlug.length - 1; hf >= 0; hf--) {
+      var h = st.herzFlug[hf]; h.t += dt;
+      if (h.t >= h.dauer) { st.herzFlug.splice(hf, 1); st.chipPuls[h.id] = 0.35; klang(st, 'plopp'); }
+    }
+    Object.keys(st.chipPuls).forEach(function (a) { st.chipPuls[a] -= dt; if (st.chipPuls[a] <= 0) delete st.chipPuls[a]; });
+    st.gaeste.forEach(function (gs) { if (gs.hop > 0) gs.hop = Math.max(0, gs.hop - dt); });
     st.garten.liste.forEach(function (p) { if (p.wackel > 0) p.wackel = Math.max(0, p.wackel - dt); });
     if (st.denk) { st.denk.t += dt; st.denk.rest -= dt; if (st.denk.rest <= 0) st.denk = null; }
     // Biel wartet kurz am Zaun, bis Bruna angetrottet ist
     if (st.wartetAuf) {
       var wt = st.wartetAuf.tier; st.wartetAuf.rest -= dt;
       if (st.spieler.ziel) st.wartetAuf = null;
-      else if (!wt.ziel || st.wartetAuf.rest <= 0) { st.wartetAuf = null; if (Dorf.Tiere.nah(wt, st.spieler)) streichle(st, wt); else { wt.lockt = false; sage(st, 'Biel', wt.name + ' ist gerade lieber am anderen Ende der Wiese.', 3); } }
+      else if (!wt.ziel || st.wartetAuf.rest <= 0) { st.wartetAuf = null; if (Dorf.Tiere.nah(wt, st.spieler)) streichle(st, wt); else { wt.lockt = false; sage(st, 'Biel', wt.name + ' ist gerade lieber am anderen Ende der Wiese.', 3, ['esel', 'frage']); } }
     }
     var menueOffen = !!st.menue;
     if (menueOffen) { st.menue.t += dt; menueSchritt(st, e); }
@@ -394,32 +467,24 @@
     Dorf.Kamera.update(st.kamera, st.spieler.x, st.spieler.y - 12, dt);
 
     if (!menueOffen && e.neu('kochen')) zumHerd(st);
-    if (!menueOffen && e.neu('sprechen')) {
-      var naechster = null, best = 28;
-      st.gaeste.forEach(function (gs) { var d = Math.hypot(gs.x - st.spieler.x, gs.y - (Dorf.Gaeste.sitzt(gs) ? 14 : 0) - st.spieler.y); if (d < best) { best = d; naechster = gs; } });
-      var nahTier = naechster ? null : Dorf.Tiere.naechstes(st.tiere, st.spieler);
-      var nahPflanze = (naechster || nahTier) ? null : Dorf.Garten.naechste(st.garten, st.spieler);
-      if (naechster) rede(st, naechster);
-      else if (nahTier) streichle(st, nahTier);
-      else if (nahPflanze) ernte(st, nahPflanze);
-      else if (amHerd(st)) oeffneMenue(st);
-    }
+    // Taste E und der grosse Knopf: dieselbe passende Aktion
+    if (!menueOffen && e.neu('sprechen')) tueKontext(st, kontext(st));
     if (st.kochen) {
       st.kochen.rest -= dt;
       if (st.kochen.rest <= 0) {
-        var G = Dorf.Gerichte.hole(st.kochen.gericht), anzahl = G.portionen + (st.kochen.frisch ? 1 : 0);
+        var G = Dorf.Gerichte.hole(st.kochen.gericht), anzahl = G.portionen + (st.kochen.frisch ? 1 : 0) + (st.kochen.ei ? 1 : 0);
         st.kochen = null;
         for (var p = 0; p < anzahl && st.teller.length < TAFEL_MAX; p++) st.teller.push(G.id);
-        sage(st, 'Biel', G.name + ' ist fertig und steht auf der Tafel!', 3.5);
+        sage(st, 'Biel', G.name + ' ist fertig und steht auf der Tafel!', 3.5, ['gericht:' + G.id, 'herz']);
         klang(st, 'fertig');
       }
     }
     if (st.tagesziel.neu) {
       st.tagesziel.neu = false;
-      sage(st, 'Biel', 'Juhu! Alle Gäste sind glücklich. Tagesziel geschafft!', 4.5);
+      sage(st, 'Biel', 'Juhu! Alle Gäste sind glücklich. Tagesziel geschafft!', 4.5, ['herz', 'herz', 'stern']);
       klang(st, 'feier');
     }
-    if (st.blase) { st.blase.rest -= dt; if (st.blase.rest <= 0) st.blase = null; }
+    if (st.blase) { st.blase.t = (st.blase.t || 0) + dt; st.blase.rest -= dt; if (st.blase.rest <= 0) st.blase = null; }
     // ab v0.7: am Abend gehen die Lichter eins nach dem anderen an, jedes mit einem leisen Pling
     var lz = Math.ceil(Dorf.Uhr.licht(st.uhr, st.spielzeit).lampen * LAMPEN - 1e-6);
     if (lz > (st.lampenAn || 0)) klang(st, 'licht');
@@ -434,7 +499,7 @@
   // Notfall-Aufraeumen nach einem Fehler: alles Vorlaeufige weg, Figuren zurueck auf sichere Plaetze.
   function rette(st) {
     st.menue = null; st.frage = null; st.blase = null; st.marker = null; st.wartetAuf = null; st.denk = null; st.kochen = null;
-    st.flieger = []; st.herzchen = []; st.toene = []; st.naechsterTag = false;
+    st.flieger = []; st.herzchen = []; st.herzFlug = []; st.chipPuls = {}; st.toene = []; st.naechsterTag = false;
     if (st.spieler) {
       Dorf.Spieler.stoppe(st.spieler);
       if (!isFinite(st.spieler.x) || !isFinite(st.spieler.y) || Dorf.Spieler.kollidiert(st.karte, st.spieler.x, st.spieler.y)) {
@@ -472,7 +537,7 @@
     if (win.location && /[?&]herzen=1/.test(win.location.search || '')) st.gaeste.forEach(function (gs) { gs.glueck = Dorf.Glueck.MAX - 5; });
     if (win.location && /[?&]abend=1/.test(win.location.search || '')) st.uhr.minute = Dorf.Uhr.ENDE;
     // ?korb=1 legt von allem drei Stueck in den Korb (zum Ausprobieren)
-    if (win.location && /[?&]korb=1/.test(win.location.search || '')) Dorf.Garten.REIHE.forEach(function (a) { st.vorrat[a] = 3; });
+    if (win.location && /[?&]korb=1/.test(win.location.search || '')) Dorf.Garten.ZUTATEN.forEach(function (a) { st.vorrat[a] = 3; });
     // Entwicklerhilfe: ?menue=1 oeffnet gleich das Kochmenue (fuer Screenshots)
     if (win.location && /[?&]menue=1/.test(win.location.search || '')) oeffneMenue(st);
     var R = Dorf.Render.erstelle(canvas, ui, doc);
@@ -489,7 +554,7 @@
       var alt = Dorf.Speicher.lade(speicher);
       if (alt && Dorf.Speicher.anwenden(st, alt)) {
         st.geladen = true;
-        sage(st, 'Biel', 'Schön, dass du wieder da bist! Tag ' + st.uhr.tag + ' geht weiter.', 4.5);
+        sage(st, 'Biel', 'Schön, dass du wieder da bist! Tag ' + st.uhr.tag + ' geht weiter.', 4.5, ['lachen', 'herz']);
         st.herzchen.push({ x: st.spieler.x, y: st.spieler.y - 26, t: 0, farbe: '#ff7fa0' });
       }
     }
@@ -523,14 +588,59 @@
         } catch (e) { /* nicht erlaubt, egal */ }
       });
     }
-    knopf(doc.getElementById('knopf-sprechen'), function () { st.eingabe.tippe(st.abend ? 'weiter' : 'sprechen'); });
-    knopf(doc.getElementById('knopf-kochen'), function () { st.eingabe.tippe('kochen'); });
+    // ab v0.8: ein einziger grosser Knopf unten rechts. Sein Bild zeigt, was er gerade tut, ohne Ziel ist er weg.
+    var aktionKnopf = doc.getElementById('knopf-aktion'), aktionZustand = null, aktionSchluessel = null, popWechsel = false;
+    knopf(aktionKnopf, function () {
+      if (!aktionZustand) return;
+      st.aktionGenutzt = (st.aktionGenutzt || 0) + 1;
+      st.eingabe.tippe(st.abend ? 'weiter' : 'sprechen');
+    });
+    function zeigeAktion() {
+      if (!aktionKnopf) return;
+      var k = kontext(st), art = k ? k.art : null;
+      var hinweisDa = !!(st.hinweis && st.hinweis.alpha > 0);
+      var puls = !!art && (st.aktionGenutzt || 0) < AKTION_PULS && !hinweisDa;
+      var schluessel = (art || '-') + (puls ? '+' : '');
+      if (schluessel === aktionSchluessel) return;
+      aktionSchluessel = schluessel;
+      if (art !== aktionZustand) popWechsel = !popWechsel;   // neues Bild: kurz aufploppen (zwei gleiche Animationen im Wechsel)
+      aktionZustand = art;
+      aktionKnopf.className = 'knopf' + (art ? ' art-' + art + ' ' + (popWechsel ? 'pop' : 'pop2') : ' leer') + (puls ? ' puls' : '');
+      if (aktionKnopf.setAttribute) {
+        aktionKnopf.setAttribute('data-art', art || '');
+        aktionKnopf.setAttribute('aria-label', art ? AKTION_NAME[art] : 'Gerade nichts zu tun');
+        aktionKnopf.setAttribute('aria-hidden', art ? 'false' : 'true');
+      }
+    }
+    // ab v0.8: Vorlesen mit der Stimme des Browsers (nur wenn vorhanden und eine deutsche Stimme da ist)
+    var vorlesen = st.vorlesen = Dorf.Vorlesen ? Dorf.Vorlesen.erstelle(win, speicher) : null, letzteBlase = null;
+    var vorlesenKnopf = doc.getElementById('vorlesen-knopf');
+    function zeigeVorlesen() {
+      if (!vorlesenKnopf) return;
+      var da = !!(vorlesen && vorlesen.verfuegbar), stumm = !ton || ton.stumm;
+      if (vorlesenKnopf.style) vorlesenKnopf.style.display = da ? '' : 'none';
+      vorlesenKnopf.className = 'knopf' + (vorlesen && vorlesen.an ? '' : ' aus') + (stumm ? ' stumm' : '');
+      if (vorlesenKnopf.setAttribute) {
+        vorlesenKnopf.setAttribute('aria-pressed', vorlesen && vorlesen.an && !stumm ? 'true' : 'false');
+        vorlesenKnopf.setAttribute('aria-label', vorlesen && vorlesen.an ? 'Vorlesen ausschalten' : 'Vorlesen einschalten');
+      }
+      if (R.uiSkala) groesse();
+    }
+    if (vorlesen) vorlesen.beiAenderung = zeigeVorlesen;
+    knopf(vorlesenKnopf, function () {
+      if (!vorlesen) return;
+      // Ton aus und Vorlesen gewuenscht: dann kommt der Ton mit an, sonst wuerde man ja nichts hoeren
+      if (ton && ton.stumm) { ton.entsperre(); ton.umschalten(); vorlesen.setze(true); }
+      else vorlesen.umschalten();
+      if (vorlesen.an && st.blase) letzteBlase = null;   // die aktuelle Blase gleich noch einmal vorlesen
+    });
+    if (ton) { var tonAlt = ton.beiAenderung; ton.beiAenderung = function () { if (tonAlt) tonAlt(); if (ton.stumm && vorlesen) vorlesen.stopp(); zeigeVorlesen(); }; }
     var neuKnopf = doc.getElementById('neu-knopf');
     knopf(neuKnopf, function () { if (st.frage) st.frage = null; else frageAuf(st); });
     var touchAn = !!((win.matchMedia && win.matchMedia('(pointer: coarse)').matches) || (win.navigator && win.navigator.maxTouchPoints > 0) || /[?&]touch=1/.test((win.location && win.location.search) || ''));
     function zeigeTouch() { R.touch = touchAn; if (rahmen && rahmen.classList) rahmen.classList.toggle('touch', touchAn); if (R.uiSkala) groesse(); }
     zeigeTouch();
-    if (doc.addEventListener) doc.addEventListener('visibilitychange', function () { if (ton) ton.pausiere(doc.hidden); if (doc.hidden) sichere(); last = null; });
+    if (doc.addEventListener) doc.addEventListener('visibilitychange', function () { if (ton) ton.pausiere(doc.hidden); if (doc.hidden) { sichere(); if (vorlesen) vorlesen.stopp(); } last = null; });
     if (win.addEventListener) win.addEventListener('pagehide', function () { sichere(); });
 
     function groesse() {
@@ -551,12 +661,13 @@
       if (rahmen && rahmen.style && rahmen.style.setProperty) rahmen.style.setProperty('--s', String(s));
       if (ui) { ui.width = Math.round(Dorf.Render.W * s * dpr); ui.height = Math.round(Dorf.Render.H * s * dpr); ui.style.width = cw; ui.style.height = ch; R.uiSkala = s * dpr; }
       // Platz der Knoepfe oben rechts in internen Pixeln, damit der Hilfetext nicht darunter liegt
-      var bw = R.touch ? Math.max(36 / s, 11) : Math.max(26 / s, 9), anzahl = ((vollKnopf && vollGeht) ? 3 : 2) + (neuKnopf ? 1 : 0);
+      var bw = R.touch ? Math.max(36 / s, 11) : Math.max(26 / s, 9), anzahl = ((vollKnopf && vollGeht) ? 3 : 2) + (neuKnopf ? 1 : 0) + (vorlesenKnopf && vorlesen && vorlesen.verfuegbar ? 1 : 0);
       R.obenBreite = Math.ceil(anzahl * bw + (anzahl - 1) * 2 + 2 + 3);
       R.knopfAnzahl = anzahl;
     }
     win.addEventListener('resize', groesse);
     groesse();
+    zeigeVorlesen();
 
     // Fehlerschutz (ab v0.6): die Schleife bittet immer zuerst um den naechsten Frame. Geht in Logik, Ton oder
     // Zeichnen etwas schief, wird aufgeraeumt und weitergespielt, statt dass das Bild einfriert.
@@ -590,6 +701,17 @@
         }
       } catch (err) { ok = false; melde('Ton', err); }
       st.toene.length = 0;
+      // ab v0.8: neue Sprechblase vorlesen, sonst leise plappern (beides nur mit Ton)
+      try {
+        if (st.blase && st.blase.nr !== letzteBlase) {
+          letzteBlase = st.blase.nr;
+          var stumm = !ton || ton.stumm;
+          var gelesen = vorlesen ? vorlesen.sage(st.blase.text, st.blase.sprecher, stumm) : false;
+          if (!gelesen && ton && !stumm && !(vorlesen && vorlesen.spricht)) ton.spiele('plapper_' + String(st.blase.sprecher || 'biel').toLowerCase());
+        }
+        if (st.abend && vorlesen && vorlesen.spricht && !st.blase) vorlesen.stopp();
+        zeigeAktion();
+      } catch (err) { ok = false; melde('Vorlesen', err); }
       try { Dorf.Render.zeichne(R, st); } catch (err) { ok = false; melde('Zeichnen', err); }
       try { st.eingabe.ende(); } catch (err) { ok = false; }
       if (ok) fehler.folge = 0;
@@ -598,10 +720,10 @@
       if (st.speichernJetzt || speicherUhr >= SPEICHER_TAKT) { try { sichere(); } catch (err) { speicherUhr = 0; } }
     }
     win.requestAnimationFrame(frame);
-    return { st: st, R: R, fehler: fehler, sichere: sichere };
+    return { st: st, R: R, fehler: fehler, sichere: sichere, vorlesen: vorlesen, ton: ton };
   }
 
-  Dorf.Spiel = { STANDARD_SEED: STANDARD_SEED, VERSION: VERSION, KOCHDAUER: KOCHDAUER, PORTIONEN: PORTIONEN, erstelle: erstelle, schritt: schritt, sage: sage, klick: klick, klickBild: klickBild, kochen: kochen, streichle: streichle, tierPlatz: tierPlatz, oeffneMenue: oeffneMenue, zumHerd: zumHerd, frageAuf: frageAuf, neuAnfangen: neuAnfangen, rette: rette, naechstesZiel: naechstesZiel, FRAGE: FRAGE, ABEND_SPERRE: ABEND_SPERRE, LAMPEN: LAMPEN, TIPP_DAUER: TIPP_DAUER, SPEICHER_TAKT: SPEICHER_TAKT, menueKarten: menueKarten, MENUE: MENUE, TAFEL_MAX: TAFEL_MAX, starte: starte };
+  Dorf.Spiel = { STANDARD_SEED: STANDARD_SEED, VERSION: VERSION, KOCHDAUER: KOCHDAUER, PORTIONEN: PORTIONEN, erstelle: erstelle, schritt: schritt, sage: sage, klick: klick, klickBild: klickBild, kochen: kochen, streichle: streichle, tierPlatz: tierPlatz, oeffneMenue: oeffneMenue, zumHerd: zumHerd, frageAuf: frageAuf, neuAnfangen: neuAnfangen, rette: rette, naechstesZiel: naechstesZiel, kontext: kontext, tueKontext: tueKontext, sammle: sammle, FLUG_KORB: FLUG_KORB, AKTION_PULS: AKTION_PULS, AKTION_NAME: AKTION_NAME, FRAGE: FRAGE, ABEND_SPERRE: ABEND_SPERRE, LAMPEN: LAMPEN, TIPP_DAUER: TIPP_DAUER, SPEICHER_TAKT: SPEICHER_TAKT, menueKarten: menueKarten, MENUE: MENUE, TAFEL_MAX: TAFEL_MAX, starte: starte };
 
   if (typeof g.document !== 'undefined' && typeof g.window !== 'undefined' && g.document.getElementById) {
     g.window.addEventListener('load', function () { Dorf.Spiel.laufend = starte(g.document, g.window); });

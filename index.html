@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Finca v0.7 (Prototyp)</title>
+<title>Finca v0.8 (Prototyp)</title>
 <style>
   html, body { margin: 0; height: 100%; background: #3a2e48; overflow: hidden; touch-action: manipulation; }
   /* ab v0.6: kein Markieren, keine Lupe beim langen Druecken, Platz fuer Notch und runde Ecken */
@@ -29,25 +29,40 @@
   #ton-knopf .an { display: block; } #ton-knopf .weg { display: none; }
   #ton-knopf.aus .an { display: none; } #ton-knopf.aus .weg { display: block; }
   #ton-knopf.aus { background: #e3dbea; }
-  #touch { display: none; position: absolute; right: calc(var(--s, 3) * 4px); bottom: calc(var(--s, 3) * 46px);
-    flex-direction: column; gap: calc(var(--s, 3) * 4px); }
-  #rahmen.touch #touch { display: flex; }
-  #touch .knopf { position: relative; width: max(64px, calc(var(--s, 3) * 30px)); height: max(64px, calc(var(--s, 3) * 30px));
-    border-radius: 50%; box-shadow: 0 0 0 3px #4b3a5a, 0 4px 0 3px #4b3a5a; color: #4b3a5a; font-weight: bold;
-    font-size: max(12px, calc(var(--s, 3) * 5px)); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; opacity: 0.93; }
-  #touch .knopf svg { width: 46%; height: 46%; }
-  #touch .knopf:active { transform: translateY(3px); box-shadow: 0 0 0 3px #4b3a5a, 0 1px 0 3px #4b3a5a; }
-  /* ab v0.7: helle Flaeche mit farbigem Rand, Farbe passt zur Handlung (Sprechen tuerkis, Kochen rosa) */
-  #touch .knopf { background: #fff8ee; }
-  #knopf-sprechen { box-shadow: 0 0 0 3px #4a3560, inset 0 0 0 5px #5ec8b8, 0 4px 0 3px #3fa597; }
-  #knopf-kochen { box-shadow: 0 0 0 3px #4a3560, inset 0 0 0 5px #ff8f8f, 0 4px 0 3px #e06a6a; }
-  #knopf-sprechen:active { box-shadow: 0 0 0 3px #4a3560, inset 0 0 0 5px #5ec8b8, 0 1px 0 3px #3fa597; }
-  #knopf-kochen:active { box-shadow: 0 0 0 3px #4a3560, inset 0 0 0 5px #ff8f8f, 0 1px 0 3px #e06a6a; }
-  /* kleine Handys quer: Knoepfe nebeneinander, damit mehr vom Spiel frei bleibt */
+  /* ab v0.8: ein grosser Aktionsknopf unten rechts. Bild und Randfarbe zeigen, was er gerade tut:
+     Gast tuerkis, Herd rosa, Pflanze gruen, Tier und Ei pink, neuer Tag gelb. Ohne Ziel ist er nicht da. */
+  #touch { display: none; position: absolute; right: calc(var(--s, 3) * 4px); bottom: calc(var(--s, 3) * 4px); }
+  #rahmen.touch #touch { display: block; }
+  #knopf-aktion { position: relative; width: max(76px, calc(var(--s, 3) * 26px)); height: max(76px, calc(var(--s, 3) * 26px));
+    border-radius: 50%; background: #fff8ee; --rand: #5ec8b8; --lippe: #3fa597;
+    box-shadow: 0 0 0 3px #4a3560, inset 0 0 0 6px var(--rand), 0 5px 0 3px var(--lippe);
+    transition: opacity .18s ease; opacity: 0.96; }
+  #knopf-aktion svg { width: 56%; height: 56%; margin: 0 auto; display: none; }
+  #knopf-aktion[data-art="reden"] .i-reden, #knopf-aktion[data-art="streicheln"] .i-streicheln, #knopf-aktion[data-art="fuettern"] .i-fuettern,
+  #knopf-aktion[data-art="ernten"] .i-ernten, #knopf-aktion[data-art="sammeln"] .i-sammeln, #knopf-aktion[data-art="kochen"] .i-kochen,
+  #knopf-aktion[data-art="weiter"] .i-weiter { display: block; }
+  #knopf-aktion.art-reden { --rand: #5ec8b8; --lippe: #3fa597; }
+  #knopf-aktion.art-kochen { --rand: #ff8f8f; --lippe: #e06a6a; }
+  #knopf-aktion.art-ernten { --rand: #7ed492; --lippe: #56b06c; }
+  #knopf-aktion.art-streicheln, #knopf-aktion.art-fuettern, #knopf-aktion.art-sammeln { --rand: #ff9fc0; --lippe: #e07aa0; }
+  #knopf-aktion.art-weiter { --rand: #ffd36e; --lippe: #e0ad3e; }
+  #knopf-aktion.leer { opacity: 0; visibility: hidden; pointer-events: none; transform: scale(0.6); transition: opacity .18s ease, transform .18s ease, visibility 0s .18s; }
+  #knopf-aktion:active { transform: translateY(4px); box-shadow: 0 0 0 3px #4a3560, inset 0 0 0 6px var(--rand), 0 1px 0 3px var(--lippe); }
+  #knopf-aktion.pop { animation: pop .28s ease-out; } #knopf-aktion.pop2 { animation: pop2 .28s ease-out; }
+  #knopf-aktion.puls.pop, #knopf-aktion.puls.pop2 { animation: pop .28s ease-out, puls 1.6s ease-in-out .3s infinite; }
+  @keyframes pop { 0% { transform: scale(0); } 65% { transform: scale(1.12); } 100% { transform: scale(1); } }
+  @keyframes pop2 { 0% { transform: scale(0); } 65% { transform: scale(1.12); } 100% { transform: scale(1); } }
+  @keyframes puls { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.07); } }
   @media (max-height: 430px) {
-    #rahmen.touch #touch { flex-direction: row; bottom: calc(var(--s, 3) * 44px); gap: calc(var(--s, 3) * 3px); }
-    #rahmen.touch #touch .knopf { width: max(56px, calc(var(--s, 3) * 26px)); height: max(56px, calc(var(--s, 3) * 26px)); font-size: 11px; }
+    #rahmen.touch #knopf-aktion { width: max(64px, calc(var(--s, 3) * 24px)); height: max(64px, calc(var(--s, 3) * 24px)); }
   }
+  @media (prefers-reduced-motion: reduce) { #knopf-aktion.pop, #knopf-aktion.pop2, #knopf-aktion.puls.pop, #knopf-aktion.puls.pop2 { animation: none; } }
+  /* ab v0.8: Vorlesen an oder aus. Grau, wenn der Ton aus ist (dann wird auch nicht vorgelesen) */
+  #vorlesen-knopf { background: #e8f7f3; }
+  #vorlesen-knopf .an { display: block; } #vorlesen-knopf .weg { display: none; }
+  #vorlesen-knopf.aus .an { display: none; } #vorlesen-knopf.aus .weg { display: block; }
+  #vorlesen-knopf.aus, #vorlesen-knopf.stumm { background: #e3dbea; }
+  #vorlesen-knopf.stumm svg { opacity: .55; }
   /* Handy hochkant: ein Bild zeigt, dass man das Handy drehen soll (auch fuer Kinder, die noch nicht lesen) */
   #hinweis { display: none; position: fixed; left: 0; right: 0; bottom: 14px; text-align: center; color: #fff4dc;
     font: bold 15px "Trebuchet MS", Verdana, sans-serif; line-height: 1.3; }
@@ -65,6 +80,10 @@
     <button id="neu-knopf" class="knopf" type="button" title="Neu anfangen" aria-label="Neu anfangen">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12a7 7 0 1 1-2.05-4.95" fill="none" stroke="#4b3a5a" stroke-width="2.4" stroke-linecap="round"/><path d="M18.5 3.5v4.5H14" fill="none" stroke="#4b3a5a" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </button>
+    <button id="vorlesen-knopf" class="knopf" type="button" title="Sprechblasen vorlesen an oder aus" aria-label="Vorlesen ausschalten" style="display:none">
+      <svg class="an" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="10" r="5" fill="#ffe0c2" stroke="#4b3a5a" stroke-width="2"/><path d="M6.5 15.5c-2 .8-3 2.5-3 4.5h11c0-2-1-3.7-3-4.5" fill="#5ec8b8" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M16.5 7.5c1.2 1.4 1.2 3.6 0 5M19 5.5c2.3 2.6 2.3 6.4 0 9" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
+      <svg class="weg" viewBox="0 0 24 24" aria-hidden="true"><circle cx="9" cy="10" r="5" fill="#e3dbea" stroke="#4b3a5a" stroke-width="2"/><path d="M6.5 15.5c-2 .8-3 2.5-3 4.5h11c0-2-1-3.7-3-4.5" fill="#c9bcd8" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M16 7l5 6M21 7l-5 6" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
+    </button>
     <button id="ton-knopf" class="knopf" type="button" title="Musik und Ton an oder aus (Taste M)" aria-label="Ton ausschalten">
       <svg class="an" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="#ff9fb8" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M16 9c1.3 1.6 1.3 4.4 0 6M18.5 6.5c2.8 3 2.8 8 0 11" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
       <svg class="weg" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" fill="#c9bcd8" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M16 9l5 6M21 9l-5 6" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
@@ -74,13 +93,14 @@
     </button>
   </div>
   <div id="touch">
-    <button id="knopf-sprechen" class="knopf" type="button" aria-label="Sprechen">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-9l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" fill="#ffffff" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><circle cx="8" cy="10.5" r="1.3" fill="#4b3a5a"/><circle cx="12" cy="10.5" r="1.3" fill="#4b3a5a"/><circle cx="16" cy="10.5" r="1.3" fill="#4b3a5a"/></svg>
-      Sprechen
-    </button>
-    <button id="knopf-kochen" class="knopf" type="button" aria-label="Kochen">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v4a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z" fill="#ffffff" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M2 11h20M9 7c0-1.5 1-1.5 1-3M14 7c0-1.5 1-1.5 1-3" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
-      Kochen
+    <button id="knopf-aktion" class="knopf leer" type="button" aria-label="Gerade nichts zu tun" data-art="">
+      <svg class="i-reden" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1h-9l-5 4v-4H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" fill="#ffffff" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><circle cx="8" cy="10.5" r="1.3" fill="#4b3a5a"/><circle cx="12" cy="10.5" r="1.3" fill="#4b3a5a"/><circle cx="16" cy="10.5" r="1.3" fill="#4b3a5a"/></svg>
+      <svg class="i-streicheln" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 20s-7-4.4-7-9.5A3.8 3.8 0 0 1 12 8a3.8 3.8 0 0 1 7 2.5C19 15.6 12 20 12 20z" fill="#ff9fc0" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M9 10.5a1.6 1.6 0 0 1 2-1" fill="none" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round"/></svg>
+      <svg class="i-fuettern" viewBox="0 0 24 24" aria-hidden="true"><path d="M15.5 8.5l-10 11c-.8.8-2 .2-1.6-.9l5-12.4c.4-1 1.6-1.3 2.4-.6l3.6 2.9z" fill="#ffa64d" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M15 7l3-3M16.5 9l4-1.5M13.5 5.5L14.5 2" fill="none" stroke="#56b06c" stroke-width="2.2" stroke-linecap="round"/></svg>
+      <svg class="i-ernten" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11h18l-2 8a2 2 0 0 1-2 1.5H7A2 2 0 0 1 5 19z" fill="#e8b878" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M7 11a5 5 0 0 1 10 0" fill="none" stroke="#4b3a5a" stroke-width="2"/><circle cx="9.5" cy="9.5" r="2.5" fill="#ff7a6b" stroke="#4b3a5a" stroke-width="2"/><circle cx="14.5" cy="9.5" r="2.5" fill="#ffb340" stroke="#4b3a5a" stroke-width="2"/></svg>
+      <svg class="i-sammeln" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3.6 0 6.5 5.4 6.5 10a6.5 6.5 0 0 1-13 0C5.5 8.4 8.4 3 12 3z" fill="#fff1d6" stroke="#4b3a5a" stroke-width="2"/><path d="M9.3 9.5c.5-1.4 1.2-2.3 2-2.8" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round"/></svg>
+      <svg class="i-kochen" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v4a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z" fill="#ffffff" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M2 11h20M9 7c0-1.5 1-1.5 1-3M14 7c0-1.5 1-1.5 1-3" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
+      <svg class="i-weiter" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="#ffd36e" stroke="#4b3a5a" stroke-width="2"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
     </button>
   </div>
 </div>
@@ -88,22 +108,23 @@
   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" fill="#fff4dc" stroke="#7a6494" stroke-width="1.6"/><rect x="9" y="5" width="6" height="12" rx="1" fill="#c9f2e2"/><circle cx="12" cy="19.5" r="1" fill="#7a6494"/></svg>
   Tipp: Handy quer halten
 </div>
-<script src="js/rng.js?v=0.7"></script>
-<script src="js/karte.js?v=0.7"></script>
-<script src="js/pfad.js?v=0.7"></script>
-<script src="js/kamera.js?v=0.7"></script>
-<script src="js/eingabe.js?v=0.7"></script>
-<script src="js/uhr.js?v=0.7"></script>
-<script src="js/spieler.js?v=0.7"></script>
-<script src="js/gerichte.js?v=0.7"></script>
-<script src="js/garten.js?v=0.7"></script>
-<script src="js/glueck.js?v=0.7"></script>
-<script src="js/gaeste.js?v=0.7"></script>
-<script src="js/tiere.js?v=0.7"></script>
-<script src="js/speicher.js?v=0.7"></script>
-<script src="js/hinweise.js?v=0.7"></script>
-<script src="js/render.js?v=0.7"></script>
-<script src="js/ton.js?v=0.7"></script>
-<script src="js/main.js?v=0.7"></script>
+<script src="js/rng.js?v=0.8"></script>
+<script src="js/karte.js?v=0.8"></script>
+<script src="js/pfad.js?v=0.8"></script>
+<script src="js/kamera.js?v=0.8"></script>
+<script src="js/eingabe.js?v=0.8"></script>
+<script src="js/uhr.js?v=0.8"></script>
+<script src="js/spieler.js?v=0.8"></script>
+<script src="js/gerichte.js?v=0.8"></script>
+<script src="js/garten.js?v=0.8"></script>
+<script src="js/glueck.js?v=0.8"></script>
+<script src="js/gaeste.js?v=0.8"></script>
+<script src="js/tiere.js?v=0.8"></script>
+<script src="js/speicher.js?v=0.8"></script>
+<script src="js/hinweise.js?v=0.8"></script>
+<script src="js/vorlesen.js?v=0.8"></script>
+<script src="js/render.js?v=0.8"></script>
+<script src="js/ton.js?v=0.8"></script>
+<script src="js/main.js?v=0.8"></script>
 </body>
 </html>

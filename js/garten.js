@@ -1,4 +1,4 @@
-/* Garten (ab v0.5): Tomaten und Karotten im Beet, Orangen und Oliven an den Baeumen.
+/* Garten (ab v0.5): Tomaten und Karotten im Beet, Orangen und Oliven an den Baeumen. Ab v0.8 kommen Eier dazu.
    Alles waechst gemuetlich nach, Biel erntet in seinen Korb (Vorrat). Nichts kann vertrocknen. */
 (function (g) {
   'use strict';
@@ -10,11 +10,14 @@
     tomate: { name: 'Tomate', mehrzahl: 'Tomaten', wort: 'tomàtiga', wachsen: 1.5, menge: 1, farbe: '#ff7a6b' },
     karotte: { name: 'Karotte', mehrzahl: 'Karotten', wort: 'pastanaga', wachsen: 2, menge: 1, farbe: '#ffa64d' },
     orange: { name: 'Orange', mehrzahl: 'Orangen', wort: 'taronja', wachsen: 2, menge: 2, farbe: '#ffb340' },
-    olive: { name: 'Olive', mehrzahl: 'Oliven', wort: 'oliva', wachsen: 2, menge: 2, farbe: '#8d6fb0' }
+    olive: { name: 'Olive', mehrzahl: 'Oliven', wort: 'oliva', wachsen: 2, menge: 2, farbe: '#8d6fb0' },
+    // ab v0.8: Eier von den Huehnern. Waechst nicht im Garten, die Huehner legen sie ins Gras.
+    ei: { name: 'Ei', mehrzahl: 'Eier', wort: 'ou', menge: 1, farbe: '#fff1d6', tier: true }
   };
-  var REIHE = ['tomate', 'karotte', 'orange', 'olive'];
+  var REIHE = ['tomate', 'karotte', 'orange', 'olive'];          // was im Garten waechst
+  var ZUTATEN = ['tomate', 'karotte', 'orange', 'olive', 'ei'];  // was in den Korb passt (ab v0.8 mit Eiern)
 
-  function leererVorrat() { var v = {}; REIHE.forEach(function (a) { v[a] = 0; }); return v; }
+  function leererVorrat() { var v = {}; ZUTATEN.forEach(function (a) { v[a] = 0; }); return v; }
 
   function erstelle(karte) {
     var liste = [];
@@ -63,21 +66,24 @@
 
   // Kann ein Gericht gekocht werden? Pa amb oli geht immer (Brot und Öl aus der Speisekammer),
   // mit frischer Tomate und Olive gibt es einen Teller mehr.
+  // ab v0.8: bonus (etwa ein Ei) ist nie Pflicht. Ist es im Korb, kommt es mit hinein und es gibt einen Teller mehr.
   function pruefe(vorrat, G) {
-    var z = G.zutaten || {}, fehlt = {}, alles = true;
+    var z = G.zutaten || {}, fehlt = {}, alles = true, b = G.bonus || {};
     Object.keys(z).forEach(function (a) { var f = z[a] - (vorrat[a] || 0); if (f > 0) { fehlt[a] = f; alles = false; } });
-    if (G.immer) return { ok: true, frisch: alles && Object.keys(z).length > 0, fehlt: fehlt };
-    return { ok: alles, frisch: alles, fehlt: fehlt };
+    var bonus = Object.keys(b).length > 0 && Object.keys(b).every(function (a) { return (vorrat[a] || 0) - (z[a] || 0) >= b[a]; });
+    if (G.immer) return { ok: true, frisch: alles && Object.keys(z).length > 0, fehlt: fehlt, bonus: bonus };
+    return { ok: alles, frisch: alles, fehlt: fehlt, bonus: alles && bonus };
   }
-  function verbrauche(vorrat, G) {
+  function verbrauche(vorrat, G, mitBonus) {
     var z = G.zutaten || {};
     Object.keys(z).forEach(function (a) { vorrat[a] = Math.max(0, (vorrat[a] || 0) - z[a]); });
+    if (mitBonus) { var b = G.bonus || {}; Object.keys(b).forEach(function (a) { vorrat[a] = Math.max(0, (vorrat[a] || 0) - b[a]); }); }
   }
   function fehltText(fehlt) {
     return Object.keys(fehlt).map(function (a) { return fehlt[a] + ' ' + (fehlt[a] === 1 ? ARTEN[a].name : ARTEN[a].mehrzahl); }).join(' und ');
   }
 
-  Dorf.Garten = { ARTEN: ARTEN, REIHE: REIHE, REICHWEITE: REICHWEITE, VORRAT_MAX: VORRAT_MAX, leererVorrat: leererVorrat,
+  Dorf.Garten = { ARTEN: ARTEN, REIHE: REIHE, ZUTATEN: ZUTATEN, REICHWEITE: REICHWEITE, VORRAT_MAX: VORRAT_MAX, leererVorrat: leererVorrat,
     erstelle: erstelle, an: an, nah: nah, naechste: naechste, punkt: punkt, update: update, ernte: ernte, neuerTag: neuerTag,
     pruefe: pruefe, verbrauche: verbrauche, fehltText: fehltText };
 })(globalThis);

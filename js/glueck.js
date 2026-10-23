@@ -39,7 +39,13 @@
     gast.glueck = Math.min(MAX, gast.glueck + d.menge);
     var neu = herzen(gast) - vor;
     if (neu > 0) {
-      if (welt.herzchen) welt.herzchen.push({ x: gast.x, y: gast.y - 30, t: 0, farbe: (gast.aussehen && gast.aussehen.farbe) || '#ff7fa0' });
+      var farbe = (gast.aussehen && gast.aussehen.farbe) || '#ff7fa0';
+      if (welt.herzchen) {
+        // ab v0.8: vier kleine Herzchen steigen auf, der Gast huepft, ein Herz fliegt zu seinem Bild oben
+        for (var k = 0; k < 4 && welt.herzchen.length < 40; k++) welt.herzchen.push({ x: gast.x + (k - 1.5) * 4, y: gast.y - 26 - (k % 2) * 3, t: -k * 0.08, farbe: farbe, klein: true });
+      }
+      gast.hop = 0.25;
+      if (welt.herzFlug) { for (var n = 0; n < neu; n++) welt.herzFlug.push({ id: gast.id, x: gast.x, y: gast.y - 28, t: -n * 0.15, dauer: 0.7, farbe: farbe }); }
       if (welt.toene) { welt.toene.push('herz'); if (welt.toene.length > 32) welt.toene.shift(); }
     }
     pruefe(welt);

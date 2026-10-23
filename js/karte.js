@@ -11,11 +11,13 @@
     // ab v0.4: kleine Eselwiese mit Holzzaun
     ZAUN: 23, WIESE: 24,
     // ab v0.5: Orangenbaum am Garten
-    ORANGE: 25
+    ORANGE: 25,
+    // ab v0.8: kleiner Huehnerstall oberhalb vom Innenhof
+    STALL: 26
   };
   var BLOCK = {};
   [T.MAUER, T.WAND, T.WASSER, T.BRUNNEN, T.OLIVE, T.TAFEL, T.HERD, T.TOR,
-    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH, T.ZAUN, T.WIESE, T.ORANGE].forEach(function (t) { BLOCK[t] = true; });
+    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH, T.ZAUN, T.WIESE, T.ORANGE, T.STALL].forEach(function (t) { BLOCK[t] = true; });
 
   var KACHEL = 16, BREITE = 40, HOEHE = 30;
 
@@ -83,6 +85,10 @@
     ring(WIESE.x0 - 1, WIESE.y0 - 1, WIESE.x1 + 1, WIESE.y1 + 1, T.ZAUN);
     rect(WIESE.x0, WIESE.y0, WIESE.x1, WIESE.y1, T.WIESE);
 
+    // Huehner (v0.8): Stall mit zwei Kacheln, davor picken die Huehner im Gras zwischen Haus und Pool
+    var HUEHNER = { x0: 17, y0: 6, x1: 23, y1: 9 }, STALL = { x: 20, y: 5 };
+    set(STALL.x, STALL.y, T.STALL); set(STALL.x + 1, STALL.y, T.STALL);
+
     // Kraeuter- und Gemuesebeet
     rect(3, 16, 8, 19, T.BEET);
 
@@ -118,7 +124,7 @@
 
     var karte = {
       w: w, h: h, kachel: KACHEL, tiles: tiles, baeume: baeume, blumen: blumen, raeume: RAEUME,
-      brunnen: { x: 19, y: 15 }, wiese: WIESE, garten: garten,
+      brunnen: { x: 19, y: 15 }, wiese: WIESE, garten: garten, huehner: HUEHNER, stall: STALL,
       // Gecko sitzt an der Hauswand rechts der Haustuer (Pixelbereich auf der Wandfront)
       gecko: { x0: 14 * KACHEL + 3, x1: 16 * KACHEL + 12, y: 10 * KACHEL + 12 },
       tile: function (x, y) { if (x < 0 || y < 0 || x >= w || y >= h) return T.MAUER; return tiles[y * w + x]; },
