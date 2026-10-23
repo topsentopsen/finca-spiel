@@ -130,7 +130,7 @@
     return d.getUTCFullYear() + '-' + zwei(d.getUTCMonth() + 1) + '-' + zwei(d.getUTCDate());
   }
   function ladeWoche(sp) {
-    var roh = lies(sp, WOCHE), d = null, w = { tage: {} };
+    var roh = lies(sp, WOCHE), d = null, w = { tage: {}, grenzen: {} };
     try { d = roh ? JSON.parse(roh) : null; } catch (e) { d = null; }
     if (d && d.tage && typeof d.tage === 'object') Object.keys(d.tage).forEach(function (t) {
       if (!/^\d{4}-\d{2}-\d{2}$/.test(t) || !d.tage[t] || typeof d.tage[t] !== 'object') return;
@@ -138,40 +138,61 @@
       LISTE.forEach(function (p) { var v = d.tage[t][p.id]; if (typeof v === 'number' && isFinite(v) && v > 0) e[p.id] = Math.min(MAX_SEK, Math.round(v)); });
       w.tage[t] = e;
     });
+    // ab v0.12: die Grenze (Minuten) jedes Tages, damit der Balken weiss, ob der Tag vor der Grenze endete
+    if (d && d.grenzen && typeof d.grenzen === 'object') Object.keys(d.grenzen).forEach(function (t) {
+      if (!w.tage[t] || !d.grenzen[t] || typeof d.grenzen[t] !== 'object') return;
+      var e = {};
+      LISTE.forEach(function (p) { var v = d.grenzen[t][p.id]; if (typeof v === 'number' && isFinite(v)) e[p.id] = klemmeGrenze(v); });
+      w.grenzen[t] = e;
+    });
     return w;
   }
-  function merkeWoche(w, konto) {
+  function merkeWoche(w, konto, gr) {
     w = w && w.tage ? w : { tage: {} };
+    if (!w.grenzen || typeof w.grenzen !== 'object') w.grenzen = {};
     if (!konto || !konto.datum) return w;
-    var e = {};
-    LISTE.forEach(function (p) { var s = sekunden(konto, p.id); if (s > 0) e[p.id] = Math.round(s); });
+    var e = {}, ge = {};
+    LISTE.forEach(function (p) { var s = sekunden(konto, p.id); if (s > 0) { e[p.id] = Math.round(s); ge[p.id] = grenze(gr, p.id); } });
     w.tage[konto.datum] = e;
+    if (gr !== undefined) w.grenzen[konto.datum] = ge;
     var grenzTag = verschiebe(konto.datum, -(WOCHE_TAGE - 1));
     Object.keys(w.tage).forEach(function (t) { if (t < grenzTag || t > konto.datum) delete w.tage[t]; });
+    Object.keys(w.grenzen).forEach(function (t) { if (!w.tage[t]) delete w.grenzen[t]; });
     return w;
   }
-  function schreibeWoche(sp, w) { return schreib(sp, WOCHE, JSON.stringify(w && w.tage ? { tage: w.tage } : { tage: {} })); }
+  function schreibeWoche(sp, w) { return schreib(sp, WOCHE, JSON.stringify(w && w.tage ? { tage: w.tage, grenzen: w.grenzen || {} } : { tage: {}, grenzen: {} })); }
+  // ab v0.12: ein Tag blieb im Rahmen, wenn gespielt wurde und der Tag mindestens 30 Sekunden vor der Grenze endete
+  // (ganz ohne Belohnung, nur ein sanft gruener Balken fuer die Eltern)
+  var RAHMEN_LUFT = 30;
+  function imRahmen(sek, grenzeMin) { var g = typeof grenzeMin === 'number' && isFinite(grenzeMin) ? grenzeMin : maxGrenze(); return sek > 0 && sek <= g * 60 - RAHMEN_LUFT; }
   // Die letzten 7 Kalendertage, aeltester zuerst. Heute kommt immer frisch aus dem Konto.
-  function letzteWoche(w, konto, heute) {
+  function letzteWoche(w, konto, heute, gr) {
     var aus = [];
     for (var k = 6; k >= 0; k--) {
       var t = verschiebe(heute, -k), sek = {};
       var e = w && w.tage ? w.tage[t] : null;
       LISTE.forEach(function (p) { sek[p.id] = e && e[p.id] ? e[p.id] : 0; });
-      if (k === 0 && konto && konto.datum === t) LISTE.forEach(function (p) { sek[p.id] = Math.max(sek[p.id], sekunden(konto, p.id)); });
-      aus.push({ datum: t, sek: sek });
+      var heuteDa = k === 0 && konto && konto.datum === t;
+      if (heuteDa) LISTE.forEach(function (p) { sek[p.id] = Math.max(sek[p.id], sekunden(konto, p.id)); });
+      // ab v0.12: Grenze des Tages (alte Tage ohne Eintrag: 15) und ob der Tag im Rahmen blieb. Heute erst, wenn er vorbei ist.
+      var gt = w && w.grenzen ? w.grenzen[t] : null, gz = {}, gruen = {};
+      LISTE.forEach(function (p) {
+        gz[p.id] = k === 0 && gr ? grenze(gr, p.id) : (gt && typeof gt[p.id] === 'number' ? gt[p.id] : maxGrenze());
+        gruen[p.id] = imRahmen(sek[p.id], gz[p.id]) && (k > 0 || !!(heuteDa && fertig(konto, p.id)));
+      });
+      aus.push({ datum: t, sek: sek, grenze: gz, gruen: gruen });
     }
     return aus;
   }
 
   // ---------- ab v0.11: Sicherung als Text-Code (Spielstaende, Alben, Einstellungen; nie das Zeitkonto) ----------
   function erlaubt(k) {
-    if (k === GRENZEN || k === RUHIG || k === LETZTES || k === 'finca.stumm' || k === 'finca.vorlesen') return true;
+    if (k === GRENZEN || k === RUHIG || k === LETZTES || k === 'finca.stumm' || k === 'finca.vorlesen' || k === 'finca.vorleseart') return true;
     for (var i = 0; i < LISTE.length; i++) if (k === spielstandSchluessel(LISTE[i].id) || k === albumSchluessel(LISTE[i].id)) return true;
     return false;
   }
   function erlaubteSchluessel() {
-    var l = [GRENZEN, RUHIG, LETZTES, 'finca.stumm', 'finca.vorlesen'];
+    var l = [GRENZEN, RUHIG, LETZTES, 'finca.stumm', 'finca.vorlesen', 'finca.vorleseart'];
     LISTE.forEach(function (p) { l.push(spielstandSchluessel(p.id), albumSchluessel(p.id)); });
     return l;
   }
@@ -254,7 +275,7 @@
   Dorf.Profile = { GRENZEN: GRENZEN, WOCHE: WOCHE, MIN_GRENZE: MIN_GRENZE, WOCHE_TAGE: WOCHE_TAGE, CODE_KOPF: CODE_KOPF,
     maxGrenze: maxGrenze, klemmeGrenze: klemmeGrenze, ladeGrenzen: ladeGrenzen, schreibeGrenzen: schreibeGrenzen, grenze: grenze,
     schlaeft: schlaeft, entsperre: entsperre, verschiebe: verschiebe, ladeWoche: ladeWoche, merkeWoche: merkeWoche,
-    schreibeWoche: schreibeWoche, letzteWoche: letzteWoche, erlaubt: erlaubt, sicherungsCode: sicherungsCode, liesCode: liesCode,
+    schreibeWoche: schreibeWoche, letzteWoche: letzteWoche, imRahmen: imRahmen, RAHMEN_LUFT: RAHMEN_LUFT, erlaubt: erlaubt, sicherungsCode: sicherungsCode, liesCode: liesCode,
     uebernimmCode: uebernimmCode, pruefsumme: pruefsumme,
     LISTE: LISTE, KONTO: KONTO, LETZTES: LETZTES, RUHIG: RUHIG, hole: hole, schluessel: schluessel,
     spielstandSchluessel: spielstandSchluessel, albumSchluessel: albumSchluessel, datum: datum,

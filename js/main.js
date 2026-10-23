@@ -3,14 +3,14 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.11';
+  var VERSION = 'v0.12';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
   var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
   var ABEND_SPERRE = 4;       // Sekunden nach Abendbeginn, in denen Tippen noch nicht zum naechsten Tag springt (ab v0.9: erst Herzen und Sticker zeigen)
   // ab v0.9: Ablauf der Abendszene "Bona nit" in Sekunden ab Abendbeginn. Jeder Gast zaehlt seine Herzen hoch (0,26 s pro Herz),
   // die Gaeste leicht versetzt. Danach ploppt der neue Sticker auf, dann erscheint die Sonne fuer den neuen Morgen.
-  var ABEND = { iris: 1.2, herzStart: 1.5, herzTakt: 0.26, versatz: 0.2, sticker: 3.3 };
+  var ABEND = { iris: 1.2, herzStart: 1.5, herzTakt: 0.26, versatz: 0.2, sticker: 3.3, buch: 5.6 };   // ab v0.12: danach geht das Abendbuch auf
   var SPEICHER_TAKT = 5;      // alle 5 Sekunden wird der Spielstand gesichert
   var FLUG_KORB = 0.6;        // ab v0.8: so lange fliegt eine Frucht oder ein Ei in den Korb unten links
   var AKTION_PULS = 3;        // der grosse Knopf pulsiert nur bei den ersten drei Malen
@@ -20,7 +20,8 @@
   var ELTERN_HALT = 3;
   // ab v0.11: je Bild eine Karte mit Minuten heute, Grenze (minus und plus) und 7 Balken fuer die Woche; unten drei Knoepfe
   var ELTERN = { x: 30, y: 10, w: 260, h: 156, zu: { x: 262, y: 14, w: 24, h: 22 },
-    ruhig: { x: 42, y: 94, w: 236, h: 20 }, wechseln: { x: 42, y: 118, w: 76, h: 24 }, neu: { x: 122, y: 118, w: 76, h: 24 },
+    ruhig: { x: 42, y: 94, w: 56, h: 20 }, namen: { x: 102, y: 94, w: 56, h: 20 }, saetze: { x: 162, y: 94, w: 56, h: 20 },
+    langsam: { x: 222, y: 94, w: 56, h: 20 }, wechseln: { x: 42, y: 118, w: 76, h: 24 }, neu: { x: 122, y: 118, w: 76, h: 24 },
     sichern: { x: 202, y: 118, w: 76, h: 24 }, bilder: [] };
   [0, 1, 2].forEach(function (i) {
     var x = 42 + i * 80;
@@ -85,7 +86,8 @@
   // Fuer Uhr, Licht und Daemmerung: als waeren die fehlenden Minuten schon gespielt
   function uhrZeit(st) { return Dorf.Uhr.belegt(st.spielzeit, grenzeSek(st)); }
   // Nur zum Vorlesen (ohne Sprechblase), z. B. die Namen der Bilder in der Auswahl
-  function ansage(st, text) { st.ansage = text; }
+  // ab v0.12: art 'name' (kurze Ansage wie "Huhn!") oder 'satz' (laengerer Satz); die Eltern koennen beides einzeln abschalten
+  function ansage(st, text, art) { st.ansage = { text: text, art: art === 'satz' ? 'satz' : 'name' }; }
   // Gedankenblase ueber Biel mit kleinen Bildern (fuer Kinder, die noch nicht lesen)
   function denke(st, bilder, dauer) { st.denk = { bilder: bilder.slice(0, 4), rest: dauer || 3, t: 0 }; klang(st, 'hmm'); }
 
@@ -402,11 +404,12 @@
     else l = P.LISTE.map(function (p) { return { id: p.id, bild: p.id, name: p.name, farbe: p.farbe, rand: p.rand, tag: p.id === st.profil ? st.uhr.tag : 0, sticker: 0, sek: st.konto ? P.sekunden(st.konto, p.id) : 0, fertig: st.konto ? P.fertig(st.konto, p.id) : false }; });
     // ab v0.11: eingestellte Minuten und die letzten 7 Tage
     if (!st.woche && st.speicher) st.woche = P.ladeWoche(st.speicher);
-    var tage = P.letzteWoche(st.woche, st.konto, st.konto ? st.konto.datum : heute(st));
+    var tage = P.letzteWoche(st.woche, st.konto, st.konto ? st.konto.datum : heute(st), st.grenzen || {});
     l.forEach(function (u) {
       u.grenze = P.grenze(st.grenzen, u.id);
       u.fertig = !!u.fertig || (u.sek || 0) >= u.grenze * 60;
       u.woche = tage.map(function (t) { return t.sek[u.id] || 0; });
+      u.gruen = tage.map(function (t) { return !!(t.gruen && t.gruen[u.id]); });
     });
     return l;
   }
@@ -425,7 +428,7 @@
     var behalte = { eingabe: st.eingabe, ton: st.ton, debug: st.debug, speicher: st.speicher, fps: st.fps, vorlesen: st.vorlesen,
       profil: st.profil, profilGeladen: st.profilGeladen, konto: st.konto, ruhig: st.ruhig, darfSpeichern: st.darfSpeichern,
       datumJetzt: st.datumJetzt, sichern: st.sichern, albumFest: st.albumFest, elternDruck: st.elternDruck,
-      grenzen: st.grenzen, woche: st.woche, grenzenAendern: st.grenzenAendern };
+      grenzen: st.grenzen, woche: st.woche, grenzenAendern: st.grenzenAendern, vorleseArt: st.vorleseArt };
     Object.keys(zusatz || {}).forEach(function (k) { behalte[k] = zusatz[k]; });
     var neu = erstelle({ seed: st.seed, eingabe: st.eingabe, zoom: st.zoom });
     Object.keys(st).forEach(function (k) { if (!(k in neu)) delete st[k]; });
@@ -524,10 +527,24 @@
     klang(st, 'menue');
     return 'grenze';
   }
+  // ab v0.12: Vorlesen einstellen (Namen, Saetze, langsamer). Gilt sofort und wird gespeichert.
+  var VORLESE_ART = ['namen', 'saetze', 'langsam'];
+  function vorleseArt(st) {
+    if (!st.vorleseArt) st.vorleseArt = st.vorlesen && st.vorlesen.art ? st.vorlesen.art : (Dorf.Vorlesen ? Dorf.Vorlesen.artStandard() : { namen: true, saetze: true, langsam: false });
+    return st.vorleseArt;
+  }
+  function setzeVorleseArt(st, k) {
+    var a = vorleseArt(st);
+    if (st.vorlesen && st.vorlesen.setzeArt) { st.vorlesen.art = a; st.vorlesen.setzeArt(k, !a[k]); }
+    else { a[k] = !a[k]; st.vorleseArtAendern = true; st.speichernJetzt = true; }
+    klang(st, 'menue');
+    return a[k];
+  }
   function setzeRuhig(st, an) { st.ruhig = !!an; st.ruhigAendern = true; st.speichernJetzt = true; klang(st, 'menue'); }
   function elternTat(st, was) {
     if (was === 'zu') { schliesseEltern(st); return 'zu'; }
     if (was === 'ruhig') { setzeRuhig(st, !st.ruhig); return 'ruhig'; }
+    if (VORLESE_ART.indexOf(was) >= 0) { setzeVorleseArt(st, was); return was; }
     if (was === 'wechseln') { schliesseEltern(st); oeffneWahl(st, { zurueck: !!st.profilGeladen && !tagGesperrt(st) }); return 'wechseln'; }
     if (was === 'neu') { schliesseEltern(st); st.wahl = null; frageAuf(st); return 'frage'; }
     if (was === 'sichern') { if (st.sichern) { try { st.sichern(); } catch (e) { /* egal */ } } st.sicherung = { offen: true }; klang(st, 'menue'); return 'sichern'; }
@@ -547,12 +564,13 @@
     }
     if (drin(ELTERN.sichern, bx, by)) return elternTat(st, 'sichern');
     if (drin(ELTERN.ruhig, bx, by)) return elternTat(st, 'ruhig');
+    for (var j = 0; j < VORLESE_ART.length; j++) if (drin(ELTERN[VORLESE_ART[j]], bx, by)) return elternTat(st, VORLESE_ART[j]);
     if (drin(ELTERN.wechseln, bx, by)) return elternTat(st, 'wechseln');
     if (drin(ELTERN.neu, bx, by)) return elternTat(st, 'neu');
     if (!drin(ELTERN, bx, by)) return elternTat(st, 'zu');
     return 'nein';
   }
-  var ELTERN_REIHE = ['minus_esel', 'plus_esel', 'minus_huhn', 'plus_huhn', 'minus_gecko', 'plus_gecko', 'ruhig', 'wechseln', 'neu', 'sichern', 'zu'];
+  var ELTERN_REIHE = ['minus_esel', 'plus_esel', 'minus_huhn', 'plus_huhn', 'minus_gecko', 'plus_gecko', 'ruhig', 'namen', 'saetze', 'langsam', 'wechseln', 'neu', 'sichern', 'zu'];
   function elternSchritt(st, e, dt) {
     var el = st.eltern; el.t += dt;
     if (el.stups) { el.stups.t -= dt; if (el.stups.t <= 0) el.stups = null; }
@@ -568,26 +586,31 @@
   // Seiten 0 bis 2: ein Rezept pro Gericht (Zutaten + Zutaten = Gericht, wer es liebt, Ei als Extra). Seite 3: das Sticker Album.
   // Bedienen ohne Lesen: linke Haelfte tippen = zurueck blaettern, rechte Haelfte = weiter, X oder daneben = zu. Zwei Reiter oben: Topf und Stern.
   var BUCH = { x: 26, y: 26, w: 268, h: 140, zu: { x: 276, y: 18, w: 24, h: 22 },
-    reiter: [{ x: 46, y: 14, w: 34, h: 16, seite: 0 }, { x: 84, y: 14, w: 34, h: 16, seite: 3 }] };
+    reiter: [{ x: 46, y: 14, w: 34, h: 16, seite: 0 }, { x: 84, y: 14, w: 34, h: 16, seite: 3 }, { x: 122, y: 14, w: 34, h: 16, seite: 4, abend: true }] };
   var BUCH_SEITEN = 4, ALBUM_SEITE = 3;
+  // ab v0.12: am Abend gibt es eine fuenfte Seite "Heute" (der Sticker von heute gross und was geklappt hat, wird vorgelesen)
+  var HEUTE_SEITE = 4;
+  function buchSeiten(st) { return st && st.abend ? BUCH_SEITEN + 1 : BUCH_SEITEN; }
+  function heuteVorlesen(st) { if (Dorf.Sticker && Dorf.Sticker.heuteSatz) ansage(st, Dorf.Sticker.heuteSatz(st), 'satz'); }
+  function aufSeite(st, seite) { if (seite === ALBUM_SEITE) st.albumNeu = false; if (seite === HEUTE_SEITE) heuteVorlesen(st); }
   // Buchknopf im Kochmenue (oben rechts am Rand der Tafel)
   var MENUE_BUCH = { x: 252, y: 20, w: 30, h: 22 };
   function oeffneBuch(st, seite) {
     if (st.frage) return false;
-    if (seite === undefined) seite = st.albumNeu ? ALBUM_SEITE : (st.buchSeite || 0);
-    seite = Math.max(0, Math.min(BUCH_SEITEN - 1, seite | 0));
+    if (seite === undefined) seite = st.abend ? HEUTE_SEITE : (st.albumNeu ? ALBUM_SEITE : (st.buchSeite || 0));
+    seite = Math.max(0, Math.min(buchSeiten(st) - 1, seite | 0));
     st.buch = { seite: seite, t: 0, blatt: 0, richtung: 0, stups: 0 };
-    if (seite === ALBUM_SEITE) st.albumNeu = false;
+    aufSeite(st, seite);
     Dorf.Spieler.stoppe(st.spieler); st.marker = null;
     klang(st, 'blaettern');
     return true;
   }
-  function schliesseBuch(st) { if (st.buch) st.buchSeite = st.buch.seite; st.buch = null; }
+  function schliesseBuch(st) { if (st.buch) st.buchSeite = st.buch.seite === HEUTE_SEITE ? 0 : st.buch.seite; st.buch = null; }
   function blaettere(st, d) {
     var b = st.buch, neu = b.seite + d;
-    if (neu < 0 || neu >= BUCH_SEITEN) { b.stups = 0.3; b.richtung = d; klang(st, 'menue'); return false; }   // Ende: Buch stupst nur kurz
+    if (neu < 0 || neu >= buchSeiten(st)) { b.stups = 0.3; b.richtung = d; klang(st, 'menue'); return false; }   // Ende: Buch stupst nur kurz
     b.seite = neu; b.blatt = 0.25; b.richtung = d;
-    if (neu === ALBUM_SEITE) st.albumNeu = false;
+    aufSeite(st, neu);
     klang(st, 'blaettern');
     return true;
   }
@@ -597,7 +620,8 @@
     if (drin(BUCH.zu, bx, by)) { schliesseBuch(st); return 'zurueck'; }
     for (var i = 0; i < BUCH.reiter.length; i++) {
       var rt = BUCH.reiter[i];
-      if (drin(rt, bx, by)) { if (b.seite !== rt.seite) { b.richtung = rt.seite > b.seite ? 1 : -1; b.seite = rt.seite; b.blatt = 0.25; if (rt.seite === ALBUM_SEITE) st.albumNeu = false; klang(st, 'blaettern'); } return 'seite'; }
+      if (rt.abend && !st.abend) continue;
+      if (drin(rt, bx, by)) { if (b.seite !== rt.seite) { b.richtung = rt.seite > b.seite ? 1 : -1; b.seite = rt.seite; b.blatt = 0.25; aufSeite(st, rt.seite); klang(st, 'blaettern'); } return 'seite'; }
     }
     if (!drin(BUCH, bx, by)) { schliesseBuch(st); return 'zurueck'; }
     blaettere(st, bx < BUCH.x + BUCH.w / 2 ? -1 : 1);
@@ -784,6 +808,8 @@
       if (gezaehlt > (st.abendZaehler || 0)) { st.abendZaehler = gezaehlt; klang(st, 'zaehl'); }
       if (st.neuerSticker && seit >= ABEND.sticker && !st.stickerGezeigt) { st.stickerGezeigt = true; klang(st, 'sticker'); }
       if (st.blase) { st.blase.t = (st.blase.t || 0) + dt; st.blase.rest -= dt; if (st.blase.rest <= 0) st.blase = null; }
+      // ab v0.12: das Abendbuch geht einmal von selbst auf (Seite Heute), zu geht es wie immer mit dem X
+      if (!st.abendBuchGezeigt && seit >= ABEND.buch && !st.buch && !st.naechsterTag) { st.abendBuchGezeigt = true; oeffneBuch(st, HEUTE_SEITE); }
       if (buchJetzt || st.buch) { st.naechsterTag = false; return; }
       if ((e.neu('weiter') && !gesperrt) || st.naechsterTag) {
         st.naechsterTag = false;
@@ -875,7 +901,7 @@
     st.lampenAn = lz;
     if (Dorf.Uhr.vorbei(st.uhr)) {
       st.abend = true; st.abendZeit = st.zeit; st.blase = null; st.kochen = null; st.menue = null; st.buch = null; Dorf.Spieler.stoppe(st.spieler); st.marker = null; st.wartetAuf = null;
-      st.denk = null; st.speichernJetzt = true; st.abendZaehler = 0; st.stickerGezeigt = false;
+      st.denk = null; st.speichernJetzt = true; st.abendZaehler = 0; st.stickerGezeigt = false; st.abendBuchGezeigt = false;
       // ab v0.10: Spieltag fuer dieses Bild ist heute vorbei
       if (st.konto && st.profil && Dorf.Profile) { Dorf.Profile.setzeFertig(st.konto, st.profil); st.kontoAendern = true; }
       // ab v0.9: Sticker fuer heute ins Album (wird in der Abendszene gezeigt)
@@ -1030,10 +1056,11 @@
         }
         if (st.konto && P) { P.schreibeKonto(speicher, st.konto); st.kontoAendern = false; }
       }
+      if (speicher && st.vorleseArtAendern && Dorf.Vorlesen && st.vorleseArt) { Dorf.Vorlesen.schreibeArt(speicher, st.vorleseArt); st.vorleseArtAendern = false; }
       if (speicher && P && st.ruhigAendern) { P.schreibeRuhig(speicher, st.ruhig); st.ruhigAendern = false; }
       // ab v0.11: Grenzen sind eine Einstellung der Eltern (gilt auch beim Ausprobieren), die Woche nur mit echtem Stand
       if (speicher && P && st.grenzenAendern) { P.schreibeGrenzen(speicher, st.grenzen); st.grenzenAendern = false; }
-      if (speicher && P && st.darfSpeichern && st.konto) { st.woche = P.merkeWoche(st.woche || P.ladeWoche(speicher), st.konto); P.schreibeWoche(speicher, st.woche); }
+      if (speicher && P && st.darfSpeichern && st.konto) { st.woche = P.merkeWoche(st.woche || P.ladeWoche(speicher), st.konto, st.grenzen || {}); P.schreibeWoche(speicher, st.woche); }
       speicherUhr = 0; st.speichernJetzt = false;
     }
     st.sichern = sichere;
@@ -1092,6 +1119,8 @@
     }
     // ab v0.8: Vorlesen mit der Stimme des Browsers (nur wenn vorhanden und eine deutsche Stimme da ist)
     var vorlesen = st.vorlesen = Dorf.Vorlesen ? Dorf.Vorlesen.erstelle(win, speicher) : null, letzteBlase = null;
+    // ab v0.12: Vorlese Einstellungen der Eltern (ein Objekt fuer Spiel und Stimme)
+    st.vorleseArt = vorlesen ? vorlesen.art : (Dorf.Vorlesen ? Dorf.Vorlesen.ladeArt(speicher) : null);
     var vorlesenKnopf = doc.getElementById('vorlesen-knopf');
     function zeigeVorlesen() {
       if (!vorlesenKnopf) return;
@@ -1174,6 +1203,14 @@
       if (st.ruhig === ruhigZuletzt) return;
       ruhigZuletzt = st.ruhig;
       if (rahmen && rahmen.classList) rahmen.classList.toggle('ruhig', !!st.ruhig);
+    }
+    // ab v0.12: solange der Elternbereich offen ist, sind die Knoepfe oben rechts weg (sie lagen am Handy ueber dem X)
+    var elternOffenZuletzt = null;
+    function zeigeElternOffen() {
+      var offen = !!st.eltern;
+      if (offen === elternOffenZuletzt) return;
+      elternOffenZuletzt = offen;
+      if (rahmen && rahmen.classList) rahmen.classList.toggle('eltern', offen);
     }
     // ab v0.9: Bilderbuch-Knopf (Rezepte und Sticker). Ein Punkt am Knopf zeigt einen neuen Sticker an.
     var buchKnopf = doc.getElementById('buch-knopf'), buchPunkt = null;
@@ -1260,10 +1297,13 @@
           var gelesen = vorlesen ? vorlesen.sage(st.blase.text, st.blase.sprecher, stumm) : false;
           if (!gelesen && ton && !stumm && !(vorlesen && vorlesen.spricht)) ton.spiele('plapper_' + String(st.blase.sprecher || 'biel').toLowerCase());
         }
-        if (st.ansage) { var txt = st.ansage; st.ansage = null; if (vorlesen && !(!ton || ton.stumm)) vorlesen.sage(txt, 'biel', false); }
-        if (st.abend && vorlesen && vorlesen.spricht && !st.blase) vorlesen.stopp();
+        // ein Satz wartet hoechstens 4 Sekunden, bis die Stimme davor fertig ist
+        if (st.ansage && st.ansage.art === 'satz' && vorlesen && vorlesen.spricht && (st.ansage.warte = (st.ansage.warte || 0) + 1) < 240) { /* warten */ }
+        else if (st.ansage) { var an = st.ansage; st.ansage = null; if (vorlesen && !(!ton || ton.stumm)) vorlesen.sage(an.text !== undefined ? an.text : an, 'biel', false, an.art || 'name'); }
+        if (st.abend && vorlesen && vorlesen.spricht && !st.blase && !st.buch) vorlesen.stopp();
         zeigeSicherung();
-        zeigeAktion(); zeigeBuch(); zeigeEltern(); zeigeRuhig();
+        zeigeAktion(); zeigeBuch(); zeigeEltern(); zeigeRuhig(); zeigeElternOffen();
+        st.vorlesenDa = !!(vorlesen && vorlesen.verfuegbar);
       } catch (err) { ok = false; melde('Vorlesen', err); }
       try { Dorf.Render.zeichne(R, st); } catch (err) { ok = false; melde('Zeichnen', err); }
       try { st.eingabe.ende(); } catch (err) { ok = false; }
@@ -1276,9 +1316,9 @@
     return { st: st, R: R, fehler: fehler, sichere: sichere, vorlesen: vorlesen, ton: ton, zoom: Z };
   }
 
-  Dorf.Spiel = { STANDARD_SEED: STANDARD_SEED, VERSION: VERSION, KOCHDAUER: KOCHDAUER, PORTIONEN: PORTIONEN, erstelle: erstelle, schritt: schritt, sage: sage, klick: klick, klickBild: klickBild, kochen: kochen, streichle: streichle, tierPlatz: tierPlatz, oeffneMenue: oeffneMenue, zumHerd: zumHerd, frageAuf: frageAuf, neuAnfangen: neuAnfangen, rette: rette, naechstesZiel: naechstesZiel, kontext: kontext, tueKontext: tueKontext, sammle: sammle, FLUG_KORB: FLUG_KORB, AKTION_PULS: AKTION_PULS, AKTION_NAME: AKTION_NAME, FRAGE: FRAGE, ABEND_SPERRE: ABEND_SPERRE, LAMPEN: LAMPEN, TIPP_DAUER: TIPP_DAUER, SPEICHER_TAKT: SPEICHER_TAKT, menueKarten: menueKarten, MENUE: MENUE, TAFEL_MAX: TAFEL_MAX, starte: starte, ABEND: ABEND, abendHerzen: abendHerzen, BUCH: BUCH, BUCH_SEITEN: BUCH_SEITEN, ALBUM_SEITE: ALBUM_SEITE, MENUE_BUCH: MENUE_BUCH, oeffneBuch: oeffneBuch, schliesseBuch: schliesseBuch, blaettere: blaettere, WACKEL: WACKEL, MENUE_ZU: MENUE_ZU, gaehnen: gaehnen, GAEHN: GAEHN,
+  Dorf.Spiel = { STANDARD_SEED: STANDARD_SEED, VERSION: VERSION, KOCHDAUER: KOCHDAUER, PORTIONEN: PORTIONEN, erstelle: erstelle, schritt: schritt, sage: sage, klick: klick, klickBild: klickBild, kochen: kochen, streichle: streichle, tierPlatz: tierPlatz, oeffneMenue: oeffneMenue, zumHerd: zumHerd, frageAuf: frageAuf, neuAnfangen: neuAnfangen, rette: rette, naechstesZiel: naechstesZiel, kontext: kontext, tueKontext: tueKontext, sammle: sammle, FLUG_KORB: FLUG_KORB, AKTION_PULS: AKTION_PULS, AKTION_NAME: AKTION_NAME, FRAGE: FRAGE, ABEND_SPERRE: ABEND_SPERRE, LAMPEN: LAMPEN, TIPP_DAUER: TIPP_DAUER, SPEICHER_TAKT: SPEICHER_TAKT, menueKarten: menueKarten, MENUE: MENUE, TAFEL_MAX: TAFEL_MAX, starte: starte, ABEND: ABEND, abendHerzen: abendHerzen, BUCH: BUCH, BUCH_SEITEN: BUCH_SEITEN, ALBUM_SEITE: ALBUM_SEITE, HEUTE_SEITE: HEUTE_SEITE, buchSeiten: buchSeiten, ansage: ansage, MENUE_BUCH: MENUE_BUCH, oeffneBuch: oeffneBuch, schliesseBuch: schliesseBuch, blaettere: blaettere, WACKEL: WACKEL, MENUE_ZU: MENUE_ZU, gaehnen: gaehnen, GAEHN: GAEHN,
     waehleProfil: waehleProfil, oeffneWahl: oeffneWahl, oeffneEltern: oeffneEltern, schliesseEltern: schliesseEltern, elternTat: elternTat, musiziere: musiziere,
-    wahlKarten: wahlKarten, ELTERN: ELTERN, ELTERN_HALT: ELTERN_HALT, ladeProfil: ladeProfil, heute: heute, tagGesperrt: tagGesperrt, HERZCHEN_MAX: HERZCHEN_MAX, NOTEN_MAX: NOTEN_MAX,
+    wahlKarten: wahlKarten, ELTERN: ELTERN, ELTERN_HALT: ELTERN_HALT, VORLESE_ART: VORLESE_ART, vorleseArt: vorleseArt, ladeProfil: ladeProfil, heute: heute, tagGesperrt: tagGesperrt, HERZCHEN_MAX: HERZCHEN_MAX, NOTEN_MAX: NOTEN_MAX,
     uhrZeit: uhrZeit, grenzeSek: grenzeSek, grenzeAendern: grenzeAendern, BALD_SEK: BALD_SEK, LIED_ABSTAND: LIED_ABSTAND, LIED_TOENE: LIED_TOENE, ELTERN_REIHE: ELTERN_REIHE };
 
   if (typeof g.document !== 'undefined' && typeof g.window !== 'undefined' && g.document.getElementById) {

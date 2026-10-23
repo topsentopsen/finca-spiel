@@ -13,6 +13,22 @@
     padrina: { pitch: 0.95, rate: 0.8 }
   };
   var MAX_ZEICHEN = 140;
+  // ab v0.12: Einstellungen der Eltern. Namen (kurze Ansagen wie "Huhn!") und Saetze (Sprechblasen, Abendbuch)
+  // lassen sich einzeln abschalten, und alles kann langsamer gesprochen werden.
+  var ART_SCHLUESSEL = 'finca.vorleseart', LANGSAM = 0.78;
+  function artStandard() { return { namen: true, saetze: true, langsam: false }; }
+  function ladeArt(speicher) {
+    var a = artStandard(), d = null;
+    try { var roh = speicher && speicher.getItem(ART_SCHLUESSEL); d = roh ? JSON.parse(roh) : null; } catch (e) { d = null; }
+    if (d && typeof d === 'object') Object.keys(a).forEach(function (k) { if (typeof d[k] === 'boolean') a[k] = d[k]; });
+    return a;
+  }
+  function schreibeArt(speicher, a) {
+    try { if (speicher) speicher.setItem(ART_SCHLUESSEL, JSON.stringify({ namen: !!a.namen, saetze: !!a.saetze, langsam: !!a.langsam })); return true; } catch (e) { /* egal */ }
+    return false;
+  }
+  function erlaubt(a, art) { a = a || artStandard(); return art === 'name' ? a.namen !== false : a.saetze !== false; }
+  function tempo(p, a) { return Math.round(p.rate * (a && a.langsam ? LANGSAM : 1) * 100) / 100; }
 
   // Klammern werden zu kleinen Pausen, damit es ruhig klingt: "Bon dia! (Guten Morgen!)" -> "Bon dia! Guten Morgen!"
   function saeubere(text) {
@@ -32,7 +48,7 @@
   function erstelle(win, speicher) {
     var ss = null, Utter = null;
     try { if (win && 'speechSynthesis' in win && win.speechSynthesis && typeof win.SpeechSynthesisUtterance === 'function') { ss = win.speechSynthesis; Utter = win.SpeechSynthesisUtterance; } } catch (e) { ss = null; }
-    var v = { verfuegbar: false, an: lies(speicher), stimme: null, frei: false, spricht: false, beiAenderung: null, gesagt: 0 };
+    var v = { verfuegbar: false, an: lies(speicher), stimme: null, frei: false, spricht: false, beiAenderung: null, gesagt: 0, art: ladeArt(speicher) };
 
     function waehleStimme() {
       if (!ss || !ss.getVoices) return;
@@ -63,9 +79,11 @@
     v.stopp = function () { v.spricht = false; if (ss) { try { ss.cancel(); } catch (e) { /* egal */ } } };
     v.setze = function (an) { v.an = !!an; schreib(speicher, v.an); if (!v.an) v.stopp(); if (v.beiAenderung) v.beiAenderung(); return v.an; };
     v.umschalten = function () { return v.setze(!v.an); };
-    // Rueckgabe true, wenn wirklich vorgelesen wird
-    v.sage = function (text, sprecher, stumm) {
+    v.setzeArt = function (k, wert) { if (!(k in artStandard())) return false; v.art[k] = !!wert; schreibeArt(speicher, v.art); if (k === 'saetze' && !wert) v.stopp(); return true; };
+    // Rueckgabe true, wenn wirklich vorgelesen wird. art: 'name' (kurze Ansage) oder 'satz' (Standard)
+    v.sage = function (text, sprecher, stumm, art) {
       if (!ss || !v.verfuegbar || !v.an || !v.frei) return false;
+      if (!erlaubt(v.art, art === 'name' ? 'name' : 'satz')) return false;
       if (stumm) { v.stopp(); return false; }
       var t = saeubere(text);
       if (!t) return false;
@@ -74,7 +92,7 @@
         ss.cancel();
         var u = new Utter(t);
         u.lang = 'de-DE'; if (v.stimme) u.voice = v.stimme;
-        u.rate = p.rate; u.pitch = p.pitch; u.volume = 0.9;
+        u.rate = tempo(p, v.art); u.pitch = p.pitch; u.volume = 0.9;
         u.onend = u.onerror = function () { v.spricht = false; };
         v.spricht = true; v.gesagt++;
         ss.speak(u);
@@ -84,5 +102,6 @@
     return v;
   }
 
-  Dorf.Vorlesen = { SCHLUESSEL: SCHLUESSEL, STIMME: STIMME, MAX_ZEICHEN: MAX_ZEICHEN, saeubere: saeubere, erstelle: erstelle };
+  Dorf.Vorlesen = { ART_SCHLUESSEL: ART_SCHLUESSEL, LANGSAM: LANGSAM, artStandard: artStandard, ladeArt: ladeArt, schreibeArt: schreibeArt,
+    erlaubt: erlaubt, tempo: tempo, SCHLUESSEL: SCHLUESSEL, STIMME: STIMME, MAX_ZEICHEN: MAX_ZEICHEN, saeubere: saeubere, erstelle: erstelle };
 })(globalThis);

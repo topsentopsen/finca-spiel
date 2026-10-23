@@ -140,6 +140,10 @@ test('Uhr: 40 s pro Stunde, Abendszene bei 23:00 und naechster Tag', function ()
   nah(st.uhr.minute, 7 * 60, 1e-6, 'nach 40 s eine Stunde');
   for (i = 0; i < 17 * 40 * 10; i++) D.Spiel.schritt(st, 0.1);
   wahr(st.abend, 'Abendszene aktiv');
+  wahr(st.buch && st.buch.seite === D.Spiel.HEUTE_SEITE, 'ab v0.12: Abendbuch ist von selbst auf der Seite Heute');
+  st.eingabe.druecke('Enter'); D.Spiel.schritt(st, 0.1); st.eingabe.ende();
+  wahr(!st.buch && st.abend, 'erstes Enter schliesst nur das Buch');
+  st.eingabe.loese('Enter'); D.Spiel.schritt(st, 0.1);
   st.eingabe.druecke('Enter'); D.Spiel.schritt(st, 0.1); st.eingabe.ende();
   wahr(!st.abend, 'Abendszene beendet'); gleich(st.uhr.tag, 2); gleich(D.Uhr.text(st.uhr), '06:00');
 });
@@ -200,12 +204,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.11', function () {
+test('Version: sichtbares Label ist v0.12', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.11');
+  gleich(D.VERSION, 'v0.12');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.11 (Prototyp)') >= 0, 'Titel enthaelt v0.11');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.11"') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.12 (Prototyp)') >= 0, 'Titel enthaelt v0.12');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.12"') >= 0, n + ' eingebunden'); });
   wahr(html.indexOf('js/profile.js') < html.indexOf('js/main.js') && html.indexOf('js/leben.js') < html.indexOf('js/main.js'), 'neue Dateien vor main');
 });
 test('Debug: F1 ist frei, Debug liegt auf Backquote', function () {
@@ -769,7 +773,7 @@ test('Abendmusik: weiche Mischung nach Uhrzeit, Abendvariante in a-Moll und leis
   m = T.mischung(19.25, false); nah(m.abend, 0.5, 1e-9); nah(m.tag + m.abend, 1, 1e-9); gleich(m.grillen, 0);
   m = T.mischung(21, false); gleich(m.abend, 1); nah(m.grillen, 0.5, 1e-9);
   m = T.mischung(22.5, false); gleich(m.grillen, 1);
-  m = T.mischung(8, true); gleich(m.abend, 1); gleich(m.grillen, 1, 'Abendszene immer mit Grillen');
+  m = T.mischung(8, true); gleich(m.abend, 0, 'ab v0.12: in der Abendszene spielt das Schlaflied statt der Schleife'); gleich(m.grillen, 1, 'Abendszene immer mit Grillen');
   var tonleiter = [9, 11, 0, 2, 4, 5, 7, 8];
   [0, 1].forEach(function (rd) {
     var n = T.noten(rd, 'abend');
@@ -1061,7 +1065,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand.esel']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.11'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.12'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -1922,7 +1926,7 @@ test('Zeitkonto: 15 Minuten pro Bild und Tag, Bildwechsel, Neuladen und Neu anfa
   for (var i = 0; i < 1200 && !s2.abend; i++) b.frames(1, 1000);
   wahr(s2.abend, 'Tag vorbei'); wahr(P.fertig(s2.konto, 'esel'), 'Esel ist fertig fuer heute');
   wahr(P.sekunden(s2.konto, 'esel') <= U.TAG_LIMIT + 2, 'hoechstens 15 Minuten gebucht');
-  b.frames(60 * 15); s2.naechsterTag = true; b.frames(2);
+  b.frames(60 * 15); if (s2.buch) S.schliesseBuch(s2); s2.naechsterTag = true; b.frames(2);
   wahr(s2.wahl && s2.wahl.gesperrt, 'statt neuem Tag: Schlafenszeit'); wahr(s2.abend || s2.wahl, 'kein neuer Tag');
   gleich(S.waehleProfil(s2, 'huhn'), 'gesperrt', 'Kind kann nicht einfach ein anderes Bild nehmen');
   gleich(S.waehleProfil(s2, 'esel'), 'gesperrt');
@@ -1947,7 +1951,7 @@ test('Zeitkonto: um Mitternacht wachen alle auf, neuer Kalendertag hat wieder 15
   var sp = fakeSpeicher(), tag = { d: '2026-10-23' }, F = { Date: fakeDatum(tag) };
   var a = starteFake({ speicher: sp, fenster: F }), st = a.h.st, S = a.D.Spiel, P = a.D.Profile;
   for (var i = 0; i < 1200 && !st.abend; i++) a.frames(1, 1000);
-  a.frames(60 * 15); st.naechsterTag = true; a.frames(2);
+  a.frames(60 * 15); if (st.buch) S.schliesseBuch(st); st.naechsterTag = true; a.frames(2);
   wahr(st.wahl && st.wahl.gesperrt, 'Schlafenszeit');
   tag.d = '2026-10-24'; a.frames(150);
   wahr(!st.wahl.gesperrt, 'neuer Tag: Bilder wieder antippbar');
@@ -2150,7 +2154,7 @@ test('Minuten pro Bild im Spiel: weniger Minuten machen frueher Abend, mehr Minu
   // die Uhr laeuft so, als waeren schon 10 Minuten gespielt: nach 5 Minuten ist Abend
   for (i = 0; i < 400 && !st.abend; i++) a.frames(1, 1000);
   wahr(st.abend, 'Abend'); wahr(P.sekunden(st.konto, 'esel') <= 5 * 60 + 3, 'nach hoechstens 5 Minuten (' + Math.round(P.sekunden(st.konto, 'esel')) + ' s)');
-  a.frames(60 * 15); st.naechsterTag = true; a.frames(2);
+  a.frames(60 * 15); if (st.buch) S.schliesseBuch(st); st.naechsterTag = true; a.frames(2);
   wahr(st.wahl && st.wahl.gesperrt, 'Schlafenszeit');
   // Neuladen: Grenze bleibt
   a.h.sichere();
@@ -2319,6 +2323,141 @@ test('Sicherung im Spiel: Knopf im Elternbereich zeigt das Fenster, Uebernehmen 
   var e = k2.erstelle(w);
   wl.keydown({ code: 'ArrowLeft', target: { tagName: 'TEXTAREA' }, preventDefault: function () { gedrueckt++; } });
   gleich(gedrueckt, 0, 'im Textfeld kein preventDefault'); wahr(!e.neu('links'));
+});
+// ---------- v0.12: Elternbereich ohne Knoepfe oben, Schlaflied, Abendbuch Heute, gruene Wochenbalken, Vorlese-Einstellungen ----------
+test('Elternbereich v0.12: solange er offen ist, sind die Knoepfe oben rechts weg', function () {
+  var a = starteFake(), st = a.h.st, S = a.D.Spiel;
+  a.frames(2); wahr(!a.els.rahmen.classList.an.eltern, 'zu: Knoepfe da');
+  S.oeffneEltern(st); a.frames(2); wahr(a.els.rahmen.classList.an.eltern, 'offen: Knoepfe versteckt');
+  S.schliesseEltern(st); a.frames(2); wahr(!a.els.rahmen.classList.an.eltern, 'wieder zu: Knoepfe da');
+  var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+  wahr(/#rahmen\.eltern #oben\s*\{\s*visibility:\s*hidden/.test(html), 'CSS versteckt die obere Leiste');
+});
+test('Schlaflied: ruhig in a-Moll, wird langsamer und leiser, rund eine halbe Minute, endet von selbst', function () {
+  var T = ladeKontext().Dorf.Ton, n = T.schlafliedNoten();
+  wahr(n.length > 30 && n.length < 70, 'sparsam: ' + n.length);
+  var tonleiter = [9, 11, 0, 2, 4, 5, 7, 8];
+  wahr(n.every(function (x) { return isFinite(x.sek) && x.sek >= 0 && isFinite(x.midi) && tonleiter.indexOf(x.midi % 12) >= 0; }), 'nur a-Moll, alles endlich');
+  wahr(n.every(function (x) { return x.staerke > 0 && x.staerke <= T.SCHLAFLIED.max; }), 'nie laut');
+  for (var i = 1; i < n.length; i++) wahr(n[i].sek >= n[i - 1].sek, 'zeitlich sortiert');
+  var d = T.schlafliedDauer(); wahr(d > 25 && d < 45, 'Dauer ' + d);
+  function abstand(a, b) { return n.filter(function (x) { return x.art === 'bass'; })[b].sek - n.filter(function (x) { return x.art === 'bass'; })[a].sek; }
+  var bass = n.filter(function (x) { return x.art === 'bass'; });
+  wahr(abstand(bass.length - 2, bass.length - 1) > abstand(0, 1), 'am Ende langsamer');
+  var mel = n.filter(function (x) { return x.art === 'melodie'; });
+  wahr(mel[mel.length - 1].staerke < mel[0].staerke, 'am Ende leiser');
+  gleich(T.WIEGEN_FOLGE[T.WIEGEN_FOLGE.length - 1], 'Am', 'endet auf dem Grundakkord');
+});
+test('Schlaflied im Ton: einmal pro Abend, Schleife macht Platz, nicht wenn stumm, am Morgen vorbei', function () {
+  var T = ladeKontext().Dorf.Ton, au = fakeAudio(), win = fakeTonFenster(fakeSpeicher(), au);
+  var t = T.erstelle(win);
+  t.tageszeit(23, true); gleich(t.schlafliedGespielt, false, 'vor dem ersten Tippen nichts');
+  win.l.pointerdown[0]({});
+  var q0 = au.log.quellen;
+  t.tageszeit(23, true);
+  wahr(t.schlafliedGespielt && t.schlaflied, 'Lied geplant');
+  gleich(t.schlafliedNoten, T.schlafliedNoten().length);
+  wahr(au.log.quellen - q0 >= T.schlafliedNoten().length, 'Toene geplant');
+  wahr(t.schlaflied.start >= t.ctx.currentTime + 1.5, 'kurze Pause vor dem Lied');
+  gleich(t.mix.abend, 0, 'Abendschleife blendet aus'); gleich(t.mix.grillen, 1, 'Grillen bleiben');
+  var n1 = t.schlafliedNoten;
+  for (var i = 0; i < 5; i++) t.tageszeit(23, true);
+  gleich(t.schlafliedNoten, n1, 'kein zweites Mal am selben Abend');
+  t.ctx.currentTime = t.schlaflied.ende + 1; t.tageszeit(23, true);
+  gleich(t.schlaflied, null, 'von selbst zu Ende'); gleich(t.schlafliedNoten, n1, 'und nicht wiederholt');
+  t.tageszeit(6, false); gleich(t.schlafliedGespielt, false, 'neuer Tag');
+  t.setzeStumm(true); t.tageszeit(23, true); gleich(t.schlafliedNoten, n1, 'stumm: kein Lied');
+  // naechster Morgen mitten im Lied: weich aus
+  t.setzeStumm(false); t.tageszeit(23, true); wahr(t.schlaflied, 'nach dem Einschalten');
+  t.tageszeit(6, false); gleich(t.schlaflied, null, 'Lied abgesagt');
+});
+test('Abendbuch: geht einmal von selbst auf der Seite Heute auf, Sticker gross, Taten als Bilder, Satz wird vorgelesen', function () {
+  var gesagt = [];
+  function U(t) { this.text = t; }
+  var ss = { getVoices: function () { return [{ lang: 'de-DE', localService: true }]; }, cancel: function () {}, speak: function (u) { gesagt.push({ text: u.text, rate: u.rate }); } };
+  var au = fakeAudio();
+  var a = starteFake({ fenster: { speechSynthesis: ss, SpeechSynthesisUtterance: U, AudioContext: au.AC } });
+  var st = a.h.st, S = a.D.Spiel, R = a.h.R, ST = a.D.Sticker;
+  (a.listener.pointerdown || []).forEach(function (f) { f({}); }); a.frames(2);
+  gleich(S.buchSeiten(st), 4, 'tags keine Seite Heute');
+  S.oeffneBuch(st); a.frames(2); gleich(R.letztesBuch.reiter, 2, 'tags zwei Reiter'); S.schliesseBuch(st); a.frames(2);
+  st.heute = { ziel: true, koch_tumbet: true, ei: true, lied: true, musik: true };
+  for (var i = 0; i < 1200 && !st.abend; i++) a.frames(1, 1000);
+  wahr(st.abend, 'Abend');
+  st.blase = null; a.frames(60 * 7);
+  wahr(st.buch && st.buch.seite === S.HEUTE_SEITE, 'Buch offen auf Heute');
+  gleich(S.buchSeiten(st), 5); gleich(R.letztesBuch.reiter, 3, 'Reiter mit Mond');
+  var h = R.letztesBuch.heute; wahr(h, 'Seite Heute gezeichnet');
+  if (st.neuerSticker) gleich(h.sticker[0], st.neuerSticker, 'Sticker von heute');
+  gleich(h.taten.join(','), 'ziel,koch_tumbet,ei,lied', 'Taten ohne doppelte Musik');
+  a.frames(300);
+  var satz = gesagt.filter(function (g) { return /Schlaf gut\.$/.test(g.text); });
+  wahr(satz.length === 1, 'Satz einmal vorgelesen: ' + gesagt.map(function (g) { return g.text; }).join(' | '));
+  wahr(/Du hast alle Gäste glücklich gemacht, Tumbet gekocht und ein Ei gefunden\./.test(satz[0].text), satz[0].text);
+  S.schliesseBuch(st); a.frames(60 * 3);
+  wahr(!st.buch, 'zu bleibt zu'); wahr(st.abend, 'Abend bleibt, bis das Kind tippt');
+  // ohne Taten und ohne Sticker ein ruhiger Satz
+  gleich(ST.heuteSatz({ heute: {}, album: {}, uhr: { tag: 1 } }), 'Ein ruhiger Tag auf der Finca. Schlaf gut.');
+  gleich(ST.heuteSatz({ heute: { vogel: true }, album: { lied: 3 }, uhr: { tag: 3 }, neuerSticker: 'lied' }), 'Dein Sticker heute: Lied. Du hast Vögel gesehen. Schlaf gut.');
+  wahr(ST.LISTE.every(function (s) { return typeof s.name === 'string' && s.name.length > 1; }), 'jeder Sticker hat einen Namen');
+  gleich(ST.heuteTaten({ ziel: 1, koch_paamboli: 1, koch_ensaimada: 1, koch_tumbet: 1, esel: 1, ernte: 1, ei: 1, huhn: 1 }).length, ST.TATEN_MAX, 'hoechstens sechs Bilder');
+});
+test('Wochenbalken: ein Tag vor der Grenze wird sanft gruen, heute erst wenn er vorbei ist, keine Belohnung', function () {
+  var D = ladeKontext().Dorf, P = D.Profile, sp = fakeSpeicher();
+  wahr(P.imRahmen(600, 15)); wahr(!P.imRahmen(900, 15), 'bis an die Grenze ist nicht gruen'); wahr(!P.imRahmen(0, 15), 'nicht gespielt ist nicht gruen');
+  wahr(P.imRahmen(250, 5)); wahr(!P.imRahmen(290, 5));
+  sp.d['finca.woche'] = JSON.stringify({ tage: { '2026-10-22': { esel: 500 }, '2026-10-21': { esel: 600 }, '2026-10-01': { esel: 1 } },
+    grenzen: { '2026-10-22': { esel: 10 }, '2026-10-21': { esel: 99, huhn: 'x' }, '2026-09-01': { esel: 5 } } });
+  var w = P.ladeWoche(sp);
+  gleich(w.grenzen['2026-10-22'].esel, 10); gleich(w.grenzen['2026-10-21'].esel, 15, 'zu viel wird 15'); wahr(!('huhn' in w.grenzen['2026-10-21']));
+  wahr(!w.grenzen['2026-09-01'], 'Grenze ohne Tag faellt weg');
+  var k = { datum: '2026-10-23', profile: { esel: { sek: 200, fertig: false } } };
+  var l = P.letzteWoche(w, k, '2026-10-23', { esel: 15 });
+  gleich(l[5].gruen.esel, true, '500 s bei 10 Minuten: gruen'); gleich(l[4].gruen.esel, true);
+  gleich(l[6].gruen.esel, false, 'heute laeuft noch');
+  k.profile.esel.fertig = true; gleich(P.letzteWoche(w, k, '2026-10-23', { esel: 15 })[6].gruen.esel, true, 'heute fertig vor der Grenze');
+  k.profile.esel.sek = 900; gleich(P.letzteWoche(w, k, '2026-10-23', { esel: 15 })[6].gruen.esel, false, 'Grenze ganz erreicht');
+  P.merkeWoche(w, { datum: '2026-10-23', profile: { esel: { sek: 300 } } }, { esel: 8 });
+  P.schreibeWoche(sp, w);
+  gleich(JSON.parse(sp.d['finca.woche']).grenzen['2026-10-23'].esel, 8, 'Grenze von heute gemerkt');
+});
+test('Wochenbalken im Elternbereich: gruen gezeichnet, Erklaerzeile, sonst lila', function () {
+  var sp = fakeSpeicher(), tag = { d: '2026-10-23' }, F = { Date: fakeDatum(tag) };
+  sp.d['finca.woche'] = JSON.stringify({ tage: { '2026-10-22': { esel: 400 }, '2026-10-21': { esel: 900 } }, grenzen: { '2026-10-22': { esel: 15 } } });
+  var a = starteFake({ speicher: sp, fenster: F }), st = a.h.st, S = a.D.Spiel, R = a.h.R;
+  a.frames(60); S.oeffneEltern(st); a.frames(2);
+  var z = R.letzteEltern.zeilen[0];
+  gleich(z.farben[5], 'gruen'); gleich(z.farben[4], 'lila', 'Grenze erreicht: lila wie bisher'); gleich(z.farben[3], 'leer');
+});
+test('Vorlesen v0.12: Namen und Saetze einzeln aus, langsamer, gespeichert und in der Sicherung', function () {
+  var V = ladeKontext().Dorf.Vorlesen, P = ladeKontext().Dorf.Profile, sp = fakeSpeicher();
+  gleich(JSON.stringify(V.ladeArt(sp)), JSON.stringify({ namen: true, saetze: true, langsam: false }));
+  sp.d['finca.vorleseart'] = '{kaputt'; gleich(V.ladeArt(sp).namen, true, 'kaputt: Standard');
+  sp.d['finca.vorleseart'] = JSON.stringify({ namen: false, langsam: 'ja' }); var a0 = V.ladeArt(sp); gleich(a0.namen, false); gleich(a0.langsam, false, 'nur echte Ja/Nein');
+  wahr(!V.erlaubt({ namen: false, saetze: true }, 'name')); wahr(V.erlaubt({ namen: false, saetze: true }, 'satz'));
+  gleich(V.tempo({ rate: 0.9 }, { langsam: true }), 0.7); gleich(V.tempo({ rate: 0.9 }, { langsam: false }), 0.9);
+  wahr(P.erlaubt('finca.vorleseart'), 'in der Sicherung erlaubt');
+  var gesagt = [];
+  function U(t) { this.text = t; }
+  var ss = { getVoices: function () { return [{ lang: 'de-DE', localService: true }]; }, cancel: function () {}, speak: function (u) { gesagt.push(u); } };
+  var au = fakeAudio(), sp2 = fakeSpeicher();
+  var a = starteFake({ speicher: sp2, fenster: { speechSynthesis: ss, SpeechSynthesisUtterance: U, AudioContext: au.AC } });
+  var st = a.h.st, S = a.D.Spiel, R = a.h.R, E = S.ELTERN;
+  (a.listener.pointerdown || []).forEach(function (f) { f({}); }); a.frames(2);
+  S.oeffneEltern(st); a.frames(30);
+  ['namen', 'saetze', 'langsam'].forEach(function (k) { wahr(E[k].x >= E.x && E[k].x + E[k].w <= E.x + E.w && E[k].h >= 18, k + ' im Feld'); });
+  wahr(S.ELTERN_REIHE.indexOf('namen') > S.ELTERN_REIHE.indexOf('ruhig'), 'auch mit Pfeilen erreichbar');
+  gleich(R.letzteEltern.schalter.langsam, false);
+  st.eltern.t = 1; S.klickBild(st, E.langsam.x + 5, E.langsam.y + 5); a.frames(2);
+  gleich(R.letzteEltern.schalter.langsam, true, 'langsam an');
+  gleich(JSON.parse(sp2.d['finca.vorleseart']).langsam, true, 'gespeichert');
+  S.elternTat(st, 'namen'); a.frames(2); gleich(JSON.parse(sp2.d['finca.vorleseart']).namen, false, 'Namen aus');
+  S.schliesseEltern(st); a.frames(2);
+  var vorher = gesagt.length;
+  S.ansage(st, 'Huhn!'); a.frames(3); gleich(gesagt.length, vorher, 'Name wird nicht gesagt');
+  S.ansage(st, 'Ein Satz zum Vorlesen.', 'satz'); a.frames(250);   // ein Satz wartet hoechstens 4 Sekunden auf eine laufende Stimme
+  gleich(gesagt.length, vorher + 1, 'Satz schon'); wahr(gesagt[gesagt.length - 1].rate < 0.85, 'langsamer: ' + gesagt[gesagt.length - 1].rate);
+  var b = starteFake({ speicher: sp2 }); gleich(b.h.st.vorleseArt.namen, false, 'nach Neuladen noch aus');
 });
 
 // ---------- Ausfuehren ----------

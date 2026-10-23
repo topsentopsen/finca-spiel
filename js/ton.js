@@ -27,6 +27,43 @@
   var MELODIE_ABEND = [[0, 0, 72], [0, 4, 69], [1, 0, 71], [1, 4, 67], [2, 0, 69], [2, 4, 65], [3, 0, 68], [3, 6, 64],
     [4, 0, 65], [4, 4, 69], [5, 0, 64], [5, 4, 67], [6, 0, 69], [6, 4, 72], [7, 0, 71], [7, 4, 68]];
 
+  // ab v0.12: Schlaflied fuer "Bona nit". Spielt einmal pro Abend, wird am Ende langsamer und leiser und hoert von selbst auf.
+  // Danach zirpen nur noch die Grillen. Es gibt absichtlich keinen Knopf zum Wiederholen.
+  var SCHLAFLIED = { vorlauf: 2.0, achtel: 0.5, bremse: 0.35, leiseBis: 0.5, max: 0.4 };
+  var WIEGEN_FOLGE = ['Am', 'F', 'G', 'Am', 'Dm', 'Am', 'E', 'Am'];
+  var WIEGEN_MELODIE = [[0, 0, 76], [0, 4, 72], [1, 0, 72], [1, 4, 69], [2, 0, 71], [2, 4, 67], [3, 0, 69], [3, 4, 72],
+    [4, 0, 74], [4, 4, 69], [5, 0, 72], [5, 4, 76], [6, 0, 71], [6, 4, 68], [7, 0, 69]];
+  var WIEGEN_MUSTER = [[0, 0], [2, 1], [4, 2], [6, 3]];
+  // Reine Funktion: alle Noten mit Zeit in Sekunden ab Liedbeginn. Die letzten zwei Takte werden langsamer und leiser.
+  function schlafliedNoten() {
+    var roh = [];
+    WIEGEN_FOLGE.forEach(function (name, takt) {
+      var a = AKKORDE[name];
+      if (takt === WIEGEN_FOLGE.length - 1) {
+        // Schlussakkord: Bass und drei Toene ganz sanft nacheinander, dann klingt alles aus
+        [0, 1, 2, 3].forEach(function (k) { roh.push({ schritt: takt * 8 + k, midi: a[k], staerke: k ? 0.22 : 0.36, art: k ? 'akkord' : 'bass' }); });
+        return;
+      }
+      WIEGEN_MUSTER.forEach(function (m) { roh.push({ schritt: takt * 8 + m[0], midi: a[m[1]], staerke: m[1] === 0 ? 0.36 : 0.22, art: m[1] === 0 ? 'bass' : 'akkord' }); });
+    });
+    WIEGEN_MELODIE.forEach(function (m) { roh.push({ schritt: m[0] * 8 + m[1], midi: m[2], staerke: 0.26, art: 'melodie' }); });
+    var n = WIEGEN_FOLGE.length * 8, ab = n - 16;
+    function zeit(k) {
+      // ab Takt 7 jede Achtel etwas laenger (sanftes Ritardando)
+      if (k <= ab) return k * SCHLAFLIED.achtel;
+      var x = k - ab;
+      return ab * SCHLAFLIED.achtel + x * SCHLAFLIED.achtel + SCHLAFLIED.bremse * SCHLAFLIED.achtel * x * x / 16;
+    }
+    roh.forEach(function (r) {
+      var leiser = r.schritt <= ab ? 1 : 1 - (1 - SCHLAFLIED.leiseBis) * (r.schritt - ab) / 16;
+      r.sek = Math.round(zeit(r.schritt) * 1000) / 1000;
+      r.staerke = Math.round(Math.min(SCHLAFLIED.max, r.staerke * leiser) * 1000) / 1000;
+    });
+    roh.sort(function (a, b) { return a.sek - b.sek || a.midi - b.midi; });
+    return roh;
+  }
+  function schlafliedDauer() { var l = schlafliedNoten(); return l[l.length - 1].sek + 2.6; }   // plus Ausklingen der letzten Saite
+
   function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
   // Alle Noten einer Runde (8 Takte). zeit in Achteln ab Rundenbeginn.
@@ -112,7 +149,7 @@
   function klemme(v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
   // Mischung nach Uhrzeit: ab 18:30 Abendmusik, ab 20:30 Grillen. Abendszene: ganz Abend.
   function mischung(stunde, abendSzene) {
-    if (abendSzene) return { tag: 0, abend: 1, grillen: 1 };
+    if (abendSzene) return { tag: 0, abend: 0, grillen: 1 };   // ab v0.12: in der Abendszene spielt das Schlaflied statt der Schleife
     var abend = klemme((stunde - 18.5) / 1.5);
     return { tag: 1 - abend, abend: abend, grillen: klemme((stunde - 20.5) / 1) };
   }
@@ -153,6 +190,8 @@
       knoten.tag = c.createGain(); knoten.tag.gain.value = t.mix.tag; knoten.tag.connect(knoten.musik);
       knoten.abendFilter = c.createBiquadFilter(); knoten.abendFilter.type = 'lowpass'; knoten.abendFilter.frequency.value = 1700;
       knoten.abend = c.createGain(); knoten.abend.gain.value = t.mix.abend; knoten.abend.connect(knoten.abendFilter); knoten.abendFilter.connect(knoten.musik);
+      // ab v0.12: eigene Spur fuer das Schlaflied (gleich warm gefiltert wie der Abend)
+      knoten.wiegen = c.createGain(); knoten.wiegen.gain.value = 1; knoten.wiegen.connect(knoten.abendFilter);
       // Grillen laufen am Tiefpass vorbei, sonst waeren sie weg
       knoten.grillen = c.createGain(); knoten.grillen.gain.value = t.mix.grillen * LAUT.grillen; knoten.grillen.connect(knoten.komp);
       knoten.effekte = c.createGain(); knoten.effekte.gain.value = LAUT.effekte; knoten.effekte.connect(knoten.gesamt);
@@ -243,15 +282,44 @@
       o.connect(gn); gn.connect(knoten.grillen); o.start(z.zeit); o.stop(z.zeit + z.dauer + 0.02);
       t.grillenGespielt++;
     }
+    // ab v0.12: Schlaflied einmal pro Abendszene. t.schlaflied: { start, ende, quellen } solange es geplant ist
+    t.schlaflied = null; t.schlafliedGespielt = false; t.schlafliedNoten = 0;
+    function schlafliedStart() {
+      var c = t.ctx, start = c.currentTime + SCHLAFLIED.vorlauf, q = [];
+      knoten.wiegen.gain.cancelScheduledValues(c.currentTime); knoten.wiegen.gain.setValueAtTime(1, c.currentTime);
+      schlafliedNoten().forEach(function (n) {
+        var quelle = c.createBufferSource(), gn = c.createGain();
+        quelle.buffer = saite(n.midi); gn.gain.value = n.staerke;
+        quelle.connect(gn); gn.connect(knoten.wiegen); quelle.start(start + n.sek); q.push(quelle);
+        t.schlafliedNoten++;
+      });
+      t.schlaflied = { start: start, ende: start + schlafliedDauer(), quellen: q };
+      t.schlafliedGespielt = true;
+    }
+    function schlafliedStopp() {
+      if (!t.schlaflied) return;
+      var c = t.ctx, j = c.currentTime;
+      // weich ausblenden, dann die noch geplanten Toene absagen
+      knoten.wiegen.gain.cancelScheduledValues(j); knoten.wiegen.gain.setTargetAtTime(0, j, 0.4);
+      t.schlaflied.quellen.forEach(function (q) { try { q.stop(j + 1.6); } catch (e) { /* schon vorbei */ } });
+      t.schlaflied = null;
+    }
+    function schlafliedPruefen(abendSzene) {
+      if (!t.ctx || !knoten.wiegen) return;
+      if (!abendSzene) { schlafliedStopp(); t.schlafliedGespielt = false; return; }
+      if (t.schlaflied && t.ctx.currentTime > t.schlaflied.ende) t.schlaflied = null;   // von selbst zu Ende
+      if (!t.schlafliedGespielt && !t.stumm && t.bereit && t.ctx.state === 'running') schlafliedStart();
+    }
     // Uhrzeit vom Spiel: blendet weich zwischen Tag, Abend und Grillen
     t.tageszeit = function (stunde, abendSzene) {
+      schlafliedPruefen(!!abendSzene);
       var m = mischung(stunde, abendSzene), alt = t.mix;
       if (m.tag === alt.tag && m.abend === alt.abend && m.grillen === alt.grillen) return false;
       t.mix = m;
       if (t.ctx && knoten.tag) {
         var j = t.ctx.currentTime;
         knoten.tag.gain.setTargetAtTime(m.tag, j, UEBERBLENDEN);
-        knoten.abend.gain.setTargetAtTime(m.abend, j, UEBERBLENDEN);
+        knoten.abend.gain.setTargetAtTime(m.abend, j, abendSzene ? 0.8 : UEBERBLENDEN);   // Schleife macht dem Schlaflied schnell Platz
         knoten.grillen.gain.setTargetAtTime(m.grillen * LAUT.grillen, j, UEBERBLENDEN);
       }
       return true;
@@ -384,5 +452,6 @@
 
   Dorf.Ton = { SCHLUESSEL: SCHLUESSEL, BPM: BPM, LAUT: LAUT, UEBERBLENDEN: UEBERBLENDEN, AKKORDE: AKKORDE, FOLGE: FOLGE, mtof: mtof, noten: noten, zupfe: zupfe, mischung: mischung, zirpen: zirpen,
     akkordBei: akkordBei, instrumentNoten: instrumentNoten, raster: raster, ACHTEL: ACHTEL,
+    SCHLAFLIED: SCHLAFLIED, WIEGEN_FOLGE: WIEGEN_FOLGE, schlafliedNoten: schlafliedNoten, schlafliedDauer: schlafliedDauer,
     stummLaden: stummLaden, stummSpeichern: stummSpeichern, erstelle: erstelle };
 })(globalThis);
