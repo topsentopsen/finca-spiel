@@ -8,7 +8,8 @@
   var SCHLUESSEL = 'finca.stumm';
   var BPM = 66;                        // langsam und entspannt
   var ACHTEL = 60 / BPM / 2;           // Sekunden pro Achtel
-  var LAUT = { gesamt: 0.6, musik: 0.55, effekte: 0.9, umgebung: 0.05 };
+  var LAUT = { gesamt: 0.6, musik: 0.55, effekte: 0.9, umgebung: 0.05, grillen: 0.06 };
+  var UEBERBLENDEN = 2.5;              // Zeitkonstante in Sekunden fuer Tag zu Abend (ganz weich)
 
   // Akkorde in MIDI: Bass und drei Toene. Spanische Kadenz in a-Moll, sanft gezupft.
   var AKKORDE = {
@@ -21,11 +22,25 @@
   var MELODIE = [[0, 0, 76], [0, 4, 72], [1, 0, 74], [1, 4, 71], [2, 0, 72], [2, 3, 69], [2, 5, 72], [3, 0, 71], [3, 4, 68],
     [4, 0, 69], [4, 4, 74], [5, 0, 72], [5, 4, 76], [6, 0, 77], [6, 3, 76], [6, 5, 74], [7, 0, 71], [7, 4, 68]];
 
+  // Abendvariante (ab v0.4): gleiche Akkorde, aber sparsamer gezupft, tiefer und mit Schlaflied-Melodie
+  var MUSTER_ABEND = [[0, 0], [2, 1], [3, 2], [4, 3], [6, 2]];     // [Achtel, Stufe]
+  var MELODIE_ABEND = [[0, 0, 72], [0, 4, 69], [1, 0, 71], [1, 4, 67], [2, 0, 69], [2, 4, 65], [3, 0, 68], [3, 6, 64],
+    [4, 0, 65], [4, 4, 69], [5, 0, 64], [5, 4, 67], [6, 0, 69], [6, 4, 72], [7, 0, 71], [7, 4, 68]];
+
   function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
   // Alle Noten einer Runde (8 Takte). zeit in Achteln ab Rundenbeginn.
-  function noten(runde) {
+  function noten(runde, art) {
     var liste = [];
+    if (art === 'abend') {
+      FOLGE.forEach(function (name, takt) {
+        var a = AKKORDE[name];
+        MUSTER_ABEND.forEach(function (m) { liste.push({ zeit: takt * 8 + m[0], midi: a[m[1]], staerke: m[1] === 0 ? 0.5 : 0.3, art: m[1] === 0 ? 'bass' : 'akkord' }); });
+      });
+      MELODIE_ABEND.forEach(function (m) { liste.push({ zeit: m[0] * 8 + m[1], midi: m[2], staerke: 0.3, art: 'melodie' }); });
+      liste.sort(function (a, b) { return a.zeit - b.zeit; });
+      return liste;
+    }
     FOLGE.forEach(function (name, takt) {
       var a = AKKORDE[name];
       MUSTER.forEach(function (stufe, i) {
@@ -59,6 +74,20 @@
     return out;
   }
 
+  function klemme(v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
+  // Mischung nach Uhrzeit: ab 18:30 Abendmusik, ab 20:30 Grillen. Abendszene: ganz Abend.
+  function mischung(stunde, abendSzene) {
+    if (abendSzene) return { tag: 0, abend: 1, grillen: 1 };
+    var abend = klemme((stunde - 18.5) / 1.5);
+    return { tag: 1 - abend, abend: abend, grillen: klemme((stunde - 20.5) / 1) };
+  }
+  // Eine Grille: drei kurze, weiche Zirper
+  function zirpen(start, hoehe) {
+    var l = [];
+    for (var i = 0; i < 3; i++) l.push({ zeit: start + i * 0.07, freq: hoehe, dauer: 0.035, staerke: i === 1 ? 0.5 : 0.38 });
+    return l;
+  }
+
   function stummLaden(speicher) {
     try { return !!(speicher && speicher.getItem(SCHLUESSEL) === '1'); } catch (e) { return false; }
   }
@@ -72,8 +101,10 @@
     var AC = win ? (win.AudioContext || win.webkitAudioContext) : null;
     var t = {
       stumm: stummLaden(speicher), bereit: false, verfuegbar: !!AC, ctx: null,
-      beiAenderung: null, runde: 0, schrittIndex: 0, naechste: 0, puffer: {}, gespielt: 0
+      beiAenderung: null, runde: 0, schrittIndex: 0, naechste: 0, puffer: {}, gespielt: 0,
+      mix: { tag: 1, abend: 0, grillen: 0 }, grillenGespielt: 0, naechsteGrille: 0
     };
+    var leiseSeit = { tag: -1, abend: -1 }, grillenZufall = 12345;
     var knoten = {}, takt = null, rauschen = null, umgebungZiel = 0, schrittL = false;
 
     function baue() {
@@ -83,6 +114,12 @@
       knoten.komp = c.createDynamicsCompressor();
       knoten.gesamt.connect(knoten.filter); knoten.filter.connect(knoten.komp); knoten.komp.connect(c.destination);
       knoten.musik = c.createGain(); knoten.musik.gain.value = LAUT.musik; knoten.musik.connect(knoten.gesamt);
+      // zwei Musikspuren zum Ueberblenden: Tag und Abend (Abend etwas waermer gefiltert)
+      knoten.tag = c.createGain(); knoten.tag.gain.value = t.mix.tag; knoten.tag.connect(knoten.musik);
+      knoten.abendFilter = c.createBiquadFilter(); knoten.abendFilter.type = 'lowpass'; knoten.abendFilter.frequency.value = 1700;
+      knoten.abend = c.createGain(); knoten.abend.gain.value = t.mix.abend; knoten.abend.connect(knoten.abendFilter); knoten.abendFilter.connect(knoten.musik);
+      // Grillen laufen am Tiefpass vorbei, sonst waeren sie weg
+      knoten.grillen = c.createGain(); knoten.grillen.gain.value = t.mix.grillen * LAUT.grillen; knoten.grillen.connect(knoten.komp);
       knoten.effekte = c.createGain(); knoten.effekte.gain.value = LAUT.effekte; knoten.effekte.connect(knoten.gesamt);
       // weicher Raumhall als Echo mit Rueckkopplung
       knoten.hall = c.createDelay(1); knoten.hall.delayTime.value = 0.27;
@@ -111,12 +148,13 @@
       return t.puffer[midi];
     }
 
-    function spieleNote(n, wann) {
+    function spieleNote(n, wann, spur) {
       var c = t.ctx, q = c.createBufferSource(), gn = c.createGain();
       q.buffer = saite(n.midi); gn.gain.value = n.staerke;
       q.connect(gn);
-      if (c.createStereoPanner) { var p = c.createStereoPanner(); p.pan.value = n.art === 'bass' ? -0.1 : (n.art === 'melodie' ? 0.2 : 0.05); gn.connect(p); p.connect(knoten.musik); }
-      else gn.connect(knoten.musik);
+      var ziel = knoten[spur] || knoten.musik;
+      if (c.createStereoPanner) { var p = c.createStereoPanner(); p.pan.value = n.art === 'bass' ? -0.1 : (n.art === 'melodie' ? 0.2 : 0.05); gn.connect(p); p.connect(ziel); }
+      else gn.connect(ziel);
       q.start(wann);
       t.gespielt++;
     }
@@ -125,14 +163,30 @@
       if (!t.ctx || t.stumm || t.ctx.state !== 'running') return;
       var jetzt = t.ctx.currentTime;
       if (t.naechste < jetzt) t.naechste = jetzt + 0.08;        // nach Pause nicht nachholen, einfach weiter
-      var liste = noten(t.runde);
+      // Eine Spur nur planen, solange sie hoerbar ist (nach dem Ausblenden noch 15 s Nachklang)
+      var spuren = ['tag', 'abend'].filter(function (sp) {
+        if (t.mix[sp] > 0.001) { leiseSeit[sp] = -1; return true; }
+        if (leiseSeit[sp] < 0) leiseSeit[sp] = jetzt;
+        return jetzt - leiseSeit[sp] < 15;
+      });
+      var listen = { tag: noten(t.runde, 'tag'), abend: noten(t.runde, 'abend') };
       while (t.naechste < jetzt + 0.35) {
         var pos = t.schrittIndex;
         // leichtes Schwingen (Swing) fuer ein lockeres Gefuehl
         var wann = t.naechste + (pos % 2 === 1 ? ACHTEL * 0.08 : 0);
-        liste.forEach(function (n) { if (n.zeit === pos) spieleNote(n, wann); });
+        spuren.forEach(function (sp) { listen[sp].forEach(function (n) { if (n.zeit === pos) spieleNote(n, wann, sp); }); });
         t.naechste += ACHTEL; t.schrittIndex++;
-        if (t.schrittIndex >= 64) { t.schrittIndex = 0; t.runde++; liste = noten(t.runde); }
+        if (t.schrittIndex >= 64) { t.schrittIndex = 0; t.runde++; listen = { tag: noten(t.runde, 'tag'), abend: noten(t.runde, 'abend') }; }
+      }
+      // Grillen in der Nacht, zwei Tiere abwechselnd, mit ruhigen Pausen
+      if (t.mix.grillen > 0.001) {
+        if (t.naechsteGrille < jetzt) t.naechsteGrille = jetzt + 0.2;
+        while (t.naechsteGrille < jetzt + 0.35) {
+          grillenZufall = (grillenZufall * 1664525 + 1013904223) >>> 0;
+          var zf = grillenZufall / 4294967296;
+          zirpen(t.naechsteGrille, zf < 0.5 ? 4200 : 4650).forEach(grille);
+          t.naechsteGrille += 0.9 + zf * 1.8;
+        }
       }
     }
 
@@ -144,6 +198,29 @@
       // Einblenden langsam, Ausblenden schnell, nie ploetzlich laut
       knoten.gesamt.gain.setTargetAtTime(t.stumm ? 0 : LAUT.gesamt, jetzt, t.stumm ? 0.08 : 1.2);
     }
+
+    function grille(z) {
+      var c = t.ctx, o = c.createOscillator(), gn = c.createGain();
+      o.type = 'sine'; o.frequency.setValueAtTime(z.freq, z.zeit);
+      gn.gain.setValueAtTime(0, z.zeit);
+      gn.gain.linearRampToValueAtTime(z.staerke, z.zeit + 0.008);
+      gn.gain.linearRampToValueAtTime(0, z.zeit + z.dauer);
+      o.connect(gn); gn.connect(knoten.grillen); o.start(z.zeit); o.stop(z.zeit + z.dauer + 0.02);
+      t.grillenGespielt++;
+    }
+    // Uhrzeit vom Spiel: blendet weich zwischen Tag, Abend und Grillen
+    t.tageszeit = function (stunde, abendSzene) {
+      var m = mischung(stunde, abendSzene), alt = t.mix;
+      if (m.tag === alt.tag && m.abend === alt.abend && m.grillen === alt.grillen) return false;
+      t.mix = m;
+      if (t.ctx && knoten.tag) {
+        var j = t.ctx.currentTime;
+        knoten.tag.gain.setTargetAtTime(m.tag, j, UEBERBLENDEN);
+        knoten.abend.gain.setTargetAtTime(m.abend, j, UEBERBLENDEN);
+        knoten.grillen.gain.setTargetAtTime(m.grillen * LAUT.grillen, j, UEBERBLENDEN);
+      }
+      return true;
+    };
 
     t.entsperre = function () {
       if (!AC) return false;
@@ -185,6 +262,11 @@
       else if (name === 'fertig') { ton(1046.5, j, 0.7, 0.045); ton(1318.5, j + 0.12, 0.7, 0.045); ton(1568, j + 0.24, 1.0, 0.045); }
       else if (name === 'kochen') { ton(330, j, 0.16, 0.05, 'sine', 660); ton(392, j + 0.18, 0.16, 0.04, 'sine', 784); }
       else if (name === 'menue') ton(880, j, 0.08, 0.025, 'triangle');
+      else if (name === 'herz') { ton(1568, j, 0.35, 0.03); ton(2093, j + 0.09, 0.45, 0.025); }
+      else if (name === 'esel') { ton(196, j, 0.28, 0.05, 'triangle', 247); ton(247, j + 0.3, 0.32, 0.045, 'triangle', 185); ton(1318.5, j + 0.62, 0.6, 0.025); }
+      else if (name === 'gecko') { ton(2637, j, 0.05, 0.02, 'triangle'); ton(3136, j + 0.08, 0.05, 0.02, 'triangle'); ton(1975.5, j + 0.2, 0.4, 0.02); }
+      else if (name === 'feier') { [523.25, 659.25, 783.99, 1046.5, 1318.5].forEach(function (f, i) { ton(f, j + i * 0.16, 1.1, 0.04); }); }
+      else if (name === 'nacht') { ton(783.99, j, 1.0, 0.035); ton(659.25, j + 0.3, 1.0, 0.03); ton(523.25, j + 0.6, 1.4, 0.03); }
       else if (name === 'schritt') {
         if (!rauschen) return false;
         var q = c.createBufferSource(), lp = c.createBiquadFilter(), gn = c.createGain();
@@ -204,6 +286,6 @@
     return t;
   }
 
-  Dorf.Ton = { SCHLUESSEL: SCHLUESSEL, BPM: BPM, LAUT: LAUT, AKKORDE: AKKORDE, FOLGE: FOLGE, mtof: mtof, noten: noten, zupfe: zupfe,
+  Dorf.Ton = { SCHLUESSEL: SCHLUESSEL, BPM: BPM, LAUT: LAUT, UEBERBLENDEN: UEBERBLENDEN, AKKORDE: AKKORDE, FOLGE: FOLGE, mtof: mtof, noten: noten, zupfe: zupfe, mischung: mischung, zirpen: zirpen,
     stummLaden: stummLaden, stummSpeichern: stummSpeichern, erstelle: erstelle };
 })(globalThis);

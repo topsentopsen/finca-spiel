@@ -3,7 +3,7 @@
 'use strict';
 var fs = require('fs'), path = require('path'), vm = require('vm');
 
-var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'gaeste', 'render', 'ton', 'main'];
+var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'glueck', 'gaeste', 'tiere', 'render', 'ton', 'main'];
 
 function ladeKontext(extra) {
   var ctx = { console: console, Math: Math };
@@ -197,12 +197,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.3', function () {
+test('Version: sichtbares Label ist v0.4', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.3');
+  gleich(D.VERSION, 'v0.4');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.3') >= 0, 'Titel enthaelt v0.3');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.3') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.4') >= 0, 'Titel enthaelt v0.4');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.4') >= 0, n + ' eingebunden'); });
 });
 test('Debug: F1 ist frei, Debug liegt auf Backquote', function () {
   var D = ladeKontext().Dorf;
@@ -637,6 +637,163 @@ test('Skalierung: kleines Handy bekommt krumme Skalierung statt winzig', functio
   var ctx = ladeKontext({ window: win, document: { getElementById: function (id) { return c[id] || null; } } });
   listener.load[0]();
   gleich(c.spiel.style.width, (320 * 1.77) + 'px');
+});
+
+
+// ---------- Glueck, Tiere und Abendmusik (v0.4) ----------
+test('Glueck: Herzen fuer Reden, Essen und Lieblingsgericht, mit Pause und Obergrenze', function () {
+  var D = ladeKontext().Dorf, G = D.Glueck, st = D.Spiel.erstelle({ seed: 3 }), mia = st.gaeste[0];
+  gleich(G.herzen(mia), 1, 'Start mit einem Herz');
+  st.toene.length = 0;
+  gleich(G.gib(st, mia, 'reden'), 0, '10 Punkte sind noch kein neues Herz');
+  gleich(G.gib(st, mia, 'reden'), 0, 'Reden zaehlt erst nach einer Pause wieder');
+  gleich(mia.glueck, 30);
+  st.zeit += 13;
+  gleich(G.gib(st, mia, 'reden'), 1, 'nach der Pause wieder');
+  gleich(st.toene.filter(function (t) { return t === 'herz'; }).length, 1, 'neues Herz klingt');
+  gleich(st.herzchen.length, 1, 'Herzchen steigt auf');
+  var a = G.gib(st, mia, 'essen'), b = G.gib(st, mia, 'liebling');
+  wahr(G.GRUND.liebling.menge > G.GRUND.essen.menge, 'Lieblingsgericht macht gluecklicher');
+  wahr(a + b >= 1);
+  for (var i = 0; i < 20; i++) G.gib(st, mia, 'liebling');
+  gleich(mia.glueck, G.MAX, 'nie mehr als voll'); gleich(G.herzen(mia), 5);
+  gleich(G.gib(st, mia, 'quatsch'), 0, 'unbekannter Grund tut nichts');
+  wahr(!st.tagesziel.erreicht, 'Jonas fehlt noch');
+});
+test('Glueck: Tagesziel einmal feiern, nie sinken, neuer Tag beginnt frisch', function () {
+  var D = ladeKontext().Dorf, G = D.Glueck, st = D.Spiel.erstelle({ seed: 4 });
+  var vorher = st.gaeste.map(function (g) { return g.glueck; });
+  for (var i = 0; i < 30 * 200; i++) D.Spiel.schritt(st, 1 / 30);
+  st.gaeste.forEach(function (g, k) { wahr(g.glueck >= vorher[k], 'Glueck sinkt nie'); });
+  st.gaeste.forEach(function (g) { g.glueck = G.MAX - 5; });
+  st.toene.length = 0;
+  G.gib(st, st.gaeste[0], 'liebling');
+  wahr(!st.tagesziel.erreicht, 'erst wenn alle gluecklich sind');
+  G.gib(st, st.gaeste[1], 'liebling');
+  wahr(st.tagesziel.erreicht && st.tagesziel.neu, 'Ziel erreicht');
+  D.Spiel.schritt(st, 1 / 30);
+  gleich(st.tagesziel.neu, false, 'nur einmal gemeldet');
+  wahr(st.toene.indexOf('feier') >= 0, 'leise Feier-Melodie');
+  wahr(/glücklich/.test(st.blase.text), 'Biel freut sich');
+  // Abend: Feier statt Nacht
+  st.uhr.minute = D.Uhr.ENDE; st.toene.length = 0;
+  D.Spiel.schritt(st, 1 / 30);
+  wahr(st.abend); wahr(st.toene.indexOf('feier') >= 0, 'Abendszene feiert');
+  st.naechsterTag = true; D.Spiel.schritt(st, 1 / 30);
+  wahr(!st.abend); gleich(st.tagesziel.erreicht, false, 'neues Ziel am neuen Tag');
+  st.gaeste.forEach(function (g) { gleich(g.glueck, G.START, 'neuer Tag, neue Herzen'); });
+  // ohne Ziel: sanfter Abend, keine Strafe
+  st.uhr.minute = D.Uhr.ENDE; st.toene.length = 0; D.Spiel.schritt(st, 1 / 30);
+  wahr(st.abend && st.toene.indexOf('nacht') >= 0 && st.toene.indexOf('feier') < 0, 'leises Gute-Nacht');
+  st.gaeste.forEach(function (g) { gleich(g.glueck, G.START, 'nichts wird abgezogen'); });
+});
+test('Glueck: Gaeste werden gluecklicher, wenn sie Essen nehmen (Liebling mehr)', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 2 }), mia = st.gaeste[0], jonas = st.gaeste[1];
+  st.teller = ['ensaimada', 'ensaimada'];
+  wahr(D.Gaeste.nimmTeller(mia, st)); gleich(mia.glueck, D.Glueck.START + D.Glueck.GRUND.liebling.menge);
+  wahr(D.Gaeste.nimmTeller(jonas, st)); gleich(jonas.glueck, D.Glueck.START + D.Glueck.GRUND.essen.menge);
+});
+test('Esel: Wiese mit Zaun, Bruna bleibt drin, Biel kommt bis an den Zaun', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 8 }), k = st.karte, T = D.Karte.T, w = k.wiese;
+  for (var x = w.x0 - 1; x <= w.x1 + 1; x++) { gleich(k.tile(x, w.y0 - 1), T.ZAUN); gleich(k.tile(x, w.y1 + 1), T.ZAUN); }
+  wahr(k.blockiert(w.x0, w.y0) && k.blockiert(w.x0 - 1, w.y0), 'Wiese und Zaun nicht begehbar');
+  wahr(D.Pfad.suche(k, 19, 18, w.x0 + 1, w.y1 + 2), 'unter dem Zaun erreichbar');
+  var e = st.tiere.esel, orte = {};
+  for (var i = 0; i < 30 * 240; i++) {
+    D.Tiere.update(st.tiere, k, 1 / 30);
+    wahr(e.x >= w.x0 * 16 && e.x <= (w.x1 + 1) * 16 && e.y >= w.y0 * 16 && e.y <= (w.y1 + 1) * 16, 'Bruna bleibt auf der Wiese');
+    orte[Math.floor(e.x / 16) + ',' + Math.floor(e.y / 16)] = 1;
+  }
+  wahr(Object.keys(orte).length >= 3, 'Bruna bummelt umher');
+  var g = st.tiere.gecko;
+  gleich(k.tile(Math.floor(g.x / 16), Math.floor(g.y / 16)), T.WAND, 'Gecko sitzt an der Hauswand');
+  // eigener Zufall: Gaeste entscheiden wie in v0.3
+  var s1 = D.Spiel.erstelle({ seed: 8 }), s2 = D.Spiel.erstelle({ seed: 8 });
+  for (i = 0; i < 3000; i++) D.Tiere.update(s1.tiere, s1.karte, 1 / 10);
+  gleich(s1.rng.next(), s2.rng.next(), 'Spielzufall unberuehrt');
+});
+test('Streicheln: Klick laeuft zum Zaun, Bruna kommt, Herz und leiser Laut', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 6 }), e = st.tiere.esel;
+  st.toene.length = 0;
+  var r = D.Spiel.klick(st, e.x, e.y - 8);
+  gleich(r, 'streicheln', 'Biel macht sich auf den Weg');
+  for (var i = 0; i < 60 * 30 && e.gestreichelt === 0; i++) { D.Spiel.schritt(st, 1 / 60); st.toene = st.toene.filter(function (t) { return t !== 'schritt'; }); }
+  gleich(e.gestreichelt, 1, 'gestreichelt');
+  wahr(st.toene.indexOf('esel') >= 0, 'Bruna macht ein leises Geraeusch');
+  wahr(st.herzchen.length >= 1, 'Herz steigt auf');
+  wahr(e.freude > 0, 'Bruna freut sich');
+  gleich(st.blase.sprecher, 'Biel'); wahr(/Bruna|Ase/.test(st.blase.text));
+  wahr(D.Tiere.nah(e, st.spieler), 'Biel steht am Zaun');
+  // Klick direkt nochmal: sofort streicheln
+  gleich(D.Spiel.klick(st, e.x, e.y - 8), 'tier'); gleich(e.gestreichelt, 2);
+});
+test('Streicheln: Taste E beim Gecko, Gaeste in der Naehe freuen sich mit', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 6 }), g = st.tiere.gecko, mia = st.gaeste[0];
+  st.spieler.x = g.x; st.spieler.y = 11 * 16 + 10;
+  mia.x = st.spieler.x + 30; mia.y = st.spieler.y + 10;  // aber nicht in Sprechweite
+  st.gaeste[1].x = 2000;
+  st.toene.length = 0;
+  var vor = mia.glueck;
+  st.eingabe.druecke('KeyE'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende();
+  gleich(g.gestreichelt, 1, 'Gecko gestreichelt');
+  wahr(st.toene.indexOf('gecko') >= 0);
+  wahr(/Gecko|Dragó/.test(st.blase.text));
+  gleich(mia.glueck, vor + D.Glueck.GRUND.tier.menge, 'Mia freut sich mit');
+  gleich(st.gaeste[1].glueck, D.Glueck.START, 'Jonas ist zu weit weg');
+  // E bei einem Gast in Sprechweite redet weiterhin zuerst
+  mia.x = st.spieler.x + 10; mia.y = st.spieler.y; st.eingabe.loese('KeyE');
+  st.eingabe.druecke('KeyE'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende();
+  gleich(st.blase.sprecher, 'Mia', 'Gast geht vor Tier'); gleich(g.gestreichelt, 1);
+});
+test('Abendmusik: weiche Mischung nach Uhrzeit, Abendvariante in a-Moll und leise', function () {
+  var T = ladeKontext().Dorf.Ton;
+  var m = T.mischung(12, false); gleich(m.tag, 1); gleich(m.abend, 0); gleich(m.grillen, 0);
+  m = T.mischung(19.25, false); nah(m.abend, 0.5, 1e-9); nah(m.tag + m.abend, 1, 1e-9); gleich(m.grillen, 0);
+  m = T.mischung(21, false); gleich(m.abend, 1); nah(m.grillen, 0.5, 1e-9);
+  m = T.mischung(22.5, false); gleich(m.grillen, 1);
+  m = T.mischung(8, true); gleich(m.abend, 1); gleich(m.grillen, 1, 'Abendszene immer mit Grillen');
+  var tonleiter = [9, 11, 0, 2, 4, 5, 7, 8];
+  [0, 1].forEach(function (rd) {
+    var n = T.noten(rd, 'abend');
+    wahr(n.length > 20 && n.length < T.noten(1).length, 'sparsamer als am Tag');
+    wahr(n.every(function (x) { return tonleiter.indexOf(x.midi % 12) >= 0 && x.staerke <= 0.5 && x.zeit >= 0 && x.zeit < 64; }), 'ruhig und in a-Moll');
+  });
+  var z = T.zirpen(1, 4200);
+  gleich(z.length, 3); wahr(z.every(function (p) { return p.dauer < 0.05 && p.freq > 3000; }), 'kurze, hohe Zirper');
+  wahr(T.LAUT.grillen <= 0.08, 'Grillen ganz leise');
+});
+test('Abendmusik: Ueberblenden im Ton, Grillen nur nachts, neue Effekte leise', function () {
+  var T = ladeKontext().Dorf.Ton, au = fakeAudio(), win = fakeTonFenster(fakeSpeicher(), au);
+  var t = T.erstelle(win); win.l.pointerdown[0]({});
+  win.takte[0]();
+  gleich(t.grillenGespielt, 0, 'tags keine Grillen');
+  var z0 = au.log.ziele.length;
+  gleich(t.tageszeit(10, false), false, 'tags nichts zu tun');
+  wahr(t.tageszeit(19.25, false), 'Abend blendet ein');
+  var ziele = au.log.ziele.slice(z0);
+  wahr(ziele.indexOf(0.5) >= 0, 'Tag und Abend je halb');
+  wahr(t.tageszeit(23, false));
+  wahr(au.log.ziele.indexOf(T.LAUT.grillen) >= 0, 'Grillen eingeblendet');
+  wahr(au.log.ziele.slice(z0).indexOf(0) >= 0, 'Tag ausgeblendet');
+  win.takte[0]();
+  wahr(t.grillenGespielt > 0, 'nachts zirpt es');
+  var abHier = au.log.gains.length;
+  ['herz', 'feier', 'esel', 'gecko', 'nacht'].forEach(function (n) { gleich(t.spiele(n), true, n); });
+  var eff = au.log.gains.slice(abHier);
+  wahr(eff.length >= 10 && eff.every(function (v) { return v <= 0.06; }), 'Effekte sehr leise');
+  wahr(au.log.gains.every(function (v) { return v <= 1; }));
+});
+test('Render: Wiese, Esel, Gecko, Herzen im HUD und Abendfeier zeichnen ohne Fehler', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 1 }), aufrufe = 0, texte = [];
+  var ctx = new Proxy({}, { get: function (o, k) { if (k in o) return o[k]; return function () { aufrufe++; if (k === 'fillText') texte.push(arguments[0]); return { addColorStop: function () {} }; }; }, set: function (o, k, v) { o[k] = v; return true; } });
+  var R = { ctx: ctx, ui: ctx, uiSkala: 1, uiCanvas: { width: 960, height: 528 } };
+  st.spieler.x = 30 * 16; st.spieler.y = 15 * 16; st.kamera.x = 360; st.kamera.y = 120;
+  st.herzchen.push({ x: st.tiere.esel.x, y: st.tiere.esel.y, t: 0.3 });
+  D.Render.zeichne(R, st);
+  wahr(texte.indexOf('Ziel: alle glücklich') >= 0, 'HUD mit Tagesziel');
+  st.gaeste.forEach(function (g) { g.glueck = D.Glueck.MAX; }); D.Glueck.pruefe(st);
+  st.abend = true; texte.length = 0; D.Render.zeichne(R, st);
+  wahr(texte.some(function (s) { return /Alle Gäste sind glücklich/.test(s); }), 'Abendfeier');
 });
 
 // ---------- Ausfuehren ----------

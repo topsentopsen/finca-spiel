@@ -17,12 +17,14 @@
 
   function erstelle(id, karte) {
     var d = DEFS[id], t = karte.start[id];
-    return {
+    var gast = {
       id: id, name: d.name, alter: d.alter, liebling: d.liebling, profil: d.profil, aussehen: d.aussehen,
       beduerfnisse: { satt: d.start.satt, spielen: d.start.spielen, ruhe: d.start.ruhe }, portion: false,
       x: t.x * K + 8, y: t.y * K + 12, dir: 'unten', animT: 0, frame: 0,
       zustand: 'frei', ziel: null, zielTile: null, pfad: [], pfadIndex: 0, warte: 1
     };
+    if (Dorf.Glueck) Dorf.Glueck.start(gast);
+    return gast;
   }
   function clamp(v) { return v < 0 ? 0 : (v > 100 ? 100 : v); }
   function abfall(gast, stunden) {
@@ -77,6 +79,8 @@
       gast.frame = 0;
       var wunschJetzt = entscheide(b);
       if (b[wert] >= 95 || (wunschJetzt === 'tafel' && gast.ziel !== 'tafel')) {
+        // Schoen gebadet oder ausgeruht: ein bisschen Glueck (Essen zaehlt schon beim Teller)
+        if (b[wert] >= 95 && Dorf.Glueck && (gast.ziel === 'pool' || gast.ziel === 'couch')) Dorf.Glueck.gib(welt, gast, gast.ziel);
         gast.zustand = 'frei'; gast.ziel = null; gast.zielTile = null; gast.pfad = []; gast.warte = 1.5; gast.portion = false;
       } else return;
     }
@@ -107,6 +111,7 @@
     if (!t || !t.length) return false;
     var i = t.indexOf(gast.liebling); if (i < 0) i = 0;
     gast.portion = t.splice(i, 1)[0];
+    if (Dorf.Glueck) Dorf.Glueck.gib(welt, gast, gast.portion === gast.liebling ? 'liebling' : 'essen');
     return true;
   }
 

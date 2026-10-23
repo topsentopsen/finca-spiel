@@ -3,7 +3,7 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.3';
+  var VERSION = 'v0.4';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   Dorf.VERSION = VERSION;
 
@@ -15,12 +15,14 @@
     var st = {
       rng: rng, karte: karte, zeit: 0, fps: 0, debug: false, abend: false, blase: null,
       marker: null, kochen: null, teller: [], menue: null, toene: [], schrittWeg: 0,
+      herzchen: [], tagesziel: { erreicht: false, neu: false },
       eingabe: opts.eingabe || Dorf.Eingabe.erstelle(null),
       spieler: Dorf.Spieler.erstelle(karte.start.biel),
       uhr: Dorf.Uhr.erstelle(),
       kamera: Dorf.Kamera.erstelle(Dorf.Render ? Dorf.Render.W : 320, Dorf.Render ? Dorf.Render.H : 176, karte.w * karte.kachel, karte.h * karte.kachel)
     };
     st.gaeste = [Dorf.Gaeste.erstelle('mia', karte), Dorf.Gaeste.erstelle('jonas', karte)];
+    st.tiere = Dorf.Tiere.erstelle(karte, seed);
     Dorf.Kamera.sofort(st.kamera, st.spieler.x, st.spieler.y - 12);
     sage(st, 'Biel', 'Bon dia! (Guten Morgen!) Willkommen auf der Finca.', 5);
     return st;
@@ -61,8 +63,13 @@
     if (st.menue) { schliesseMenue(st); return 'zurueck'; }
     var karte = st.karte, K = karte.kachel, T = Dorf.Karte.T;
     var tx = Math.floor(wx / K), ty = Math.floor(wy / K), sp = st.spieler, ziel = null, aktion = null;
-    var gast = gastAn(st, wx, wy);
-    if (gast) {
+    var gast = gastAn(st, wx, wy), tier = gast ? null : Dorf.Tiere.an(st.tiere, wx, wy);
+    if (tier) {
+      if (Dorf.Tiere.nah(tier, sp)) { streichle(st, tier); return 'tier'; }
+      ziel = tierPlatz(st, tier);
+      aktion = { art: 'streicheln', tier: tier, versuche: 0 };
+      if (ziel) Dorf.Tiere.locke(st.tiere, karte, tier, ziel.x * K + 8, ziel.y * K + 12);
+    } else if (gast) {
       var gt = Dorf.Gaeste.tileVon(gast);
       if (istNah(sp, gast, 26)) { rede(st, gast); return 'gast'; }
       ziel = besterNachbar(st, gt.x, gt.y, [[0, 1], [1, 0], [-1, 0], [0, -1]].map(function (d) { return { x: gt.x + d[0], y: gt.y + d[1] }; }));
@@ -83,6 +90,32 @@
     if (Math.abs(dx) > Math.abs(dy)) sp.dir = dx < 0 ? 'links' : 'rechts'; else sp.dir = dy < 0 ? 'oben' : 'unten';
     sage(st, gast.name, Dorf.Gaeste.spruch(gast, st.rng), 3.5);
     klang(st, 'glocke');
+    if (Dorf.Glueck) Dorf.Glueck.gib(st, gast, 'reden');
+  }
+
+  // Freie Kachel neben einem Tier, die Biel erreichen kann (beim Esel ausserhalb vom Zaun)
+  function tierPlatz(st, tier) {
+    var K = st.karte.kachel, tx = Math.floor(tier.x / K), ty = Math.floor(tier.y / K), k = [];
+    for (var dy = -3; dy <= 3; dy++) for (var dx = -3; dx <= 3; dx++) k.push({ x: tx + dx, y: ty + dy, d: Math.abs(dx) + Math.abs(dy) });
+    k.sort(function (a, b) { return a.d - b.d; });
+    var karte = st.karte, von = Dorf.Spieler.tile(st.spieler);
+    for (var i = 0; i < k.length; i++) {
+      if (karte.blockiert(k[i].x, k[i].y)) continue;
+      if (k[i].x === von.x && k[i].y === von.y) return k[i];
+      if (Dorf.Pfad.suche(karte, von.x, von.y, k[i].x, k[i].y)) return k[i];
+    }
+    return null;
+  }
+  // Streicheln: Herz, leiser Laut, Biel erzaehlt etwas. Gaeste in der Naehe freuen sich mit.
+  function streichle(st, tier) {
+    var sp = st.spieler, dx = tier.x - sp.x, dy = tier.y - sp.y;
+    if (Math.abs(dx) > Math.abs(dy)) sp.dir = dx < 0 ? 'links' : 'rechts'; else sp.dir = dy < 0 ? 'oben' : 'unten';
+    Dorf.Tiere.streichle(tier, sp);
+    st.herzchen.push({ x: tier.x, y: tier.y - (tier.art === 'esel' ? 22 : 8), t: 0, farbe: '#ff7fa0' });
+    klang(st, tier.art === 'esel' ? 'esel' : 'gecko');
+    sage(st, 'Biel', Dorf.Tiere.spruch(tier), 3.5);
+    if (Dorf.Glueck) st.gaeste.forEach(function (gs) { if (Math.hypot(gs.x - tier.x, gs.y - tier.y) < 72) Dorf.Glueck.gib(st, gs, 'tier'); });
+    return true;
   }
 
   function amHerd(st) {
@@ -157,6 +190,15 @@
   function ankunft(st, a) {
     if (!a) return;
     if (a.art === 'kochen' && amHerd(st)) oeffneMenue(st);
+    else if (a.art === 'streicheln') {
+      var t = a.tier;
+      if (Dorf.Tiere.nah(t, st.spieler)) { if (t.ziel && t.lockt) { st.wartetAuf = { tier: t, rest: 3 }; return; } streichle(st, t); }
+      else if (t.ziel && t.lockt) { st.wartetAuf = { tier: t, rest: 3 }; return; }
+      else if (a.versuche < 2) {
+        var zt = tierPlatz(st, t);
+        if (zt && Dorf.Spieler.geheZu(st.spieler, st.karte, zt.x, zt.y, { art: 'streicheln', tier: t, versuche: a.versuche + 1 })) { st.marker = { x: zt.x, y: zt.y, t: 0 }; return; }
+      }
+    }
     else if (a.art === 'sprechen') {
       var gs = a.gast;
       if (istNah(st.spieler, gs, 30)) rede(st, gs);
@@ -178,12 +220,22 @@
         st.abend = false; st.naechsterTag = false;
         Dorf.Uhr.neuerTag(st.uhr);
         st.gaeste.forEach(function (gs) { gs.beduerfnisse.satt = 60; if (gs.beduerfnisse.ruhe !== undefined) gs.beduerfnisse.ruhe = 80; });
+        if (Dorf.Glueck) Dorf.Glueck.neuerTag(st);
+        st.herzchen.length = 0;
         sage(st, 'Biel', 'Bon dia! (Guten Morgen!) Tag ' + st.uhr.tag + ' beginnt.', 4);
       }
       return;
     }
     var stunden = Dorf.Uhr.update(st.uhr, dt);
     st.gaeste.forEach(function (gs) { Dorf.Gaeste.update(gs, st, dt, stunden); });
+    Dorf.Tiere.update(st.tiere, st.karte, dt);
+    for (var hz = st.herzchen.length - 1; hz >= 0; hz--) { st.herzchen[hz].t += dt; if (st.herzchen[hz].t > 1.4) st.herzchen.splice(hz, 1); }
+    // Biel wartet kurz am Zaun, bis Bruna angetrottet ist
+    if (st.wartetAuf) {
+      var wt = st.wartetAuf.tier; st.wartetAuf.rest -= dt;
+      if (st.spieler.ziel) st.wartetAuf = null;
+      else if (!wt.ziel || st.wartetAuf.rest <= 0) { st.wartetAuf = null; if (Dorf.Tiere.nah(wt, st.spieler)) streichle(st, wt); else { wt.lockt = false; sage(st, 'Biel', wt.name + ' ist gerade lieber am anderen Ende der Wiese.', 3); } }
+    }
     var menueOffen = !!st.menue;
     if (menueOffen) { st.menue.t += dt; menueSchritt(st, e); }
     var hatteZiel = !!st.spieler.ziel, vx = st.spieler.x, vy = st.spieler.y;
@@ -201,7 +253,9 @@
     if (!menueOffen && e.neu('sprechen')) {
       var naechster = null, best = 28;
       st.gaeste.forEach(function (gs) { var d = Math.hypot(gs.x - st.spieler.x, gs.y - (Dorf.Gaeste.sitzt(gs) ? 14 : 0) - st.spieler.y); if (d < best) { best = d; naechster = gs; } });
+      var nahTier = naechster ? null : Dorf.Tiere.naechstes(st.tiere, st.spieler);
       if (naechster) rede(st, naechster);
+      else if (nahTier) streichle(st, nahTier);
       else if (amHerd(st)) oeffneMenue(st);
     }
     if (st.kochen) {
@@ -214,8 +268,16 @@
         klang(st, 'fertig');
       }
     }
+    if (st.tagesziel.neu) {
+      st.tagesziel.neu = false;
+      sage(st, 'Biel', 'Juhu! Alle Gäste sind glücklich. Tagesziel geschafft!', 4.5);
+      klang(st, 'feier');
+    }
     if (st.blase) { st.blase.rest -= dt; if (st.blase.rest <= 0) st.blase = null; }
-    if (Dorf.Uhr.vorbei(st.uhr)) { st.abend = true; st.blase = null; st.kochen = null; st.menue = null; Dorf.Spieler.stoppe(st.spieler); st.marker = null; }
+    if (Dorf.Uhr.vorbei(st.uhr)) {
+      st.abend = true; st.abendZeit = st.zeit; st.blase = null; st.kochen = null; st.menue = null; Dorf.Spieler.stoppe(st.spieler); st.marker = null; st.wartetAuf = null;
+      klang(st, st.tagesziel.erreicht ? 'feier' : 'nacht');
+    }
   }
 
   function starte(doc, win, opts) {
@@ -235,6 +297,11 @@
       Dorf.Kamera.sofort(st.kamera, st.spieler.x, st.spieler.y - 12);
     }
     if (debugAn) st.debug = true;
+    // Entwicklerhilfe: ?uhr=20 stellt die Uhrzeit, ?abend=1 zeigt die Abendszene, ?herzen=1 macht alle gluecklich
+    var mu = win.location && /[?&]uhr=(\d+)/.exec(win.location.search || '');
+    if (mu) st.uhr.minute = Math.max(Dorf.Uhr.START, Math.min(Dorf.Uhr.ENDE - 1, parseInt(mu[1], 10) * 60));
+    if (win.location && /[?&]herzen=1/.test(win.location.search || '')) st.gaeste.forEach(function (gs) { gs.glueck = Dorf.Glueck.MAX - 5; });
+    if (win.location && /[?&]abend=1/.test(win.location.search || '')) st.uhr.minute = Dorf.Uhr.ENDE;
     // Entwicklerhilfe: ?menue=1 oeffnet gleich das Kochmenue (fuer Screenshots)
     if (win.location && /[?&]menue=1/.test(win.location.search || '')) oeffneMenue(st);
     var R = Dorf.Render.erstelle(canvas, ui);
@@ -303,6 +370,7 @@
         var dB = Math.hypot(sp.x - (kb.x * 16 + 16), sp.y - (kb.y * 16 + 16));
         var dP = pool ? Math.hypot(sp.x - pool.x * 16, sp.y - pool.y * 16) : 999;
         ton.umgebung(Math.max(0, 1 - Math.min(dB, dP * 1.4) / 110));
+        ton.tageszeit(st.uhr.minute / 60, st.abend);
       }
       st.toene.length = 0;
       Dorf.Render.zeichne(R, st);
@@ -313,7 +381,7 @@
     return { st: st, R: R };
   }
 
-  Dorf.Spiel = { STANDARD_SEED: STANDARD_SEED, VERSION: VERSION, KOCHDAUER: KOCHDAUER, PORTIONEN: PORTIONEN, erstelle: erstelle, schritt: schritt, sage: sage, klick: klick, klickBild: klickBild, kochen: kochen, oeffneMenue: oeffneMenue, zumHerd: zumHerd, menueKarten: menueKarten, MENUE: MENUE, TAFEL_MAX: TAFEL_MAX, starte: starte };
+  Dorf.Spiel = { STANDARD_SEED: STANDARD_SEED, VERSION: VERSION, KOCHDAUER: KOCHDAUER, PORTIONEN: PORTIONEN, erstelle: erstelle, schritt: schritt, sage: sage, klick: klick, klickBild: klickBild, kochen: kochen, streichle: streichle, tierPlatz: tierPlatz, oeffneMenue: oeffneMenue, zumHerd: zumHerd, menueKarten: menueKarten, MENUE: MENUE, TAFEL_MAX: TAFEL_MAX, starte: starte };
 
   if (typeof g.document !== 'undefined' && typeof g.window !== 'undefined' && g.document.getElementById) {
     g.window.addEventListener('load', function () { Dorf.Spiel.laufend = starte(g.document, g.window); });

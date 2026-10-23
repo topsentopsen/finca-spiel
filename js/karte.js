@@ -7,11 +7,13 @@
     GRAS: 0, WEG: 1, PFLASTER: 2, MAUER: 3, WAND: 4, BODEN: 5, FLIESE: 6,
     WASSER: 7, RAND: 8, BRUNNEN: 9, OLIVE: 10, TAFEL: 11, HERD: 12, TOR: 13, BEET: 14,
     // ab v0.2: Einrichtung
-    TEPPICH: 15, COUCH: 16, PFLANZE: 17, ECKBANK: 18, ANRICHTE: 19, BETT: 20, SESSEL: 21, TISCH: 22
+    TEPPICH: 15, COUCH: 16, PFLANZE: 17, ECKBANK: 18, ANRICHTE: 19, BETT: 20, SESSEL: 21, TISCH: 22,
+    // ab v0.4: kleine Eselwiese mit Holzzaun
+    ZAUN: 23, WIESE: 24
   };
   var BLOCK = {};
   [T.MAUER, T.WAND, T.WASSER, T.BRUNNEN, T.OLIVE, T.TAFEL, T.HERD, T.TOR,
-    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH].forEach(function (t) { BLOCK[t] = true; });
+    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH, T.ZAUN, T.WIESE].forEach(function (t) { BLOCK[t] = true; });
 
   var KACHEL = 16, BREITE = 40, HOEHE = 30;
 
@@ -74,6 +76,11 @@
     set(29, 19, T.BODEN);
     set(28, 19, T.PFLASTER);
 
+    // Eselwiese (v0.4) zwischen Pool und Gaestehaus: Zaun ringsum, innen weiches Gras
+    var WIESE = { x0: 31, y0: 11, x1: 36, y1: 13 };
+    ring(WIESE.x0 - 1, WIESE.y0 - 1, WIESE.x1 + 1, WIESE.y1 + 1, T.ZAUN);
+    rect(WIESE.x0, WIESE.y0, WIESE.x1, WIESE.y1, T.WIESE);
+
     // Kraeuter- und Gemuesebeet
     rect(3, 16, 8, 19, T.BEET);
 
@@ -101,7 +108,9 @@
 
     var karte = {
       w: w, h: h, kachel: KACHEL, tiles: tiles, baeume: baeume, blumen: blumen, raeume: RAEUME,
-      brunnen: { x: 19, y: 15 },
+      brunnen: { x: 19, y: 15 }, wiese: WIESE,
+      // Gecko sitzt an der Hauswand rechts der Haustuer (Pixelbereich auf der Wandfront)
+      gecko: { x0: 14 * KACHEL + 3, x1: 16 * KACHEL + 12, y: 10 * KACHEL + 12 },
       tile: function (x, y) { if (x < 0 || y < 0 || x >= w || y >= h) return T.MAUER; return tiles[y * w + x]; },
       blockiert: function (x, y) { return !!BLOCK[karte.tile(x, y)]; }
     };

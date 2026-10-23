@@ -50,10 +50,107 @@
   // Boden unter Moebeln: Kueche Fliesen, sonst Holz
   function bodenUnter(karte, x, y) { var T = Dorf.Karte.T, k = karte.raeume.kueche; return (x >= k.x0 && x <= k.x1 && y >= k.y0 && y <= k.y1) ? T.FLIESE : T.BODEN; }
 
+  // Holzzaun: Gras darunter, Pfosten an den Ecken, zwei Latten in Laufrichtung
+  function zeichneZaun(c, karte, x, y, sx, sy, hs) {
+    var T = Dorf.Karte.T;
+    r(c, sx, sy, K, K, P.gras);
+    if (hs % 3 === 0) r(c, sx + (hs % 11) + 2, sy + ((hs >> 4) % 10) + 3, 1, 2, P.gras2);
+    var li = karte.tile(x - 1, y) === T.ZAUN, re = karte.tile(x + 1, y) === T.ZAUN, ob = karte.tile(x, y - 1) === T.ZAUN, un = karte.tile(x, y + 1) === T.ZAUN;
+    var holz = '#d9b08c', hell = '#f0d2b4', dunkel = '#a9805f';
+    if (li || re) { r(c, li ? sx : sx + 6, sy + 6, li && re ? K : 10, 2, holz); r(c, li ? sx : sx + 6, sy + 10, li && re ? K : 10, 2, holz); r(c, li ? sx : sx + 6, sy + 6, li && re ? K : 10, 1, hell); }
+    if (ob || un) { r(c, sx + 6, ob ? sy : sy + 6, 2, ob && un ? K : 10, holz); r(c, sx + 9, ob ? sy : sy + 6, 2, ob && un ? K : 10, holz); r(c, sx + 6, ob ? sy : sy + 6, 1, ob && un ? K : 10, hell); }
+    if (!(li && re && !ob && !un && x % 2) && !(ob && un && !li && !re && y % 2)) { rr(c, sx + 5, sy + 3, 6, 11, dunkel); r(c, sx + 6, sy + 3, 4, 2, hell); }
+  }
+
+  // Eselin Bruna: lavendelgrau, grosse Ohren, weicher Bauch
+  function zeichneEsel(c, e, sx, sy, zeit) {
+    var x = Math.round(sx), y = Math.round(sy), links = e.dir === 'links', f = e.frame, s = links ? -1 : 1;
+    var fell = '#c9c3d6', bauch = '#efeaf5', maehne = '#7d6f8e', dunkel = '#9c93ad', K2 = P.kontur;
+    var hopp = e.freude > 0 ? -Math.round(Math.abs(Math.sin(e.freude * 9)) * 2) : 0;
+    y += hopp;
+    ellipse(c, x, y + 1, 11, 2.5, 'rgba(75,58,90,0.18)');
+    // Beine
+    var b = [f === 1 ? 1 : 0, f === 3 ? 1 : 0];
+    r(c, x - 7, y - 6, 2, 6 - b[0], dunkel); r(c, x - 3, y - 6, 2, 6 - b[1], fell); r(c, x + 2, y - 6, 2, 6 - b[1], dunkel); r(c, x + 6, y - 6, 2, 6 - b[0], fell);
+    r(c, x - 7, y - 1 - b[0], 2, 1, K2); r(c, x - 3, y - 1 - b[1], 2, 1, K2); r(c, x + 2, y - 1 - b[1], 2, 1, K2); r(c, x + 6, y - 1 - b[0], 2, 1, K2);
+    // Koerper
+    rr(c, x - 9, y - 14, 18, 9, fell); r(c, x - 6, y - 7, 12, 2, bauch);
+    // Schwanz
+    var sw = Math.round(Math.sin(zeit * 3) * 1);
+    r(c, x - s * 9 - (links ? 0 : 1), y - 13 + sw, 1, 5, maehne); r(c, x - s * 9 - (links ? 0 : 1) - (links ? -1 : 1) * 0, y - 8 + sw, 2, 2, maehne);
+    // Kopf: beim Fressen tiefer
+    var frisst = !e.ziel && e.freude <= 0 && e.frisst > 2.6 ? 5 : 0;
+    var kx = x + s * 9, ky = y - 18 + frisst;
+    rr(c, kx - 4, ky, 8, 8, fell); rr(c, kx - 3 + s * 2, ky + 4, 6, 5, bauch);
+    r(c, kx - 1 + s * 4, ky + 6, 1, 1, K2);
+    // Ohren (wackeln beim Streicheln)
+    var wack = e.freude > 0 ? Math.round(Math.sin(e.freude * 14)) : 0;
+    r(c, kx - 3, ky - 6 + wack, 2, 7, fell); r(c, kx + 1, ky - 6 - wack, 2, 7, fell);
+    r(c, kx - 3, ky - 5 + wack, 1, 4, '#f4c6d6'); r(c, kx + 1, ky - 5 - wack, 1, 4, '#f4c6d6');
+    r(c, kx - 3, ky - 6 + wack, 2, 1, maehne); r(c, kx + 1, ky - 6 - wack, 2, 1, maehne);
+    // Maehne
+    for (var m = 0; m < 4; m++) r(c, kx - s * (2 + m * 2) - (links ? 1 : 0), ky + 1 + m, 2, 2, maehne);
+    // Auge und Baeckchen
+    var blinz = Math.floor(zeit * 1.3) % 6 === 0 && (zeit * 1.3) % 1 < 0.15;
+    if (e.freude > 0) r(c, kx + s * 1 - 1, ky + 3, 3, 1, K2); else r(c, kx + s * 1, ky + 2, 1, blinz ? 1 : 2, K2);
+    r(c, kx + s * 2 - (links ? 1 : 0), ky + 5, 2, 1, '#ffb3c8');
+  }
+
+  // Kleiner Gecko: minzgruen, sitzt flach an der Wand
+  function zeichneGecko(c, g, sx, sy, zeit) {
+    var x = Math.round(sx), y = Math.round(sy), s = g.dir === 'links' ? -1 : 1, f = g.frame % 2;
+    var haut = '#9fe3b0', rand = '#4f9a6a', fleck = '#e8fbd9';
+    function teil(px, py, w, h, col) { r(c, s > 0 ? x + px : x - px - w, y + py, w, h, col); }
+    // Umriss zuerst, dann die Haut: so sieht man ihn auch auf heller Wand
+    teil(-5, -2, 10, 5, rand); teil(4, -3, 5, 5, rand); teil(-10, -1, 6, 3, rand);
+    teil(-3, -4 - f, 2, 3, rand); teil(2, -4 + f, 2, 3, rand); teil(-3, 2 + f, 2, 3, rand); teil(2, 2 - f, 2, 3, rand);
+    teil(-4, -1, 8, 3, haut); teil(5, -2, 3, 3, haut); teil(-9, 0, 5, 1, haut);
+    teil(-1, 0, 1, 1, fleck); teil(1, -1, 1, 1, fleck); teil(-3, 0, 1, 1, fleck);
+    teil(6, -2, 1, 1, P.kontur);
+    if (Math.sin(zeit * 4) > 0.8) teil(-11, 1, 2, 1, haut);
+    if (g.freude > 0) herz(c, x - 2, y - 10 - Math.round((1.6 - g.freude) * 3), '#ff9fbf');
+  }
+
+  // aufsteigende Herzchen
+  function zeichneHerzchen(c, st, cx, cy) {
+    (st.herzchen || []).forEach(function (h) {
+      var a = Math.max(0, 1 - h.t / 1.4), dx = Math.round(Math.sin(h.t * 6) * 2);
+      c.globalAlpha = a;
+      herz(c, Math.round(h.x - cx) - 2 + dx, Math.round(h.y - cy - h.t * 14), h.farbe || '#ff7fa0');
+      c.globalAlpha = 1;
+    });
+  }
+
+  // kleine Herzen fuer die Gaeste (HUD und Abendszene)
+  function herzReihe(c, gs, x, y) {
+    var n = Dorf.Glueck ? Dorf.Glueck.herzen(gs) : 0;
+    for (var i = 0; i < 5; i++) herz(c, x + i * 6, y, i < n ? '#ff7fa0' : '#e9dcef');
+  }
+  function zeichneGlueck(R, st) {
+    var c = R.ctx, gs = st.gaeste, h = 11 + gs.length * 8;
+    var ok = st.tagesziel && st.tagesziel.erreicht;
+    pille(c, 2, 13, 72, h, ok ? '#fff0f6' : 'rgba(255,248,236,0.92)');
+    text(R, ok ? 'Alle glücklich! ♥' : 'Ziel: alle glücklich', 6, 15, { farbe: ok ? '#d0507e' : '#7a5a9a', fett: true, groesse: 6 });
+    gs.forEach(function (g, i) {
+      var y = 24 + i * 8;
+      text(R, g.name, 6, y - 1, { groesse: 6 });
+      herzReihe(c, g, 40, y);
+    });
+  }
+
   function zeichneKachel(c, karte, x, y, sx, sy, zeit, st) {
     var T = Dorf.Karte.T, t = karte.tile(x, y), hs = hash(x, y);
     if (istMoebel(t)) t = bodenUnter(karte, x, y);
     switch (t) {
+      case T.WIESE:
+        // saftige Eselwiese mit kleinen Kleeblueten
+        r(c, sx, sy, K, K, '#c3eeaa');
+        r(c, sx + (hs % 11) + 2, sy + ((hs >> 4) % 10) + 3, 1, 3, '#94cf7f'); r(c, sx + ((hs >> 6) % 11) + 3, sy + ((hs >> 2) % 9) + 4, 1, 2, '#94cf7f');
+        if (hs % 4 === 0) { r(c, sx + ((hs >> 7) % 10) + 3, sy + ((hs >> 9) % 10) + 3, 2, 2, '#fff4fb'); r(c, sx + ((hs >> 7) % 10) + 3, sy + ((hs >> 9) % 10) + 3, 1, 1, '#ffc6dc'); }
+        break;
+      case T.ZAUN:
+        zeichneZaun(c, karte, x, y, sx, sy, hs);
+        break;
       case T.GRAS: case T.OLIVE:
         r(c, sx, sy, K, K, P.gras);
         if (hs % 3 === 0) { r(c, sx + (hs % 11) + 2, sy + ((hs >> 4) % 10) + 3, 1, 2, P.gras2); r(c, sx + (hs % 11) + 4, sy + ((hs >> 4) % 10) + 2, 1, 3, P.gras2); }
@@ -459,11 +556,18 @@
         if (sym) zeichneBlase(c, Math.round(gs.x - cx) + 5, info.oben, sym, zeit);
       } });
     });
+    (st.tiere ? st.tiere.liste : []).forEach(function (t) {
+      var sx = t.x - cx, sy = t.y - cy;
+      if (sx < -24 || sx > W + 24 || sy < -32 || sy > H + 32) return;
+      if (t.art === 'esel') liste.push({ y: t.y, f: function () { zeichneEsel(c, t, sx, sy, zeit); } });
+      else liste.push({ y: t.y - 30, f: function () { zeichneGecko(c, t, sx, sy, zeit); } });   // Wand: vor allem dahinter
+    });
     var sp = st.spieler;
     liste.push({ y: sp.y + 0.1, f: function () { zeichnePerson(c, sp.x - cx, sp.y - cy, BIEL, sp.dir, sp.frame); } });
     liste.sort(function (a, b) { return a.y - b.y; });
     liste.forEach(function (e) { e.f(); });
     zeichneKochen(c, karte, st, cx, cy);
+    zeichneHerzchen(c, st, cx, cy);
 
     // Debug: Pfade
     if (st.debug) {
@@ -499,6 +603,7 @@
       text(R, st.blase.text, 14, 150, { groesse: 8 });
     }
 
+    if (!st.abend && !st.menue && !st.debug && Dorf.Glueck) zeichneGlueck(R, st);
     if (st.menue && !st.abend) zeichneMenue(R, st);
     if (st.debug) zeichneDebug(R, st);
 
@@ -507,10 +612,21 @@
       c.fillStyle = 'rgba(58,44,96,0.6)'; c.fillRect(0, 0, W, H);
       for (var s = 0; s < 24; s++) { var hs = hash(s, 7); r(c, hs % W, 14 + (hs >> 9) % 60, 1, 1, '#fff6c8'); }
       kreis(c, 270, 34, 9, '#fff3c4'); kreis(c, 274, 31, 8, 'rgba(58,44,96,0.95)');
-      pille(c, 50, 64, 220, 56, P.box);
-      text(R, 'Bona nit! Tag geschafft', W / 2, 72, { align: 'center', fett: true, groesse: 12 });
-      text(R, '(Gute Nacht!) Tag ' + st.uhr.tag + ' auf der Finca ist vorbei.', W / 2, 90, { align: 'center' });
-      text(R, 'Enter, Leertaste oder Tippen: nächster Tag', W / 2, 104, { align: 'center', farbe: '#7a5a9a' });
+      var geschafft = st.tagesziel && st.tagesziel.erreicht, seit = st.zeit - (st.abendZeit || 0);
+      if (geschafft) for (var hz = 0; hz < 10; hz++) {
+        var hh = hash(hz, 3), hy = 150 - ((seit * 12 + (hh % 140)) % 150);
+        c.globalAlpha = Math.min(1, hy / 40); herz(c, 20 + (hh >> 5) % 280 + Math.round(Math.sin(seit * 2 + hz) * 3), Math.round(hy), ['#ff9fbf', '#ffc6dc', '#fff0a8'][hz % 3]); c.globalAlpha = 1;
+      }
+      pille(c, 44, 46, 232, 84, P.box);
+      text(R, 'Bona nit! Tag geschafft', W / 2, 52, { align: 'center', fett: true, groesse: 12 });
+      text(R, '(Gute Nacht!) Tag ' + st.uhr.tag + ' auf der Finca ist vorbei.', W / 2, 68, { align: 'center' });
+      text(R, geschafft ? 'Juhu! Alle Gäste sind glücklich ♥' : 'Schöner Tag! Morgen sammeln wir weiter Herzen.', W / 2, 79, { align: 'center', fett: geschafft, farbe: geschafft ? '#d0507e' : P.kontur });
+      st.gaeste.forEach(function (g, i) {
+        var gx = W / 2 - st.gaeste.length * 40 + i * 80 + 6;
+        text(R, g.name, gx + 16, 90, { align: 'center', groesse: 7 });
+        herzReihe(c, g, gx + 1, 99);
+      });
+      text(R, 'Enter, Leertaste oder Tippen: nächster Tag', W / 2, 112, { align: 'center', farbe: '#7a5a9a' });
     }
   }
 
@@ -523,7 +639,7 @@
     st.gaeste.forEach(function (gs) {
       var b = gs.beduerfnisse;
       text(R, gs.name + ': Satt ' + b.satt.toFixed(0) + '  Spielen ' + b.spielen.toFixed(0) + '  Ruhe ' + (b.ruhe !== undefined ? b.ruhe.toFixed(0) : '-'), 5, z, { farbe: '#ffe7b0' }); z += 8;
-      text(R, '  ' + gs.zustand + ' → ' + (gs.ziel || '-') + '  Pfad ' + Math.max(0, gs.pfad.length - gs.pfadIndex), 5, z, { farbe: '#d8d0ec' }); z += 9;
+      text(R, '  ' + gs.zustand + ' → ' + (gs.ziel || '-') + '  Pfad ' + Math.max(0, gs.pfad.length - gs.pfadIndex) + '  Glück ' + (gs.glueck || 0), 5, z, { farbe: '#d8d0ec' }); z += 9;
     });
   }
 
