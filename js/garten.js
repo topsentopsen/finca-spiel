@@ -1,5 +1,5 @@
 /* Garten (ab v0.5): Tomaten und Karotten im Beet, Orangen und Oliven an den Baeumen. Ab v0.8 kommen Eier dazu.
-   Alles waechst gemuetlich nach, Biel erntet in seinen Korb (Vorrat). Nichts kann vertrocknen. */
+   Ab v0.14 auch Zitronenbaeume. Alles waechst gemuetlich nach, Biel erntet in seinen Korb (Vorrat). Nichts kann vertrocknen. */
 (function (g) {
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
@@ -10,12 +10,13 @@
     tomate: { name: 'Tomate', mehrzahl: 'Tomaten', wort: 'tomàtiga', wachsen: 1.5, menge: 1, farbe: '#ff7a6b' },
     karotte: { name: 'Karotte', mehrzahl: 'Karotten', wort: 'pastanaga', wachsen: 2, menge: 1, farbe: '#ffa64d' },
     orange: { name: 'Orange', mehrzahl: 'Orangen', wort: 'taronja', wachsen: 2, menge: 2, farbe: '#ffb340' },
+    zitrone: { name: 'Zitrone', mehrzahl: 'Zitronen', wort: 'llimona', wachsen: 2, menge: 2, farbe: '#e8d84a' },
     olive: { name: 'Olive', mehrzahl: 'Oliven', wort: 'oliva', wachsen: 2, menge: 2, farbe: '#8d6fb0' },
     // ab v0.8: Eier von den Huehnern. Waechst nicht im Garten, die Huehner legen sie ins Gras.
     ei: { name: 'Ei', mehrzahl: 'Eier', wort: 'ou', menge: 1, farbe: '#fff1d6', tier: true }
   };
-  var REIHE = ['tomate', 'karotte', 'orange', 'olive'];          // was im Garten waechst
-  var ZUTATEN = ['tomate', 'karotte', 'orange', 'olive', 'ei'];  // was in den Korb passt (ab v0.8 mit Eiern)
+  var REIHE = ['tomate', 'karotte', 'orange', 'zitrone', 'olive'];          // was im Garten waechst
+  var ZUTATEN = ['tomate', 'karotte', 'orange', 'zitrone', 'olive', 'ei'];  // was in den Korb passt (ab v0.8 Eier, ab v0.14 Zitronen)
 
   function leererVorrat() { var v = {}; ZUTATEN.forEach(function (a) { v[a] = 0; }); return v; }
 
@@ -67,15 +68,26 @@
   // Kann ein Gericht gekocht werden? Pa amb oli geht immer (Brot und Öl aus der Speisekammer),
   // mit frischer Tomate und Olive gibt es einen Teller mehr.
   // ab v0.8: bonus (etwa ein Ei) ist nie Pflicht. Ist es im Korb, kommt es mit hinein und es gibt einen Teller mehr.
-  function pruefe(vorrat, G) {
-    var z = G.zutaten || {}, fehlt = {}, alles = true, b = G.bonus || {};
-    Object.keys(z).forEach(function (a) { var f = z[a] - (vorrat[a] || 0); if (f > 0) { fehlt[a] = f; alles = false; } });
-    var bonus = Object.keys(b).length > 0 && Object.keys(b).every(function (a) { return (vorrat[a] || 0) - (z[a] || 0) >= b[a]; });
-    if (G.immer) return { ok: true, frisch: alles && Object.keys(z).length > 0, fehlt: fehlt, bonus: bonus };
-    return { ok: alles, frisch: alles, fehlt: fehlt, bonus: alles && bonus };
+  // ab v0.14: G.statt erlaubt eine Ersatzzutat (z. B. Zitrone statt Orange fuer Ensaïmada)
+  function zutatenPlan(G, ersetzt) {
+    var z = G.zutaten || {}, plan = {}, statt = G.statt || {};
+    Object.keys(z).forEach(function (a) { plan[ersetzt && statt[a] ? statt[a] : a] = z[a]; });
+    return plan;
   }
-  function verbrauche(vorrat, G, mitBonus) {
-    var z = G.zutaten || {};
+  function pruefe(vorrat, G) {
+    function einmal(plan) {
+      var fehlt = {}, alles = true, b = G.bonus || {};
+      Object.keys(plan).forEach(function (a) { var f = plan[a] - (vorrat[a] || 0); if (f > 0) { fehlt[a] = f; alles = false; } });
+      var bonus = Object.keys(b).length > 0 && Object.keys(b).every(function (a) { return (vorrat[a] || 0) - (plan[a] || 0) >= b[a]; });
+      return { fehlt: fehlt, alles: alles, bonus: bonus };
+    }
+    var plan = zutatenPlan(G, false), r = einmal(plan), ersetzt = false;
+    if (!r.alles && G.statt) { var alt = einmal(zutatenPlan(G, true)); if (alt.alles) { r = alt; plan = zutatenPlan(G, true); ersetzt = true; } }
+    if (G.immer) return { ok: true, frisch: r.alles && Object.keys(G.zutaten || {}).length > 0, fehlt: r.fehlt, bonus: r.bonus, plan: plan, ersetzt: ersetzt };
+    return { ok: r.alles, frisch: r.alles, fehlt: r.fehlt, bonus: r.alles && r.bonus, plan: plan, ersetzt: ersetzt };
+  }
+  function verbrauche(vorrat, G, mitBonus, plan) {
+    var z = plan || zutatenPlan(G, false);
     Object.keys(z).forEach(function (a) { vorrat[a] = Math.max(0, (vorrat[a] || 0) - z[a]); });
     if (mitBonus) { var b = G.bonus || {}; Object.keys(b).forEach(function (a) { vorrat[a] = Math.max(0, (vorrat[a] || 0) - b[a]); }); }
   }

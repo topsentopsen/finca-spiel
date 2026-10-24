@@ -54,7 +54,7 @@
     var esel = st.tiere && st.tiere.esel;
     if (esel && V.karotte > 0) return { art: 'fuettern', x: esel.x, y: esel.y - 30, bild: 'karotte' };
     var hungrig = st.gaeste.some(function (gs) { return gs.ziel === 'tafel' && gs.zustand !== 'aktiv'; });
-    var frisch = (V.tomate || 0) >= 2 || (V.orange || 0) >= 1 || ((V.tomate || 0) >= 1 && (V.olive || 0) >= 1);
+    var frisch = (V.tomate || 0) >= 2 || (V.orange || 0) >= 1 || (V.zitrone || 0) >= 1 || ((V.tomate || 0) >= 1 && (V.olive || 0) >= 1);
     if (st.teller.length < Dorf.Spiel.TAFEL_MAX && ((hungrig && st.teller.length === 0) || (frisch && st.teller.length < 2)))
       return { art: 'kochen', x: HERD.x, y: HERD.y, bild: 'topf' };
     var leer = Dorf.Garten.REIHE.filter(function (a) { return a !== 'karotte' && (V[a] || 0) < 2; });

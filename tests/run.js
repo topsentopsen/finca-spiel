@@ -204,13 +204,14 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.13', function () {
+test('Version: sichtbares Label ist v0.14', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.13');
+  gleich(D.VERSION, 'v0.14');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.13 (Prototyp)') >= 0, 'Titel enthaelt v0.13');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.12"') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.14 (Prototyp)') >= 0, 'Titel enthaelt v0.14');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.14"') >= 0, n + ' eingebunden'); });
   wahr(html.indexOf('js/profile.js') < html.indexOf('js/main.js') && html.indexOf('js/leben.js') < html.indexOf('js/main.js'), 'neue Dateien vor main');
+  wahr(/orientation:\s*landscape/.test(html) && /pointer:\s*coarse/.test(html) && /hochkant halten/.test(html), 'Handy-Hochformat-Hinweis');
 });
 test('Debug: F1 ist frei, Debug liegt auf Backquote', function () {
   var D = ladeKontext().Dorf;
@@ -841,7 +842,7 @@ test('Render: Wiese, Esel, Gecko, Herzen im HUD und Abendfeier zeichnen ohne Feh
 
 // ---------- Garten, Fuettern und Padrina (v0.5) ----------
 function tasteE(D, st) { st.eingabe.druecke('KeyE'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende(); st.eingabe.loese('KeyE'); }
-test('Garten: Beet mit Tomaten und Karotten, Orangenbaum und Oliven, alles reif am Morgen', function () {
+test('Garten: Beet mit Tomaten und Karotten, Orangen-, Zitronenbaum und Oliven, alles reif am Morgen', function () {
   var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 1 }), T = D.Karte.T, k = st.karte;
   var arten = {};
   st.garten.liste.forEach(function (p) {
@@ -849,15 +850,17 @@ test('Garten: Beet mit Tomaten und Karotten, Orangenbaum und Oliven, alles reif 
     wahr(p.reif, 'reif am Morgen');
     if (p.baum) wahr(k.blockiert(p.x, p.y), 'Baum ist fest'); else gleich(k.tile(p.x, p.y), T.BEET, 'Pflanze im Beet');
   });
-  wahr(arten.tomate >= 2 && arten.karotte >= 2 && arten.orange >= 1 && arten.olive >= 1, JSON.stringify(arten));
+  wahr(arten.tomate >= 2 && arten.karotte >= 2 && arten.orange >= 1 && arten.zitrone >= 1 && arten.olive >= 1, JSON.stringify(arten));
   gleich(k.tile(10, 19), T.ORANGE);
+  gleich(k.tile(9, 19), T.ZITRONE);
   wahr(k.baeume.some(function (b) { return b.art === 'orange'; }), 'Orangenbaum wird gezeichnet');
+  wahr(k.baeume.some(function (b) { return b.art === 'zitrone'; }), 'Zitronenbaum wird gezeichnet');
   // jede Pflanze ist fuer Biel erreichbar
   st.garten.liste.forEach(function (p) {
     var ok = !k.blockiert(p.x, p.y) || [[0, 1], [1, 0], [-1, 0], [0, -1]].some(function (d) { return !k.blockiert(p.x + d[0], p.y + d[1]) && D.Pfad.suche(k, 19, 18, p.x + d[0], p.y + d[1]); });
     wahr(ok, p.art + ' erreichbar');
   });
-  gleich(JSON.stringify(st.vorrat), JSON.stringify({ tomate: 0, karotte: 0, orange: 0, olive: 0, ei: 0 }), 'Korb leer am Anfang');
+  gleich(JSON.stringify(st.vorrat), JSON.stringify({ tomate: 0, karotte: 0, orange: 0, zitrone: 0, olive: 0, ei: 0 }), 'Korb leer am Anfang');
 });
 test('Garten: Ernten mit E, waechst gemuetlich nach, voller Korb und neuer Tag', function () {
   var D = ladeKontext().Dorf, GA = D.Garten, st = D.Spiel.erstelle({ seed: 1 });
@@ -899,6 +902,17 @@ test('Garten: Klick auf den Orangenbaum laeuft hin und erntet', function () {
   for (var i = 0; i < 60 * 20 && st.vorrat.orange === 0; i++) D.Spiel.schritt(st, 1 / 60);
   gleich(st.vorrat.orange, 2, 'zwei Orangen geerntet');
 });
+test('Garten: Zitronenbaum ernten und Ensaïmada mit Zitrone statt Orange', function () {
+  var D = ladeKontext().Dorf, GA = D.Garten, st = D.Spiel.erstelle({ seed: 3 });
+  st.gaeste = [];
+  var zit = st.garten.liste.filter(function (p) { return p.art === 'zitrone'; })[0];
+  wahr(!!zit, 'Zitronenbaum vorhanden');
+  gleich(GA.ernte(st.garten, st.vorrat, zit), 2); gleich(st.vorrat.zitrone, 2);
+  // Ensaïmada geht mit Zitrone (statt Orange)
+  st.vorrat.orange = 0;
+  wahr(D.Spiel.kochen(st, 'ensaimada'), 'Ensaïmada mit Zitrone');
+  gleich(st.vorrat.zitrone, 1, 'eine Zitrone verbraucht');
+});
 test('Kochen mit Zutaten: Pa amb oli geht immer, frisch gibt es mehr, sonst freundlicher Hinweis', function () {
   var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 1 });
   st.gaeste = [];
@@ -924,7 +938,7 @@ test('Kochen mit Zutaten: Pa amb oli geht immer, frisch gibt es mehr, sonst freu
   st.vorrat.tomate = 3;
   wahr(D.Spiel.kochen(st, 'tumbet')); gleich(st.vorrat.tomate, 1);
   // Menue zeigt die Zutaten
-  var P = D.Garten.pruefe({ tomate: 0, karotte: 0, orange: 0, olive: 0 }, D.Gerichte.hole('paamboli'));
+  var P = D.Garten.pruefe({ tomate: 0, karotte: 0, orange: 0, zitrone: 0, olive: 0 }, D.Gerichte.hole('paamboli'));
   wahr(P.ok && !P.frisch, 'Speisekammer reicht');
   D.Gerichte.REIHE.forEach(function (id) { wahr(D.Gerichte.hole(id).zutaten, id + ' hat Zutaten'); });
 });
@@ -1083,7 +1097,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand.esel']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.13'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.14'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -1299,7 +1313,7 @@ test('Hintergrund: einmal vorgezeichnet, pro Frame nur kopieren, Wasser und Tafe
   D.Render.zeichne(R1, st); z1.fillRect = 0; D.Render.zeichne(R1, st); D.Render.zeichne(R2, st); z2.fillRect = 0; D.Render.zeichne(R2, st);
   wahr(z1.fillRect < z2.fillRect * 0.75, 'weniger Zeichenaufrufe (' + z1.fillRect + ' statt ' + z2.fillRect + ')');
 });
-test('Knoepfe: Elternknopf statt Neu-Knopf im HTML, Handy quer als Bild', function () {
+test('Knoepfe: Elternknopf statt Neu-Knopf im HTML, Handy hochkant als Bild', function () {
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   wahr(!/neu-knopf/.test(html), 'kein sichtbarer Neu-Knopf mehr (ab v0.10 im Elternbereich)');
   wahr(/<button id="eltern-knopf"[^>]*aria-label="Für Eltern, 3 Sekunden gedrückt halten"/.test(html), 'Eltern-Knopf beschriftet');

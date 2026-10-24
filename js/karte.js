@@ -17,11 +17,13 @@
     // ab v0.9: Pflanzkuebel mit Blumen als Deko im Hof, an der Arkade und am Tor
     KUEBEL: 27,
     // ab v0.10: Musikinstrumente zum Antippen (Gitarre, Kastagnetten, Trommel) auf der Wiese unter dem Hof
-    INSTRUMENT: 28
+    INSTRUMENT: 28,
+    // ab v0.14: Zitronenbaum am Garten
+    ZITRONE: 29
   };
   var BLOCK = {};
   [T.MAUER, T.WAND, T.WASSER, T.BRUNNEN, T.OLIVE, T.TAFEL, T.HERD, T.TOR,
-    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH, T.ZAUN, T.WIESE, T.ORANGE, T.STALL, T.KUEBEL, T.INSTRUMENT].forEach(function (t) { BLOCK[t] = true; });
+    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH, T.ZAUN, T.WIESE, T.ORANGE, T.STALL, T.KUEBEL, T.INSTRUMENT, T.ZITRONE].forEach(function (t) { BLOCK[t] = true; });
 
   var KACHEL = 16, BREITE = 40, HOEHE = 30;
 
@@ -109,13 +111,17 @@
       [27, 26], [31, 27], [35, 26], [37, 21], [37, 4], [37, 8], [2, 14], [10, 16], [22, 2], [18, 3]];
     var baeume = [];
     oliven.forEach(function (p) { set(p[0], p[1], T.OLIVE); baeume.push({ x: p[0], y: p[1] }); });
-    // Orangenbaum neben dem Beet (v0.5)
+    // Orangenbaum neben dem Beet (v0.5), Zitronenbaeume daneben und etwas suedlich (v0.14)
     set(10, 19, T.ORANGE); baeume.push({ x: 10, y: 19, art: 'orange' });
-    // Was im Garten waechst: Tomaten und Karotten im Beet, Orangen und Oliven an den Baeumen am Beet
+    set(9, 19, T.ZITRONE); baeume.push({ x: 9, y: 19, art: 'zitrone' });
+    set(11, 21, T.ZITRONE); baeume.push({ x: 11, y: 21, art: 'zitrone' });
+    // Was im Garten waechst: Tomaten und Karotten im Beet, Orangen, Zitronen und Oliven an den Baeumen
     var garten = [
       { art: 'tomate', x: 3, y: 16 }, { art: 'tomate', x: 5, y: 16 }, { art: 'tomate', x: 7, y: 16 },
       { art: 'karotte', x: 4, y: 18 }, { art: 'karotte', x: 6, y: 18 }, { art: 'karotte', x: 8, y: 18 },
-      { art: 'orange', x: 10, y: 19, baum: true }, { art: 'olive', x: 10, y: 16, baum: true }, { art: 'olive', x: 2, y: 14, baum: true }
+      { art: 'orange', x: 10, y: 19, baum: true },
+      { art: 'zitrone', x: 9, y: 19, baum: true }, { art: 'zitrone', x: 11, y: 21, baum: true },
+      { art: 'olive', x: 10, y: 16, baum: true }, { art: 'olive', x: 2, y: 14, baum: true }
     ];
 
     // Pflanzkuebel (v0.9): in den Hofecken, an der Arkade und links und rechts vom Tor, nie auf einem Weg

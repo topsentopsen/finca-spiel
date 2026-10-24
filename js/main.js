@@ -3,7 +3,7 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.13';
+  var VERSION = 'v0.14';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
   var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
@@ -351,7 +351,7 @@
     }
     // ab v0.8: ein Ei ist nie Pflicht. Liegt eins im Korb, kommt es mit hinein und es gibt einen Teller mehr.
     var mitEi = !!z.bonus;
-    if (z.frisch || mitEi) Dorf.Garten.verbrauche(st.vorrat, G, mitEi);
+    if (z.frisch || mitEi) Dorf.Garten.verbrauche(st.vorrat, G, mitEi, z.plan);
     st.kochen = { rest: G.dauer, dauer: G.dauer, gericht: G.id, frisch: z.frisch && !!G.immer, ei: mitEi };
     sage(st, 'Biel', 'Ich mache ' + G.name + ' (' + G.info + ')' + (st.kochen.frisch ? ' mit frischer Tomate und Olive!' : (mitEi ? ' mit einem frischen Ei!' : '.')), 3.5,
       ['gericht:' + G.id, 'topf'].concat(mitEi ? ['ei'] : []));
@@ -1223,11 +1223,37 @@
       if (buchKnopf.setAttribute) buchKnopf.setAttribute('aria-label', p ? 'Bilderbuch, neuer Sticker' : 'Bilderbuch');
     }
     var touchAn = !!((win.matchMedia && win.matchMedia('(pointer: coarse)').matches) || (win.navigator && win.navigator.maxTouchPoints > 0) || /[?&]touch=1/.test((win.location && win.location.search) || ''));
-    function zeigeTouch() { R.touch = touchAn; if (rahmen && rahmen.classList) rahmen.classList.toggle('touch', touchAn); if (R.uiSkala) groesse(); }
+    function zeigeTouch() { R.touch = touchAn; if (rahmen && rahmen.classList) rahmen.classList.toggle('touch', touchAn); if (R.uiSkala) groesse(); if (touchAn) hochkantSperren(); }
     zeigeTouch();
     if (doc.addEventListener) doc.addEventListener('visibilitychange', function () { if (ton) ton.pausiere(doc.hidden); if (doc.hidden) { sichere(); if (vorlesen) vorlesen.stopp(); } last = null; });
     if (win.addEventListener) win.addEventListener('pagehide', function () { sichere(); });
 
+    // ab v0.14: Hochformat nur auf dem Handy erzwingen (Desktop bleibt unverändert)
+  function istMobilGeraet() {
+    try {
+      if (win.matchMedia) {
+        if (win.matchMedia('(pointer: coarse)').matches) return true;
+        if (win.matchMedia('(hover: none) and (max-width: 900px)').matches) return true;
+      }
+      if (win.navigator && (win.navigator.maxTouchPoints || 0) > 1) return true;
+    } catch (e) {}
+    return false;
+  }
+  function hochkantSperren() {
+    if (!istMobilGeraet()) return;
+    try {
+      var o = win.screen && win.screen.orientation;
+      if (o && typeof o.lock === 'function') {
+        var p = o.lock('portrait');
+        if (p && typeof p.catch === 'function') p.catch(function () {});
+      }
+    } catch (e) {}
+    try {
+      if (win.screen && typeof win.screen.lockOrientation === 'function') win.screen.lockOrientation('portrait');
+      else if (win.screen && typeof win.screen.mozLockOrientation === 'function') win.screen.mozLockOrientation('portrait');
+      else if (win.screen && typeof win.screen.msLockOrientation === 'function') win.screen.msLockOrientation('portrait');
+    } catch (e2) {}
+  }
     function groesse() {
       // Rand fuer Notch und abgerundete Ecken (safe-area, als Padding am body)
       var rand = { l: 0, r: 0, o: 0, u: 0 };
@@ -1253,7 +1279,9 @@
       R.knopfAnzahl = anzahl;
     }
     win.addEventListener('resize', groesse);
+    win.addEventListener('orientationchange', hochkantSperren);
     groesse();
+    hochkantSperren();
     zeigeVorlesen();
 
     // Fehlerschutz (ab v0.6): die Schleife bittet immer zuerst um den naechsten Frame. Geht in Logik, Ton oder

@@ -20,6 +20,7 @@
     holz: '#c98b5e', holz2: '#a56c48', tuch: '#fffdf8', herd: '#dfe3ef', herd2: '#9aa3bb',
     erde: '#b98463', erde2: '#9c6a50', spross: '#6cc75a', blatt: '#84c27a', blatt2: '#5f9e64', blatt3: '#b6e39a', stamm: '#9a6a4a',
     olive1: '#c9d9b0', olive2: '#9fb98a', olive3: '#7c9a72',
+    zitrone1: '#f3e86a', zitrone2: '#d9c83a', zitrone3: '#b8c85a', zitroneBlatt: '#7eb86a',
     stein: '#ece4f0', stein2: '#cfc2da', schatten: 'rgba(74,52,120,0.26)', box: '#fff8ee',
     couch: '#b9a3f5', couch2: '#9580dc', kissen: '#ffc0d4', teppich: '#f7a9bf', teppich2: '#ffdbe6',
     topf: '#ef9470', topf2: '#cf6e52', bett: '#b3dcf5', decke: '#ffc0d4', backe: '#ff9fb0', augeHell: '#ffffff',
@@ -319,6 +320,7 @@
     else if (art === 'karotte') { r(c, x - 2, y - 2, 5, 3, P.kontur); r(c, x - 1, y + 1, 3, 2, P.kontur); r(c, x, y + 3, 1, 1, P.kontur); r(c, x - 1, y - 1, 3, 2, '#ffa04d'); r(c, x, y + 1, 1, 2, '#ffa04d'); r(c, x - 2, y - 4, 1, 2, '#5fbf6a'); r(c, x, y - 5, 1, 3, '#5fbf6a'); r(c, x + 2, y - 4, 1, 2, '#5fbf6a'); }
     else if (art === 'ei') zeichneEi(c, x, y);
     else if (art === 'orange') { kreis(c, x, y, 3, P.kontur); kreis(c, x, y, 2, '#ffb037'); r(c, x - 1, y - 1, 1, 1, '#ffe0a0'); r(c, x, y - 4, 2, 1, '#5fbf6a'); }
+    else if (art === 'zitrone') { kreis(c, x, y, 3, P.konturGruen); kreis(c, x, y, 2, P.zitrone1); r(c, x - 1, y - 1, 1, 1, '#fff6a8'); r(c, x, y - 4, 2, 1, P.zitroneBlatt); }
     else { rr(c, x - 2, y - 3, 5, 6, P.kontur); rr(c, x - 1, y - 2, 3, 4, '#9a7cc4'); r(c, x - 1, y - 2, 1, 1, '#e0d2f5'); r(c, x + 1, y - 4, 2, 1, '#5fbf6a'); }
     if (blass) c.globalAlpha = 1;
   }
@@ -326,7 +328,7 @@
   var KORB = { x: 3, y: H - 4, spalte: 9 };
   function korbSpalte(i) { return { x: KORB.x + 7 + i * KORB.spalte, y: KORB.y - 9 }; }
   function korbZiel(art) {
-    var Z = (Dorf.Garten && Dorf.Garten.ZUTATEN) || ['tomate', 'karotte', 'orange', 'olive', 'ei'], i = Math.max(0, Z.indexOf(art));
+    var Z = (Dorf.Garten && Dorf.Garten.ZUTATEN) || ['tomate', 'karotte', 'orange', 'zitrone', 'olive', 'ei'], i = Math.max(0, Z.indexOf(art));
     return korbSpalte(i);
   }
   function imFlug(liste, schluessel, wert) { var n = 0; (liste || []).forEach(function (f) { if (f[schluessel] === wert) n++; }); return n; }
@@ -375,7 +377,7 @@
       if (p.reif) { r(c, x - 2, y - 2, 5, 3, P.kontur); r(c, x - 1, y - 1, 3, 2, '#ffa04d'); glitzer(c, x + 4, y - 5, zeit, ph); }
     }
   }
-  // Fruechte am Baum (Orangen oder Oliven)
+  // Fruechte am Baum (Orangen, Zitronen oder Oliven)
   function zeichneBaumFruechte(c, p, sx, sy, zeit) {
     var cx = sx + 8, by = sy + 14, ph = (p.x * 5 + p.y) % 10 / 3;
     if (!p.reif) return;
@@ -401,7 +403,7 @@
     else if (art === 'kissen') { pille(c, x - 5, y - 3, 11, 7, P.kissen); r(c, x - 2, y - 1, 2, 1, '#ffe0ea'); }
     else zeichneZutat(c, art, x, y);
   }
-  var SYMBOLE_EXTRA = ['reden', 'topf', 'sonne', 'spross', 'teller', 'ball', 'kissen', 'tomate', 'karotte', 'orange', 'olive', 'ei'];
+  var SYMBOLE_EXTRA = ['reden', 'topf', 'sonne', 'spross', 'teller', 'ball', 'kissen', 'tomate', 'karotte', 'orange', 'zitrone', 'olive', 'ei'];
   function kenntSymbol(art) { return !!art && (SYMBOLE_EXTRA.indexOf(art) >= 0 || !!BILD[art] || (art.indexOf('gericht:') === 0 && !!(Dorf.Gerichte && Dorf.Gerichte.hole(art.slice(8))))); }
   // dicker Zeigepfeil nach unten, Spitze bei (x, y): verstehen auch Kinder, die noch nicht lesen
   function zeichneHand(c, x, y) {
@@ -756,6 +758,13 @@
     ellipse(c, cx, by, 7, 3, P.schatten);
     rr(c, cx - 2, by - 8, 5, 9, P.konturHolz); r(c, cx - 1, by - 8, 3, 8, P.stamm);
     kreis(c, cx, by - 17, 9, P.konturGruen); kreis(c, cx, by - 17, 8, P.blatt2); kreis(c, cx - 2, by - 19, 5, P.blatt); kreis(c, cx - 3, by - 21, 2, P.blatt3);
+  }
+  // ab v0.14: Zitronenbaum – helleres gelbgruenes Laub
+  function zeichneZitronenbaum(c, sx, sy) {
+    var cx = sx + 8, by = sy + 14;
+    ellipse(c, cx, by, 7, 3, P.schatten);
+    rr(c, cx - 2, by - 8, 5, 9, P.konturHolz); r(c, cx - 1, by - 8, 3, 8, P.stamm);
+    kreis(c, cx, by - 17, 9, P.konturGruen); kreis(c, cx, by - 17, 8, P.zitroneBlatt); kreis(c, cx - 2, by - 19, 5, P.blatt3); kreis(c, cx - 3, by - 21, 2, '#d4f0a8');
   }
   function zeichneBaum(c, sx, sy) {
     var cx = sx + 8, by = sy + 14;
@@ -1835,7 +1844,7 @@
     });
 
     // Objekte und Figuren nach Fuss-y sortiert
-    karte.baeume.forEach(function (t) { var sx = t.x * K - cx, sy = t.y * K - cy; if (sx > -24 && sx < W + 24 && sy > -32 && sy < H + 32) liste.push({ y: t.y * K + 14, f: function () { if (t.art === 'orange') zeichneOrangenbaum(c, sx, sy); else zeichneBaum(c, sx, sy); var fr = st.garten && Dorf.Garten.an(st.garten, t.x, t.y); if (fr) zeichneBaumFruechte(c, fr, sx + wackeln(fr), sy, zeit); } }); });
+    karte.baeume.forEach(function (t) { var sx = t.x * K - cx, sy = t.y * K - cy; if (sx > -24 && sx < W + 24 && sy > -32 && sy < H + 32) liste.push({ y: t.y * K + 14, f: function () { if (t.art === 'orange') zeichneOrangenbaum(c, sx, sy); else if (t.art === 'zitrone') zeichneZitronenbaum(c, sx, sy); else zeichneBaum(c, sx, sy); var fr = st.garten && Dorf.Garten.an(st.garten, t.x, t.y); if (fr) zeichneBaumFruechte(c, fr, sx + wackeln(fr), sy, zeit); } }); });
     (st.garten ? st.garten.liste : []).forEach(function (p) {
       if (p.baum) return;
       var sx = p.x * K - cx, sy = p.y * K - cy;
