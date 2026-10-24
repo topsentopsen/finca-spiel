@@ -1,27 +1,29 @@
 /* Musik und Geraeusche, komplett im eigenen Code mit WebAudio erzeugt (ab v0.3).
-   Fröhliche gezupfte Gitarrenschleife in C-Dur (Karplus-Strong), leise Effekte, Brunnenrauschen.
+   Fröhliche gezupfte Gitarrenschleife in C-Dur ohne Moll (Karplus-Strong), leise Effekte, Brunnenrauschen.
    Startet erst nach der ersten Beruehrung oder Taste (Regel der Browser). */
 (function (g) {
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
 
   var SCHLUESSEL = 'finca.stumm';
-  var BPM = 76;                        // ab v0.21: etwas frischeres Tempo (weiter kindgerecht)
+  var BPM = 80;                        // ab v0.23: etwas flotter und fröhlicher (weiter kindgerecht)
   var ACHTEL = 60 / BPM / 2;           // Sekunden pro Achtel
   var LAUT = { gesamt: 0.6, musik: 0.55, effekte: 0.9, umgebung: 0.05, grillen: 0.06, handy: 1.6 };   // handy: etwa 4 dB mehr fuer kleine Lautsprecher
   var UEBERBLENDEN = 2.5;              // Zeitkonstante in Sekunden fuer Tag zu Abend (ganz weich)
 
-  // Akkorde in MIDI: Bass und drei Toene. Ab v0.21 helle C-Dur-Kadenz (I–V–vi–IV), sanft gezupft.
+  // Akkorde in MIDI: Bass und drei Toene. Ab v0.23 nur Dur in der Tagesschleife (kein Am mehr).
+  // Am/Em/Dm bleiben fuer Instrument-Fallback und Wiegenlied-Noten.
   var AKKORDE = {
     C: [48, 60, 64, 67], G: [43, 55, 59, 62], Am: [45, 57, 60, 64], F: [41, 53, 57, 60],
     Em: [40, 52, 55, 59], Dm: [38, 50, 53, 57], E: [40, 56, 59, 64]
   };
-  var FOLGE = ['C', 'G', 'Am', 'F', 'C', 'G', 'F', 'G'];
+  // I–V–IV–I, dann I–V–IV–V — klar Dur, kein Moll-Einschub
+  var FOLGE = ['C', 'G', 'F', 'C', 'C', 'G', 'F', 'G'];
   // Zupfmuster pro Takt (8 Achtel): 0 = Bass, 1..3 = Akkordtoene — etwas luftiger
   var MUSTER = [0, 1, 2, 1, 3, 2, 1, 2];
-  // Kleine Melodie, nur in jeder zweiten Runde: [Takt, Achtel, MIDI] — hellere Intervalle
-  var MELODIE = [[0, 0, 72], [0, 4, 76], [1, 0, 79], [1, 4, 76], [2, 0, 77], [2, 3, 74], [2, 5, 72], [3, 0, 76], [3, 4, 79],
-    [4, 0, 81], [4, 4, 79], [5, 0, 76], [5, 4, 74], [6, 0, 72], [6, 3, 74], [6, 5, 76], [7, 0, 79], [7, 4, 72]];
+  // Kleine Melodie, nur in jeder zweiten Runde: [Takt, Achtel, MIDI] — steigend, hell
+  var MELODIE = [[0, 0, 72], [0, 4, 76], [1, 0, 79], [1, 4, 84], [2, 0, 81], [2, 3, 79], [2, 5, 76], [3, 0, 79], [3, 4, 84],
+    [4, 0, 86], [4, 4, 84], [5, 0, 79], [5, 4, 76], [6, 0, 74], [6, 3, 76], [6, 5, 79], [7, 0, 84], [7, 4, 72]];
 
   // Abendvariante: gleiche Dur-Folge, sparsamer gezupft, ruhigere Melodie
   var MUSTER_ABEND = [[0, 0], [2, 1], [3, 2], [4, 3], [6, 2]];     // [Achtel, Stufe]
@@ -557,6 +559,8 @@
       else if (name === 'eltern') { ton(660, j, 0.07, 0.02, 'triangle'); ton(990, j + 0.08, 0.12, 0.016, 'triangle'); }
       else if (name === 'vogel') { ton(2900, j, 0.07, 0.006, 'sine', 3600); ton(3300, j + 0.1, 0.06, 0.005, 'sine', 4100); }
       else if (name === 'blubber') { ton(520, j, 0.08, 0.02, 'sine', 380); ton(700, j + 0.07, 0.1, 0.018, 'sine', 480); ton(880, j + 0.16, 0.14, 0.014, 'sine', 620); }
+      else if (name === 'schoepfen') { ton(480, j, 0.1, 0.03, 'sine', 320); ton(640, j + 0.08, 0.12, 0.025, 'sine', 420); ton(900, j + 0.18, 0.16, 0.02, 'triangle', 600); ton(720, j + 0.28, 0.1, 0.018, 'sine', 500); }
+      else if (name === 'ballon') { ton(220, j, 0.18, 0.04, 'sine', 160); ton(330, j + 0.12, 0.22, 0.035, 'triangle', 240); ton(440, j + 0.28, 0.28, 0.03, 'sine', 300); }
       // ab v0.20: Boot (weiches Plitsch), Flamingo (hohes Plopp)
       else if (name === 'boot') { ton(220, j, 0.12, 0.03, 'sine', 160); ton(330, j + 0.08, 0.16, 0.025, 'triangle', 240); }
       else if (name === 'flamingo') { ton(660, j, 0.1, 0.02, 'sine', 880); ton(990, j + 0.09, 0.14, 0.016, 'triangle', 1200); }

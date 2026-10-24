@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<title>Finca v0.22 (Prototyp)</title>
+<title>Finca v0.23 (Prototyp)</title>
 <!-- ab v0.9: eigenes kleines Symbol (Finca Haus mit Sonne), direkt als Bild im Text, keine Datei von aussen -->
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%23b9a3f5'/%3E%3Ccircle cx='12' cy='4' r='2.2' fill='%23ffd36e'/%3E%3Cpath d='M2 8l6-5 6 5z' fill='%23e0785a'/%3E%3Crect x='3.5' y='8' width='9' height='6' fill='%23fff4dc'/%3E%3Crect x='7' y='10' width='2.4' height='4' fill='%238a5a3c'/%3E%3Cpath d='M5 9.4c.5-.6 1.3-.2 1 .5L5 11 4 9.9c-.3-.7.5-1.1 1-.5z' fill='%23ff7fa0'/%3E%3C/svg%3E">
 <style>
@@ -62,13 +62,21 @@
   #knopf-aktion svg { width: 56%; height: 56%; margin: 0 auto; display: none; }
   #knopf-aktion[data-art="reden"] .i-reden, #knopf-aktion[data-art="streicheln"] .i-streicheln, #knopf-aktion[data-art="fuettern"] .i-fuettern,
   #knopf-aktion[data-art="ernten"] .i-ernten, #knopf-aktion[data-art="sammeln"] .i-sammeln, #knopf-aktion[data-art="kochen"] .i-kochen,
-  #knopf-aktion[data-art="weiter"] .i-weiter, #knopf-aktion[data-art="musik"] .i-musik { display: block; }
+  #knopf-aktion[data-art="weiter"] .i-weiter, #knopf-aktion[data-art="musik"] .i-musik,
+  #knopf-aktion[data-art="schoepfen"] .i-schoepfen, #knopf-aktion[data-art="ballon"] .i-ballon,
+  #knopf-aktion[data-art="landen"] .i-landen, #knopf-aktion[data-art="aussteigen"] .i-aussteigen,
+  #knopf-aktion[data-art="boot"] .i-boot, #knopf-aktion[data-art="flamingo"] .i-flamingo,
+  #knopf-aktion[data-art="absteigen"] .i-absteigen { display: block; }
   #knopf-aktion.art-reden { --rand: #5ec8b8; --lippe: #3fa597; }
   #knopf-aktion.art-kochen { --rand: #ff8f8f; --lippe: #e06a6a; }
   #knopf-aktion.art-ernten { --rand: #7ed492; --lippe: #56b06c; }
   #knopf-aktion.art-streicheln, #knopf-aktion.art-fuettern, #knopf-aktion.art-sammeln { --rand: #ff9fc0; --lippe: #e07aa0; }
   #knopf-aktion.art-weiter { --rand: #ffd36e; --lippe: #e0ad3e; }
   #knopf-aktion.art-musik { --rand: #ffb037; --lippe: #d98a1c; }
+  #knopf-aktion.art-schoepfen { --rand: #7ec8e3; --lippe: #4aa0c0; }
+  #knopf-aktion.art-ballon, #knopf-aktion.art-landen { --rand: #ff6b8a; --lippe: #e04a6a; }
+  #knopf-aktion.art-boot, #knopf-aktion.art-aussteigen { --rand: #f0b27a; --lippe: #d08a4a; }
+  #knopf-aktion.art-flamingo, #knopf-aktion.art-absteigen { --rand: #ff9fb8; --lippe: #e07a9a; }
   #knopf-aktion.leer { opacity: 0; visibility: hidden; pointer-events: none; transform: scale(0.6); transition: opacity .18s ease, transform .18s ease, visibility 0s .18s; }
   /* ab v0.17: auf Touch bleibt der leere Knopf leicht tippbar (Rückmeldung statt „tot“) */
   #rahmen.touch #knopf-aktion.leer, html.mobil #knopf-aktion.leer {
@@ -178,6 +186,13 @@
       <svg class="i-kochen" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11h16v4a5 5 0 0 1-5 5H9a5 5 0 0 1-5-5z" fill="#ffffff" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M2 11h20M9 7c0-1.5 1-1.5 1-3M14 7c0-1.5 1-1.5 1-3" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
       <svg class="i-musik" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 17.5V5.5l10-2v12" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><ellipse cx="6.5" cy="17.5" rx="3" ry="2.4" fill="#ffb037" stroke="#4b3a5a" stroke-width="2"/><ellipse cx="16.5" cy="15.5" rx="3" ry="2.4" fill="#ff9fc0" stroke="#4b3a5a" stroke-width="2"/></svg>
       <svg class="i-weiter" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5" fill="#ffd36e" stroke="#4b3a5a" stroke-width="2"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
+      <svg class="i-schoepfen" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 10h10v3a4 4 0 0 1-4 4h-2a4 4 0 0 1-4-4z" fill="#7ec8e3" stroke="#4b3a5a" stroke-width="2"/><path d="M9 10V7a3 3 0 0 1 6 0v3" fill="none" stroke="#4b3a5a" stroke-width="2"/><path d="M16 14c2 1 3 3 2 5M18 12c2 .5 3.5 2 3 4" fill="none" stroke="#4aa0c0" stroke-width="2" stroke-linecap="round"/></svg>
+      <svg class="i-ballon" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="9" rx="7" ry="8" fill="#ff6b8a" stroke="#4b3a5a" stroke-width="2"/><path d="M9 15l3 2 3-2M10 17h4v3h-4z" fill="#c98b5e" stroke="#4b3a5a" stroke-width="2" stroke-linejoin="round"/><path d="M8 9h8" stroke="#fff6e8" stroke-width="2"/></svg>
+      <svg class="i-landen" viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="8" rx="6" ry="7" fill="#ffd35e" stroke="#4b3a5a" stroke-width="2"/><path d="M10 14h4v3h-4z" fill="#c98b5e" stroke="#4b3a5a" stroke-width="2"/><path d="M12 18v3M9 21h6" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
+      <svg class="i-boot" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h16l-2 4H6z" fill="#f0b27a" stroke="#4b3a5a" stroke-width="2"/><path d="M12 6v8M12 6l5 3" fill="none" stroke="#4b3a5a" stroke-width="2"/><path d="M13 7h4v2h-4z" fill="#ff9fb0" stroke="#4b3a5a" stroke-width="1.5"/></svg>
+      <svg class="i-aussteigen" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 14h16l-2 4H6z" fill="#f0b27a" stroke="#4b3a5a" stroke-width="2"/><path d="M12 5v7M9 9l3 3 3-3" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
+      <svg class="i-flamingo" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="13" r="6" fill="#ff9fb8" stroke="#4b3a5a" stroke-width="2"/><path d="M16 10c1-3 2-5 4-6" fill="none" stroke="#4b3a5a" stroke-width="2"/><circle cx="20" cy="4" r="1.5" fill="#ff7fa6" stroke="#4b3a5a" stroke-width="1.5"/></svg>
+      <svg class="i-absteigen" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="6" fill="#ff9fb8" stroke="#4b3a5a" stroke-width="2"/><path d="M12 3v5M9 6l3 3 3-3" fill="none" stroke="#4b3a5a" stroke-width="2" stroke-linecap="round"/></svg>
     </button>
   </div>
 </div>
@@ -185,27 +200,28 @@
   <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2.5" fill="#fff4dc" stroke="#7a6494" stroke-width="1.6"/><rect x="9" y="5" width="6" height="12" rx="1" fill="#c9f2e2"/><circle cx="12" cy="19.5" r="1" fill="#7a6494"/></svg>
   Tipp: Handy hochkant halten
 </div>
-<script src="js/rng.js?v=0.22"></script>
-<script src="js/karte.js?v=0.22"></script>
-<script src="js/pfad.js?v=0.22"></script>
-<script src="js/kamera.js?v=0.22"></script>
-<script src="js/eingabe.js?v=0.22"></script>
-<script src="js/uhr.js?v=0.22"></script>
-<script src="js/spieler.js?v=0.22"></script>
-<script src="js/gerichte.js?v=0.22"></script>
-<script src="js/garten.js?v=0.22"></script>
-<script src="js/glueck.js?v=0.22"></script>
-<script src="js/gaeste.js?v=0.22"></script>
-<script src="js/tiere.js?v=0.22"></script>
-<script src="js/wasser.js?v=0.22"></script>
-<script src="js/speicher.js?v=0.22"></script>
-<script src="js/sticker.js?v=0.22"></script>
-<script src="js/hinweise.js?v=0.22"></script>
-<script src="js/vorlesen.js?v=0.22"></script>
-<script src="js/render.js?v=0.22"></script>
-<script src="js/ton.js?v=0.22"></script>
-<script src="js/profile.js?v=0.22"></script>
-<script src="js/leben.js?v=0.22"></script>
-<script src="js/main.js?v=0.22"></script>
+<script src="js/rng.js?v=0.23"></script>
+<script src="js/karte.js?v=0.23"></script>
+<script src="js/pfad.js?v=0.23"></script>
+<script src="js/kamera.js?v=0.23"></script>
+<script src="js/eingabe.js?v=0.23"></script>
+<script src="js/uhr.js?v=0.23"></script>
+<script src="js/spieler.js?v=0.23"></script>
+<script src="js/gerichte.js?v=0.23"></script>
+<script src="js/garten.js?v=0.23"></script>
+<script src="js/glueck.js?v=0.23"></script>
+<script src="js/gaeste.js?v=0.23"></script>
+<script src="js/tiere.js?v=0.23"></script>
+<script src="js/wasser.js?v=0.23"></script>
+<script src="js/ballon.js?v=0.23"></script>
+<script src="js/speicher.js?v=0.23"></script>
+<script src="js/sticker.js?v=0.23"></script>
+<script src="js/hinweise.js?v=0.23"></script>
+<script src="js/vorlesen.js?v=0.23"></script>
+<script src="js/render.js?v=0.23"></script>
+<script src="js/ton.js?v=0.23"></script>
+<script src="js/profile.js?v=0.23"></script>
+<script src="js/leben.js?v=0.23"></script>
+<script src="js/main.js?v=0.23"></script>
 </body>
 </html>

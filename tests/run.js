@@ -3,7 +3,7 @@
 'use strict';
 var fs = require('fs'), path = require('path'), vm = require('vm');
 
-var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'garten', 'glueck', 'gaeste', 'tiere', 'wasser', 'speicher', 'sticker', 'hinweise', 'vorlesen', 'render', 'ton', 'profile', 'leben', 'main'];
+var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'garten', 'glueck', 'gaeste', 'tiere', 'wasser', 'ballon', 'speicher', 'sticker', 'hinweise', 'vorlesen', 'render', 'ton', 'profile', 'leben', 'main'];
 
 function ladeKontext(extra) {
   var ctx = { console: console, Math: Math };
@@ -204,12 +204,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.22', function () {
+test('Version: sichtbares Label ist v0.23', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.22');
+  gleich(D.VERSION, 'v0.23');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.22 (Prototyp)') >= 0, 'Titel enthaelt v0.22');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.22"') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.23 (Prototyp)') >= 0, 'Titel enthaelt v0.23');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.23"') >= 0, n + ' eingebunden'); });
   wahr(html.indexOf('js/profile.js') < html.indexOf('js/main.js') && html.indexOf('js/leben.js') < html.indexOf('js/main.js'), 'neue Dateien vor main');
   wahr(/html\.mobil\.quer/.test(html) && /hochkant halten/.test(html), 'Handy-Hochformat-Hinweis (Klasse mobil.quer)');
   wahr(fs.existsSync(path.join(__dirname, '..', 'assets', 'schlaflied-a.mp3')), 'Schlaflied A');
@@ -1101,7 +1101,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand.esel']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.22'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.23'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -1343,7 +1343,7 @@ test('Dauerlauf: zehn Tage mit Zufallstipps, Tasten, Neu-Frage, Speichern und La
       if (i % 50 === 0) D.Render.zeichne(R, st);
       var sp2 = st.spieler;
       wahr(isFinite(sp2.x) && isFinite(sp2.y) && sp2.x >= 0 && sp2.y >= 0 && sp2.x <= st.karte.w * 16 && sp2.y <= st.karte.h * 16, 'Biel in der Karte');
-      wahr(!D.Spieler.kollidiert(st.karte, sp2.x, sp2.y) || (D.Wasser && D.Wasser.besetzt(st.wasser)), 'Biel steckt nirgends fest');
+      wahr(!D.Spieler.kollidiert(st.karte, sp2.x, sp2.y) || (D.Wasser && D.Wasser.besetzt(st.wasser)) || (D.Ballon && D.Ballon.besetzt(st.ballon)), 'Biel steckt nirgends fest');
       st.gaeste.forEach(function (g) { wahr(isFinite(g.x) && isFinite(g.y) && g.glueck >= 0 && g.glueck <= D.Glueck.MAX, 'Gast ok'); });
       D.Garten.REIHE.forEach(function (a) { wahr(st.vorrat[a] >= 0 && st.vorrat[a] <= D.Garten.VORRAT_MAX, 'Korb im Rahmen'); });
       wahr(st.teller.length <= 6 && st.herzchen.length <= 40, 'Tafel und Herzchen begrenzt');
@@ -2818,8 +2818,8 @@ test('v0.21: Tagesschleife beginnt auf C-Dur, BPM frischer', function () {
 });
 
 
-// ---------- v0.22: Flamingo bewegt sich; Boot-Ausstieg kindgerecht ----------
-test('v0.22: Flamingo treibt leer und steuert besetzt im Poolwasser', function () {
+// ---------- v0.23: Flamingo bewegt sich; Boot-Ausstieg kindgerecht ----------
+test('v0.23: Flamingo treibt leer und steuert besetzt im Poolwasser', function () {
   var D = ladeKontext().Dorf, st = D.Spiel.erstelle(42), W = D.Wasser, T = D.Karte.T;
   var f = st.wasser.flamingo, x0 = f.x, y0 = f.y;
   var leer = { halt: function () { return false; } };
@@ -2854,7 +2854,7 @@ test('v0.22: Flamingo treibt leer und steuert besetzt im Poolwasser', function (
   wahr(!!f.ziel, 'Flamingo hat Schwimmziel');
 });
 
-test('v0.22: Boot-Ausstieg nahe Strand dockt an, weit draussen nicht', function () {
+test('v0.23: Boot-Ausstieg nahe Strand dockt an, weit draussen nicht', function () {
   var D = ladeKontext().Dorf, st = D.Spiel.erstelle(42), W = D.Wasser, T = D.Karte.T;
   var b = st.wasser.boot, strandY = st.karte.meer.strandY;
   // Einsteigen am Strand
@@ -2882,6 +2882,70 @@ test('v0.22: Boot-Ausstieg nahe Strand dockt an, weit draussen nicht', function 
   wahr(!b.besetzt, 'Strand-Tipp steigt aus');
 });
 
+// ---------- v0.23: froehliche Dur-Musik, Brunnen schoepfen, Heissluftballon ----------
+test('v0.23: Tagesmusik nur Dur (kein Am in FOLGE)', function () {
+  wahr(!!D.Ton, 'Ton da');
+  wahr(D.Ton.FOLGE.indexOf('Am') < 0, 'kein Am');
+  D.Ton.FOLGE.forEach(function (n) {
+    wahr(!!D.Ton.AKKORDE[n], n + ' existiert');
+    // Dur-Akkorde: C, G, F, D, A, E, Bb … — Am waere Moll
+    wahr(n.indexOf('m') < 0 || n === 'E', 'kein Moll-Akkord: ' + n);
+  });
+  wahr(D.Ton.BPM >= 78 && D.Ton.BPM <= 92, 'BPM kindgerecht-flotter');
+});
+
+test('v0.23: Brunnen Wasser schoepfen per Tipp und Kontext', function () {
+  var st = D.Spiel.erstelle({ seed: 1 });
+  var kb = st.karte.brunnen;
+  st.spieler.x = kb.x * 16 + 16; st.spieler.y = (kb.y + 2) * 16 + 8;
+  var k = D.Spiel.kontext(st);
+  gleich(k && k.art, 'schoepfen', 'Kontext Schoepfen');
+  wahr(D.Spiel.tueKontext(st, k), 'tueKontext');
+  wahr(!!st.schoepfen && st.schoepfen.rest > 0, 'Animation laeuft');
+  wahr(st.toene.indexOf('schoepfen') >= 0, 'Sound');
+  // Tipp auf Brunnen aus der Naehe
+  st.schoepfen = null; st.toene = [];
+  var r = D.Spiel.klick(st, kb.x * 16 + 16, kb.y * 16 + 14);
+  wahr(r === 'schoepfen' || !!st.schoepfen || !!st.spieler.ziel, 'Tipp startet Schöpfen oder Lauf');
+});
+
+test('v0.23: Heissluftballon einsteigen, schweben, landen', function () {
+  wahr(!!D.Ballon, 'Ballon-Modul');
+  var st = D.Spiel.erstelle({ seed: 1 });
+  wahr(!!st.ballon && st.ballon.liste.length >= 2, 'mehrere Ballons');
+  var farben = {};
+  st.ballon.liste.forEach(function (b) { farben[b.farbe] = 1; });
+  wahr(Object.keys(farben).length >= 2, 'verschiedene Farben');
+  var bl = st.ballon.aktiv;
+  st.spieler.x = bl.x; st.spieler.y = bl.y;
+  wahr(D.Ballon.einsteigen(st.ballon, st.spieler), 'einsteigen');
+  wahr(D.Ballon.besetzt(st.ballon), 'besetzt');
+  var x0 = bl.x, y0 = bl.y;
+  wahr(D.Ballon.setzeZiel(st.ballon, st.karte, Math.floor(x0 / 16) + 2, Math.floor(y0 / 16) - 1), 'Ziel');
+  D.Ballon.update(st.ballon, st.karte, st.spieler, { halt: function () { return false; } }, 0.5);
+  wahr(Math.hypot(bl.x - x0, bl.y - y0) > 1, 'schwebt');
+  // Pfeile
+  D.Ballon.update(st.ballon, st.karte, st.spieler, { halt: function (k) { return k === 'rechts'; } }, 0.4);
+  wahr(bl.x > x0, 'WASD/Pfeil rechts');
+  wahr(D.Ballon.aussteigen(st.ballon, st.spieler, st.karte), 'landen');
+  wahr(!D.Ballon.besetzt(st.ballon), 'frei');
+  wahr(!D.Spieler.kollidiert(st.karte, st.spieler.x, st.spieler.y), 'auf begehbarem Boden');
+});
+
+test('v0.23: Ballon-Kontext und Klick-Steuerung', function () {
+  var st = D.Spiel.erstelle({ seed: 2 });
+  var bl = st.ballon.aktiv;
+  st.spieler.x = bl.x; st.spieler.y = bl.y;
+  gleich(D.Spiel.kontext(st).art, 'ballon', 'Kontext Einsteigen');
+  D.Spiel.tueKontext(st, D.Spiel.kontext(st));
+  wahr(D.Ballon.besetzt(st.ballon), 'drin');
+  gleich(D.Spiel.kontext(st).art, 'landen', 'Kontext Landen');
+  var tx = Math.floor(bl.x / 16) + 3, ty = Math.floor(bl.y / 16);
+  gleich(D.Spiel.klick(st, tx * 16 + 8, ty * 16 + 8), 'schweben', 'Tipp steuert');
+  D.Spiel.tueKontext(st, { art: 'landen' });
+  wahr(!D.Ballon.besetzt(st.ballon), 'wieder draussen');
+});
+
 // ---------- Ausfuehren ----------
 tests.forEach(function (t) {
   try { t.fn(); ok++; console.log('  ok    ' + t.name); }
@@ -2889,3 +2953,4 @@ tests.forEach(function (t) {
 });
 console.log('\n' + ok + ' bestanden, ' + fehler + ' fehlgeschlagen');
 process.exit(fehler ? 1 : 0);
+

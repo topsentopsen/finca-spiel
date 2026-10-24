@@ -900,7 +900,7 @@
     kreis(c, cx - 3, by - 17, 4, P.olive2); kreis(c, cx - 2, by - 24, 3, P.olive1);
     r(c, cx - 4, by - 20, 3, 2, P.olive1); r(c, cx + 2, by - 25, 3, 2, P.olive1);
   }
-  function zeichneBrunnen(c, sx, sy, zeit) {
+  function zeichneBrunnen(c, sx, sy, zeit, schoepfen) {
     ellipse(c, sx + 16, sy + 28, 15, 3, P.schatten);
     pille(c, sx + 2, sy + 6, 28, 22, P.stein);
     r(c, sx + 3, sy + 20, 26, 6, P.stein2);
@@ -912,7 +912,55 @@
     r(c, sx + 24, sy - 6, 4, 16, P.konturStein); r(c, sx + 25, sy - 5, 2, 14, P.holz);
     pille(c, sx + 1, sy - 10, 30, 6, P.dach);
     r(c, sx + 16, sy - 4, 1, 7, P.konturStein);
-    box(c, sx + 13, sy + 2, 7, 6, '#b8c4e0');
+    // Eimer (ab v0.23: kippt beim Schöpfen)
+    var kip = schoepfen ? Math.min(1, (schoepfen.dauer - schoepfen.rest) / 0.35) : 0;
+    var ex = sx + 13 + Math.round(kip * 4), ey = sy + 2 - Math.round(kip * 6);
+    box(c, ex, ey, 7, 6, '#b8c4e0');
+    r(c, ex, ey, 7, 1, P.konturStein);
+    if (kip > 0.2) {
+      r(c, ex + 6, ey + 3, 2, 1, P.wasser2);
+      r(c, ex + 7, ey + 5, 1, 2, P.wasser);
+    }
+  }
+  function zeichneSchoepfTropfen(c, schoepfen, cx, cy) {
+    if (!schoepfen || !schoepfen.tropfen) return;
+    schoepfen.tropfen.forEach(function (tr) {
+      if (tr.t > 0.95) return;
+      c.globalAlpha = Math.max(0, 1 - tr.t / 0.95);
+      kreis(c, Math.round(tr.x - cx), Math.round(tr.y - cy), 2, P.wasser2);
+      r(c, Math.round(tr.x - cx), Math.round(tr.y - cy) + 2, 1, 2, P.wasser);
+      c.globalAlpha = 1;
+    });
+  }
+
+  // ab v0.23: grosser bunter Heissluftballon (Korb + Huelle)
+  function zeichneBallon(c, bl, sx, sy, zeit, besetzt) {
+    var bob = Math.round(Math.sin((bl.phase || 0) * 1.4 + zeit) * (besetzt ? 1.6 : 1.1));
+    var x = Math.round(sx), y = Math.round(sy) + bob;
+    var farbe = bl.farbe || '#ff6b8a';
+    var hell = '#fff6e8', dunkel = P.kontur;
+    // Schatten am Boden
+    ellipse(c, x, y + 6, 10, 3, 'rgba(74,52,120,0.16)');
+    // Seile
+    r(c, x - 5, y - 18, 1, 14, dunkel); r(c, x + 4, y - 18, 1, 14, dunkel);
+    r(c, x - 3, y - 18, 1, 12, '#d9c2a0'); r(c, x + 2, y - 18, 1, 12, '#d9c2a0');
+    // Huelle (gross)
+    kreis(c, x, y - 30, 16, dunkel);
+    kreis(c, x, y - 30, 15, farbe);
+    kreis(c, x - 3, y - 34, 6, hell);
+    // Streifen
+    r(c, x - 10, y - 30, 20, 2, hell);
+    r(c, x - 1, y - 44, 2, 8, farbe);
+    // Korb
+    rr(c, x - 6, y - 6, 12, 9, dunkel);
+    rr(c, x - 5, y - 5, 10, 7, '#c98b5e');
+    r(c, x - 5, y - 5, 10, 2, '#e0b07a');
+    r(c, x - 4, y - 2, 1, 3, '#8a5a3a'); r(c, x + 3, y - 2, 1, 3, '#8a5a3a');
+    if (besetzt) {
+      // kleiner Flacker im Brenner
+      if (Math.floor(zeit * 6) % 2 === 0) { r(c, x - 1, y - 10, 2, 3, '#ffb84d'); r(c, x, y - 12, 1, 2, '#ffe27a'); }
+    }
+    return bob;
   }
 
   // ---------- Figuren (ab v0.8 neu gezeichnet nach dem Design Review) ----------
@@ -2034,7 +2082,7 @@
       if (sx > -20 && sx < W + 20 && sy > -24 && sy < H + 24) liste.push({ y: ins.y * K + 12, f: function () { zeichneInstrument(c, ins, sx, sy); } });
     });
     R.letztesLeben = lebenListe(liste, c, st, cx, cy);
-    liste.push({ y: (karte.brunnen.y + 1) * K + 12, f: function () { zeichneBrunnen(c, karte.brunnen.x * K - cx, karte.brunnen.y * K - cy, zeit); } });
+    liste.push({ y: (karte.brunnen.y + 1) * K + 12, f: function () { zeichneBrunnen(c, karte.brunnen.x * K - cx, karte.brunnen.y * K - cy, zeit, st.schoepfen); } });
     var redner = st.blase && !st.abend && !st.menue ? st.blase.sprecher : null;
     R.letzteWolken = [];
     st.gaeste.forEach(function (gs, gi) {
@@ -2067,6 +2115,7 @@
     });
     // ab v0.20: Boot und Flamingo
     var wass = st.wasser, bootBesetzt = !!(wass && wass.boot && wass.boot.besetzt), flamBesetzt = !!(wass && wass.flamingo && wass.flamingo.besetzt);
+    var ballonBesetzt = !!(st.ballon && Dorf.Ballon && Dorf.Ballon.besetzt(st.ballon));
     if (wass && wass.boot) {
       (function (b) {
         var sx = b.x - cx, sy = b.y - cy;
@@ -2085,12 +2134,26 @@
         } });
       })(wass.flamingo);
     }
+    // ab v0.23: Heissluftballons (Huelle hoch, Korb = Fuss-y)
+    if (st.ballon && st.ballon.liste) {
+      st.ballon.liste.forEach(function (bl) {
+        (function (bl) {
+          var sx = bl.x - cx, sy = bl.y - cy;
+          if (sx < -40 || sx > W + 40 || sy < -60 || sy > H + 40) return;
+          liste.push({ y: bl.y + 0.12, f: function () {
+            var bob = zeichneBallon(c, bl, sx, sy, zeit, !!bl.besetzt);
+            if (bl.besetzt) zeichnePerson(c, st.spieler.x - cx, st.spieler.y - cy - 8 + bob, BIEL, 'unten', 0, { zeit: zeit, ruhig: true });
+          } });
+        })(bl);
+      });
+    }
     var sp = st.spieler;
-    if (!bootBesetzt && !flamBesetzt) {
+    if (!bootBesetzt && !flamBesetzt && !ballonBesetzt) {
       liste.push({ y: sp.y + 0.1, f: function () { zeichnePerson(c, sp.x - cx, sp.y - cy, BIEL, sp.dir, sp.frame, { zeit: zeit, hop: huepfer(st, 'Biel', 0) }); } });
     }
     liste.sort(function (a, b) { return a.y - b.y; });
     liste.forEach(function (e) { e.f(); });
+    if (st.schoepfen) zeichneSchoepfTropfen(c, st.schoepfen, cx, cy);
     zeichneKochen(c, karte, st, cx, cy);
     zeichneHerzchen(c, st, cx, cy);
     zeichneNoten(c, st, cx, cy);

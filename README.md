@@ -1,4 +1,4 @@
-# Finca v0.22
+# Finca v0.23
 
 A small browser game with a handheld look, written in pure JavaScript. There is no build and no npm. Music and sounds are generated in code with WebAudio; from v0.13 the evening lullaby is one small MP3 in `assets/` (no other media files).
 
@@ -29,6 +29,8 @@ Optional: `index.html?seed=12345` uses a different seed for flowers and guest de
 | Click / tap a fish in the sea | Bubbles and a little heart (from v0.19); fish swim on their own |
 | Click / tap the boat on the beach | Board, sail on open sea only (tap water or arrows; sand blocks beach cruising); near shore tap the boat, the sand or Aussteigen to hop off — farther out you get a clear tip (from v0.20–v0.22) |
 | Click / tap the flamingo in the pool | Sit; it drifts alone, and while seated tap pool water or use arrows/WASD to swim; tap the flamingo again to stand on the rim (from v0.20 / v0.22) |
+| Click / tap a hot-air balloon in the garden corner | Board; float over the map with tap or arrows/WASD; Land / tap balloon to disembark on walkable ground (from v0.23) |
+| Click / tap the well (or context “Wasser schöpfen”) | Tip the bucket, water drops + scoop sound (from v0.23) |
 | Read aloud button (top right) | Only shown if the browser has a German voice. Short calm lines are read aloud; off when the sound is off, pressing it while muted turns the sound back on (saved in the browser) |
 | B or book button (top right) | Open or close the picture book: recipe pages and the sticker album. Tap the right half or press the right arrow to turn forward, the left half or left arrow to turn back; the pot tab jumps to the recipes, the star tab to the album; the X, Esc, B or a tap next to the book closes it. The book button in the cooking menu opens the recipe of the selected dish |
 | Enter / Space / tap | Close the dialog; after "Bona nit!" start the next day |
@@ -199,3 +201,9 @@ A pastel rowboat rests on the beach left of the gate. Tap it (or walk close and 
 
 ## Note
 This folder contains no passwords, tokens or other credentials.
+
+## Hot-air balloon & well (v0.23)
+
+- **Day music**: brighter major-only loop (no Am), slightly quicker BPM; lullabies A/B/C unchanged.
+- **Well**: tip or use the action button near the well to scoop water (bucket tip + drops + sound).
+- **Hot-air balloons**: colourful balloons parked in the SW garden corner; board one, float over the map, land again on walkable ground. Desktop 320×176 and mobile portrait 320×400 unchanged.

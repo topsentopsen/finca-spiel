@@ -3,7 +3,7 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.22';
+  var VERSION = 'v0.23';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
   var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
@@ -14,7 +14,7 @@
   var SPEICHER_TAKT = 5;      // alle 5 Sekunden wird der Spielstand gesichert
   var FLUG_KORB = 0.6;        // ab v0.8: so lange fliegt eine Frucht oder ein Ei in den Korb unten links
   var AKTION_PULS = 3;        // der grosse Knopf pulsiert nur bei den ersten drei Malen
-  var AKTION_NAME = { reden: 'Reden', streicheln: 'Streicheln', fuettern: 'Füttern', ernten: 'Ernten', sammeln: 'Ei aufheben', kochen: 'Kochen', weiter: 'Neuer Tag', musik: 'Musik machen', boot: 'Einsteigen', aussteigen: 'Aussteigen', flamingo: 'Draufsetzen', absteigen: 'Aufstehen' };
+  var AKTION_NAME = { reden: 'Reden', streicheln: 'Streicheln', fuettern: 'Füttern', ernten: 'Ernten', sammeln: 'Ei aufheben', kochen: 'Kochen', weiter: 'Neuer Tag', musik: 'Musik machen', boot: 'Einsteigen', aussteigen: 'Aussteigen', flamingo: 'Draufsetzen', absteigen: 'Aufstehen', schoepfen: 'Wasser schöpfen', ballon: 'Einsteigen', landen: 'Landen' };
   var WACKEL = 0.5, MENUE_ZU = 0.9;   // ab v0.9: Karte mit fehlenden Zutaten wackelt, danach geht das Menue zu
   // ab v0.10: Elternbereich (3 Sekunden auf das Zahnrad drücken), Instrumente, Zoom am Handy
   var ELTERN_HALT = 3;
@@ -66,6 +66,8 @@
     st.vorrat = Dorf.Garten.leererVorrat();
     st.tiere = Dorf.Tiere.erstelle(karte, seed);
     st.wasser = Dorf.Wasser ? Dorf.Wasser.erstelle(karte) : null;
+    st.ballon = Dorf.Ballon ? Dorf.Ballon.erstelle(karte) : null;
+    st.schoepfen = null;
     Dorf.Kamera.sofort(st.kamera, st.spieler.x, st.spieler.y - 12);
     sage(st, 'Biel', 'Bon dia! (Guten Morgen!) Willkommen auf der Finca.', 5, ['sonne', 'lachen']);
     return st;
@@ -136,6 +138,13 @@
       var wb = st.wasser.boot; if (wb) pruef(Math.hypot(wx - wb.x, wy - (wb.y - 4)) - 6, { boot: true });
       var wf = st.wasser.flamingo; if (wf) pruef(Math.hypot(wx - wf.x, wy - (wf.y - 6)) - 8, { flamingo: true });
     }
+    if (st.ballon && Dorf.Ballon) {
+      (st.ballon.liste || []).forEach(function (bl) {
+        pruef(Math.hypot(wx - bl.x, wy - (bl.y - 20)) - 10, { ballon: bl });
+      });
+    }
+    var kb = st.karte.brunnen;
+    if (kb) pruef(Math.hypot(wx - (kb.x * 16 + 16), wy - (kb.y * 16 + 18)) - 14, { brunnen: true });
     return best;
   }
 
@@ -176,17 +185,28 @@
       }
       st.marker = { x: tx, y: ty, t: 0, nein: true }; return 'nein';
     }
+    // ab v0.23: Heissluftballon steuern / landen
+    if (st.ballon && Dorf.Ballon && Dorf.Ballon.besetzt(st.ballon)) {
+      var balHit = Dorf.Ballon.ballonAn(st.ballon, wx, wy, st.eingabe.touch ? 28 : 22);
+      if (balHit && balHit.besetzt) { tippBallon(st, balHit); return 'ballon'; }
+      if (Dorf.Ballon.setzeZiel(st.ballon, karte, tx, ty)) {
+        st.marker = { x: tx, y: ty, t: 0 }; return 'schweben';
+      }
+      st.marker = { x: tx, y: ty, t: 0, nein: true }; return 'nein';
+    }
     var gast = gastAn(st, wx, wy), ei = gast ? null : Dorf.Tiere.eiAn(st.tiere, wx, wy, 6);
     var tier = (gast || ei) ? null : Dorf.Tiere.an(st.tiere, wx, wy);
     var fisch = (gast || ei || tier) ? null : Dorf.Tiere.fischAn(st.tiere, wx, wy, st.eingabe.touch ? 14 : 10);
     var bootZiel = (!gast && !ei && !tier && !fisch && st.wasser && Dorf.Wasser) ? Dorf.Wasser.bootAn(st.wasser, wx, wy, st.eingabe.touch ? 18 : 14) : null;
     var flamingoZiel = (!gast && !ei && !tier && !fisch && !bootZiel && st.wasser && Dorf.Wasser) ? Dorf.Wasser.flamingoAn(st.wasser, wx, wy, st.eingabe.touch ? 20 : 16) : null;
-    var pf = (gast || tier || ei || fisch || bootZiel || flamingoZiel) ? null : Dorf.Garten.an(st.garten, tx, ty);
-    var herd = !gast && !tier && !pf && !ei && !fisch && !bootZiel && !flamingoZiel && karte.tile(tx, ty) === T.HERD;
-    var ins = (!gast && !tier && !pf && !ei && !herd && !fisch && !bootZiel && !flamingoZiel) ? instrumentAn(st, tx, ty) : null;
-    if (!gast && !tier && !pf && !herd && !ei && !ins && !fisch && !bootZiel && !flamingoZiel) {
+    var ballonZiel = (!gast && !ei && !tier && !fisch && !bootZiel && !flamingoZiel && st.ballon && Dorf.Ballon) ? Dorf.Ballon.ballonAn(st.ballon, wx, wy, st.eingabe.touch ? 24 : 18) : null;
+    var brunnenZiel = (!gast && !ei && !tier && !fisch && !bootZiel && !flamingoZiel && !ballonZiel && karte.tile(tx, ty) === T.BRUNNEN);
+    var pf = (gast || tier || ei || fisch || bootZiel || flamingoZiel || ballonZiel || brunnenZiel) ? null : Dorf.Garten.an(st.garten, tx, ty);
+    var herd = !gast && !tier && !pf && !ei && !fisch && !bootZiel && !flamingoZiel && !ballonZiel && !brunnenZiel && karte.tile(tx, ty) === T.HERD;
+    var ins = (!gast && !tier && !pf && !ei && !herd && !fisch && !bootZiel && !flamingoZiel && !ballonZiel && !brunnenZiel) ? instrumentAn(st, tx, ty) : null;
+    if (!gast && !tier && !pf && !herd && !ei && !ins && !fisch && !bootZiel && !flamingoZiel && !ballonZiel && !brunnenZiel) {
       var f = naechstesZiel(st, wx, wy, st.eingabe.touch ? 14 : 8);
-      if (f) { gast = f.gast || null; tier = f.tier || null; pf = f.pflanze || null; herd = !!f.herd; ei = f.ei || null; ins = f.instrument || null; fisch = f.fisch || null; bootZiel = f.boot ? st.wasser.boot : null; flamingoZiel = f.flamingo ? st.wasser.flamingo : null; }
+      if (f) { gast = f.gast || null; tier = f.tier || null; pf = f.pflanze || null; herd = !!f.herd; ei = f.ei || null; ins = f.instrument || null; fisch = f.fisch || null; bootZiel = f.boot ? st.wasser.boot : null; flamingoZiel = f.flamingo ? st.wasser.flamingo : null; ballonZiel = f.ballon || null; brunnenZiel = !!f.brunnen; }
     }
     if (fisch) { tippFisch(st, fisch); return 'fisch'; }
     if (bootZiel) {
@@ -202,6 +222,20 @@
       aktion = { art: 'flamingo' };
       if (!ziel || !Dorf.Spieler.geheZu(sp, karte, ziel.x, ziel.y, aktion)) { st.marker = { x: Math.floor(flamingoZiel.x / K), y: Math.floor(flamingoZiel.y / K), t: 0, nein: true }; return 'nein'; }
       st.marker = { x: ziel.x, y: ziel.y, t: 0 }; return 'flamingo';
+    }
+    if (ballonZiel) {
+      if (Math.hypot(ballonZiel.x - sp.x, ballonZiel.y - sp.y) <= (Dorf.Ballon.NAH || 36) + 4) { tippBallon(st, ballonZiel); return 'ballon'; }
+      ziel = ballonNachbar(st, ballonZiel);
+      aktion = { art: 'ballon', ballon: ballonZiel };
+      if (!ziel || !Dorf.Spieler.geheZu(sp, karte, ziel.x, ziel.y, aktion)) { st.marker = { x: Math.floor(ballonZiel.x / K), y: Math.floor(ballonZiel.y / K), t: 0, nein: true }; return 'nein'; }
+      st.marker = { x: ziel.x, y: ziel.y, t: 0 }; return 'ballon';
+    }
+    if (brunnenZiel) {
+      if (brunnenNah(st)) { tippSchoepfen(st); return 'schoepfen'; }
+      ziel = brunnenNachbar(st);
+      aktion = { art: 'schoepfen' };
+      if (!ziel || !Dorf.Spieler.geheZu(sp, karte, ziel.x, ziel.y, aktion)) { st.marker = { x: karte.brunnen.x, y: karte.brunnen.y, t: 0, nein: true }; return 'nein'; }
+      st.marker = { x: ziel.x, y: ziel.y, t: 0 }; return 'schoepfen';
     }
     if (ins) {
       if (instrumentNah(st, ins)) { musiziere(st, ins); return 'musik'; }
@@ -353,6 +387,62 @@
     var orte = (st.karte.orte && st.karte.orte.pool) || [];
     var kandidaten = orte.map(function (o) { return { x: o.x, y: o.y }; });
     return besterNachbar(st, Math.floor(f.x / 16), Math.floor(f.y / 16), kandidaten);
+  }
+
+  // ab v0.23: Heissluftballon ein-/aussteigen
+  function tippBallon(st, bl) {
+    if (!st.ballon || !Dorf.Ballon) return false;
+    if (Dorf.Ballon.besetzt(st.ballon)) {
+      if (Dorf.Ballon.aussteigen(st.ballon, st.spieler, st.karte)) {
+        klang(st, 'ballon'); sage(st, 'Biel', 'Wieder am Boden!', 2.5, ['sonne', 'lachen']);
+        lerne(st, 'ballon'); merke(st, 'ballon'); return true;
+      }
+      return false;
+    }
+    var ziel = bl || st.ballon.aktiv;
+    if (ziel && Dorf.Ballon.einsteigenIn(st.ballon, ziel, st.spieler)) {
+      klang(st, 'ballon'); sage(st, 'Biel', 'Hoch in den Ballon! Tippe wohin oder Pfeile.', 3.5, ['sonne', 'herz']);
+      lerne(st, 'ballon'); merke(st, 'ballon'); return true;
+    }
+    if (Dorf.Ballon.einsteigen(st.ballon, st.spieler)) {
+      klang(st, 'ballon'); sage(st, 'Biel', 'Hoch in den Ballon! Tippe wohin oder Pfeile.', 3.5, ['sonne', 'herz']);
+      lerne(st, 'ballon'); merke(st, 'ballon'); return true;
+    }
+    return false;
+  }
+  function ballonNachbar(st, bl) {
+    bl = bl || (st.ballon && st.ballon.aktiv); if (!bl) return null;
+    return besterNachbar(st, Math.floor(bl.x / 16), Math.floor(bl.y / 16));
+  }
+
+  // ab v0.23: am Brunnen Wasser schoepfen
+  function brunnenNah(st) {
+    var kb = st.karte.brunnen, sp = st.spieler;
+    if (!kb || !sp) return false;
+    return Math.hypot(sp.x - (kb.x * 16 + 16), sp.y - (kb.y * 16 + 18)) <= 34;
+  }
+  function brunnenNachbar(st) {
+    var kb = st.karte.brunnen; if (!kb) return null;
+    var kandidaten = [];
+    for (var dy = -1; dy <= 2; dy++) for (var dx = -1; dx <= 2; dx++) {
+      kandidaten.push({ x: kb.x + dx, y: kb.y + dy });
+      kandidaten.push({ x: kb.x + 1 + dx, y: kb.y + 1 + dy });
+    }
+    return besterNachbar(st, kb.x, kb.y + 2, kandidaten);
+  }
+  function tippSchoepfen(st) {
+    if (!brunnenNah(st)) return false;
+    if (st.schoepfen && st.schoepfen.rest > 0.2) return true; // schon am Schöpfen
+    st.schoepfen = { rest: 1.15, dauer: 1.15, tropfen: [] };
+    var kb = st.karte.brunnen, mx = kb.x * 16 + 16, my = kb.y * 16 + 14;
+    for (var i = 0; i < 5; i++) {
+      st.schoepfen.tropfen.push({ x: mx + (i - 2) * 3, y: my, vx: (i - 2) * 8, vy: -40 - i * 6, t: 0 });
+    }
+    st.spieler.dir = 'oben';
+    klang(st, 'schoepfen');
+    if (!(st.heute && st.heute.schoepfen)) sage(st, 'Biel', 'Wasser schöpfen! Plitsch platsch.', 3, ['herz', 'lachen']);
+    lerne(st, 'schoepfen'); merke(st, 'schoepfen');
+    return true;
   }
 
   function streichle(st, tier) {
@@ -830,6 +920,8 @@
     else if (a.art === 'musik') { if (instrumentNah(st, a.instrument)) musiziere(st, a.instrument); }
     else if (a.art === 'boot') { tippBoot(st); }
     else if (a.art === 'flamingo') { tippFlamingo(st); }
+    else if (a.art === 'ballon') { tippBallon(st, a.ballon); }
+    else if (a.art === 'schoepfen') { if (brunnenNah(st)) tippSchoepfen(st); }
     else if (a.art === 'streicheln') {
       var t = a.tier;
       if (Dorf.Tiere.nah(t, st.spieler)) { if (t.ziel && t.lockt) { st.wartetAuf = { tier: t, rest: 3 }; return; } streichle(st, t); }
@@ -876,6 +968,14 @@
       if (Dorf.Wasser.bootNah(st.wasser, sp)) return { art: 'boot' };
       if (Dorf.Wasser.flamingoNah(st.wasser, sp)) return { art: 'flamingo' };
     }
+    if (st.ballon && Dorf.Ballon) {
+      if (Dorf.Ballon.besetzt(st.ballon)) return { art: 'landen' };
+      if (Dorf.Ballon.ballonNah(st.ballon, sp)) return { art: 'ballon' };
+      // auch neben einem dekorativen Ballon
+      var blN = Dorf.Ballon.ballonAn(st.ballon, sp.x, sp.y - 10, Dorf.Ballon.NAH || 36);
+      if (blN) return { art: 'ballon', ziel: blN };
+    }
+    if (brunnenNah(st)) return { art: 'schoepfen' };
     return null;
   }
   function tueKontext(st, k) {
@@ -888,6 +988,8 @@
     else if (k.art === 'musik') musiziere(st, k.ziel);
     else if (k.art === 'boot' || k.art === 'aussteigen') tippBoot(st);
     else if (k.art === 'flamingo' || k.art === 'absteigen') tippFlamingo(st);
+    else if (k.art === 'ballon' || k.art === 'landen') tippBallon(st, k.ziel || null);
+    else if (k.art === 'schoepfen') tippSchoepfen(st);
     else return false;
     return true;
   }
@@ -1001,9 +1103,18 @@
     if (st.menue && !buchJetzt && !st.buch) { st.menue.t += dt; menueSchritt(st, e, dt); }
     var hatteZiel = !!st.spieler.ziel, vx = st.spieler.x, vy = st.spieler.y;
     var wasserBesetzt = !!(st.wasser && Dorf.Wasser && Dorf.Wasser.besetzt(st.wasser));
-    var angekommen = (menueOffen || wasserBesetzt) ? null : Dorf.Spieler.update(st.spieler, e, st.karte, dt);
+    var ballonBesetzt = !!(st.ballon && Dorf.Ballon && Dorf.Ballon.besetzt(st.ballon));
+    var angekommen = (menueOffen || wasserBesetzt || ballonBesetzt) ? null : Dorf.Spieler.update(st.spieler, e, st.karte, dt);
     if (menueOffen) { st.spieler.laeuft = false; st.spieler.frame = 0; }
     if (!menueOffen && st.wasser && Dorf.Wasser) Dorf.Wasser.update(st.wasser, st.karte, st.spieler, e, dt);
+    if (!menueOffen && st.ballon && Dorf.Ballon) Dorf.Ballon.update(st.ballon, st.karte, st.spieler, e, dt);
+    if (st.schoepfen) {
+      st.schoepfen.rest -= dt;
+      (st.schoepfen.tropfen || []).forEach(function (tr) {
+        tr.t += dt; tr.x += tr.vx * dt; tr.y += tr.vy * dt; tr.vy += 90 * dt;
+      });
+      if (st.schoepfen.rest <= 0) st.schoepfen = null;
+    }
     // sehr leise Schritte
     st.schrittWeg += Math.hypot(st.spieler.x - vx, st.spieler.y - vy);
     if (st.schrittWeg >= 14) { st.schrittWeg = 0; klang(st, 'schritt'); }
@@ -1044,6 +1155,8 @@
           Dorf.Wasser.aussteigen(st.wasser, st.spieler, st.karte);
         }
       }
+      if (st.ballon && Dorf.Ballon && Dorf.Ballon.besetzt(st.ballon)) Dorf.Ballon.aussteigen(st.ballon, st.spieler, st.karte);
+      st.schoepfen = null;
       st.denk = null; st.speichernJetzt = true; st.abendZaehler = 0; st.stickerGezeigt = false; st.abendBuchGezeigt = false;
       // ab v0.10: Spieltag fuer dieses Bild ist heute vorbei
       if (st.konto && st.profil && Dorf.Profile) { Dorf.Profile.setzeFertig(st.konto, st.profil); st.kontoAendern = true; }
@@ -1084,7 +1197,7 @@
 
   // Notfall-Aufraeumen nach einem Fehler: alles Vorlaeufige weg, Figuren zurueck auf sichere Plaetze.
   function rette(st) {
-    st.menue = null; st.frage = null; st.buch = null; st.blase = null; st.marker = null; st.wartetAuf = null; st.denk = null; st.kochen = null;
+    st.menue = null; st.frage = null; st.buch = null; st.blase = null; st.marker = null; st.wartetAuf = null; st.denk = null; st.kochen = null; st.schoepfen = null;
     st.eltern = null; st.elternDruck = false; st.noten = []; st.musik = [];
     if (st.wahl && !st.wahl.gesperrt && st.profilGeladen) st.wahl = null;
     st.flieger = []; st.herzchen = []; st.herzFlug = []; st.chipPuls = {}; st.toene = []; st.naechsterTag = false;
