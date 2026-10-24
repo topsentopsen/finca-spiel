@@ -3,7 +3,7 @@
 'use strict';
 var fs = require('fs'), path = require('path'), vm = require('vm');
 
-var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'garten', 'glueck', 'gaeste', 'tiere', 'speicher', 'sticker', 'hinweise', 'vorlesen', 'render', 'ton', 'profile', 'leben', 'main'];
+var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'garten', 'glueck', 'gaeste', 'tiere', 'wasser', 'speicher', 'sticker', 'hinweise', 'vorlesen', 'render', 'ton', 'profile', 'leben', 'main'];
 
 function ladeKontext(extra) {
   var ctx = { console: console, Math: Math };
@@ -204,12 +204,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.19', function () {
+test('Version: sichtbares Label ist v0.20', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.19');
+  gleich(D.VERSION, 'v0.20');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.19 (Prototyp)') >= 0, 'Titel enthaelt v0.19');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.19"') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.20 (Prototyp)') >= 0, 'Titel enthaelt v0.20');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.20"') >= 0, n + ' eingebunden'); });
   wahr(html.indexOf('js/profile.js') < html.indexOf('js/main.js') && html.indexOf('js/leben.js') < html.indexOf('js/main.js'), 'neue Dateien vor main');
   wahr(/html\.mobil\.quer/.test(html) && /hochkant halten/.test(html), 'Handy-Hochformat-Hinweis (Klasse mobil.quer)');
   wahr(fs.existsSync(path.join(__dirname, '..', 'assets', 'schlaflied-a.mp3')), 'Schlaflied A');
@@ -1101,7 +1101,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand.esel']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.19'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.20'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -2711,6 +2711,71 @@ test('v0.19: Fische schwimmen und Antippen macht Blubber', function () {
   gleich(k1.blumen[0].x, k2.blumen[0].x);
 });
 
+
+
+// ---------- v0.20: Boot und Flamingo ----------
+test('v0.20: Boot am Strand, einsteigen, auf Meer fahren, aussteigen', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 5 }), W = D.Wasser, T = D.Karte.T;
+  wahr(st.wasser && st.wasser.boot, 'Boot vorhanden');
+  var b = st.wasser.boot;
+  gleich(st.karte.tile(Math.floor(b.x / 16), Math.floor(b.y / 16)), T.STRAND, 'Boot steht auf Strand');
+  // Biel ans Boot stellen
+  st.spieler.x = b.x; st.spieler.y = b.y;
+  wahr(W.einsteigen(st.wasser, st.spieler), 'einsteigen');
+  wahr(b.besetzt, 'besetzt');
+  // nach Sueden aufs Meer tippen
+  var zx = Math.floor(b.x / 16), zy = 33;
+  wahr(W.setzeBootZiel(st.wasser, st.karte, zx, zy), 'Meer-Ziel');
+  for (var i = 0; i < 240; i++) D.Spiel.schritt(st, 1 / 30);
+  wahr(st.karte.tile(Math.floor(b.x / 16), Math.floor(b.y / 16)) === T.MEER, 'Boot auf Meer');
+  wahr(st.spieler.x === b.x && st.spieler.y === b.y, 'Biel im Boot');
+  // zurueck zum Strand
+  wahr(W.setzeBootZiel(st.wasser, st.karte, Math.floor(b.x / 16), 30), 'Strand-Ziel');
+  for (var j = 0; j < 300; j++) D.Spiel.schritt(st, 1 / 30);
+  wahr(W.aufStrand(st.karte, b.x, b.y), 'wieder am Strand');
+  wahr(W.aussteigen(st.wasser, st.spieler, st.karte), 'aussteigen');
+  wahr(!b.besetzt, 'frei');
+  wahr(st.karte.tile(Math.floor(st.spieler.x / 16), Math.floor(st.spieler.y / 16)) !== T.MEER, 'Biel nicht im Meer');
+});
+test('v0.20: Flamingo im Pool, sitzen und aufstehen', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 5 }), W = D.Wasser, T = D.Karte.T;
+  wahr(st.wasser && st.wasser.flamingo, 'Flamingo vorhanden');
+  var f = st.wasser.flamingo;
+  gleich(st.karte.tile(Math.floor(f.x / 16), Math.floor(f.y / 16)), T.WASSER, 'Flamingo im Poolwasser');
+  // Biel an den Poolrand neben den Flamingo
+  st.spieler.x = 29 * 16 + 8; st.spieler.y = 9 * 16 + 12;
+  wahr(W.flamingoNah(st.wasser, st.spieler) || Math.hypot(f.x - st.spieler.x, f.y - st.spieler.y) < 50, 'nahe genug zum Test');
+  // nah genug erzwingen
+  st.spieler.x = f.x; st.spieler.y = f.y + 8;
+  wahr(W.aufFlamingo(st.wasser, st.spieler), 'aufsetzen');
+  wahr(f.besetzt, 'besetzt');
+  for (var i = 0; i < 30; i++) D.Spiel.schritt(st, 1 / 30);
+  wahr(Math.abs(st.spieler.x - f.x) < 2, 'schwebt auf Flamingo');
+  wahr(W.abFlamingo(st.wasser, st.spieler, st.karte), 'aufstehen');
+  wahr(!f.besetzt, 'frei');
+  gleich(st.karte.tile(Math.floor(st.spieler.x / 16), Math.floor(st.spieler.y / 16)), T.RAND, 'steht am Rand');
+});
+test('v0.20: Klick Boot/Flamingo und Wege bleiben', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 5 }), k = st.karte, T = D.Karte.T;
+  wahr(D.Pfad.suche(k, 19, 18, 19, 30), 'Hof zu Strand');
+  wahr(D.Pfad.suche(k, 16, 17, k.orte.pool[0].x, k.orte.pool[0].y), 'Pool erreichbar');
+  gleich(k.tile(19, 24), T.WEG);
+  var b = st.wasser.boot;
+  st.spieler.x = b.x; st.spieler.y = b.y;
+  gleich(D.Spiel.klick(st, b.x, b.y - 4), 'boot');
+  wahr(b.besetzt, 'per Klick eingestiegen');
+  // Meer tippen waehrend Bootfahrt
+  gleich(D.Spiel.klick(st, 20 * 16 + 8, 33 * 16 + 8), 'segeln');
+  // Flamingo: erst aussteigen
+  for (var i = 0; i < 200 && !D.Wasser.aufStrand(st.karte, b.x, b.y); i++) D.Spiel.schritt(st, 1 / 30);
+  if (b.besetzt) D.Wasser.aussteigen(st.wasser, st.spieler, st.karte);
+  var f = st.wasser.flamingo;
+  st.spieler.x = f.x; st.spieler.y = f.y + 6;
+  gleich(D.Spiel.klick(st, f.x, f.y - 6), 'flamingo');
+  wahr(f.besetzt, 'sitzt');
+  gleich(D.Spiel.klick(st, f.x, f.y - 6), 'flamingo');
+  wahr(!f.besetzt, 'wieder auf');
+});
 
 // ---------- Ausfuehren ----------
 tests.forEach(function (t) {

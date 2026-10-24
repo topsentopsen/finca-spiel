@@ -235,6 +235,56 @@
     r(c, kx + s, ky - 1, 1, 1, P.kontur);
     r(c, kx + (s > 0 ? 1 : -2), ky + 2, 2, 1, '#ff7a7a');
   }
+
+  // ab v0.20: kleines Pastell-Ruderboot (dicke Kontur)
+  function zeichneBoot(c, b, sx, sy, zeit, besetzt) {
+    var bob = Math.round(Math.sin((b.phase || 0) * 2.4 + zeit) * (besetzt ? 1.2 : 0.8));
+    var x = Math.round(sx), y = Math.round(sy) + bob;
+    var links = b.dir === 'links';
+    c.save();
+    if (links) { c.translate(x, y); c.scale(-1, 1); x = 0; y = 0; }
+    ellipse(c, x, y + 3, 11, 3, 'rgba(74,52,120,0.18)');
+    // Rumpf
+    rr(c, x - 11, y - 4, 22, 8, P.kontur);
+    rr(c, x - 10, y - 3, 20, 6, '#f0b27a');
+    r(c, x - 8, y - 1, 16, 2, '#e09a5c');
+    // Bordkante hell
+    r(c, x - 9, y - 3, 18, 1, '#ffe0b8');
+    // kleiner Mast + Wimpel
+    r(c, x + 1, y - 14, 2, 11, P.kontur); r(c, x + 2, y - 13, 1, 9, '#d9c2a0');
+    r(c, x + 3, y - 13, 5, 3, P.kontur); r(c, x + 3, y - 12, 4, 2, '#ff9fb0');
+    // Sitzbank
+    r(c, x - 5, y - 2, 8, 2, '#c98b5e');
+    c.restore();
+    return bob;
+  }
+  // ab v0.20: aufblasbarer Flamingo (cute, Pastell)
+  function zeichneFlamingo(c, f, sx, sy, zeit, besetzt) {
+    var bob = Math.round(Math.sin((f.phase || 0) * 2.2 + zeit) * 1.5);
+    var x = Math.round(sx), y = Math.round(sy) + bob;
+    var rosa = '#ff9fb8', rosa2 = '#ffc0d4', rosa3 = '#ff7fa0';
+    ellipse(c, x, y + 4, 12, 3, 'rgba(74,52,120,0.16)');
+    // Ring / Koerper
+    kreis(c, x, y, 11, P.kontur);
+    kreis(c, x, y, 10, rosa);
+    kreis(c, x, y, 6, rosa2);
+    kreis(c, x, y, 4, '#fff6f9');
+    // Hals nach oben rechts
+    r(c, x + 6, y - 8, 3, 8, P.kontur); r(c, x + 7, y - 7, 1, 6, rosa);
+    r(c, x + 5, y - 12, 5, 4, P.kontur); r(c, x + 6, y - 11, 3, 2, rosa3);
+    // Schnabel
+    r(c, x + 10, y - 11, 3, 2, P.kontur); r(c, x + 10, y - 10, 2, 1, '#ffcf70');
+    // Auge
+    r(c, x + 7, y - 11, 1, 1, P.kontur);
+    // kleiner Fluegel-Hint
+    r(c, x - 8, y - 1, 4, 2, P.kontur); r(c, x - 7, y, 3, 1, rosa3);
+    if (besetzt) {
+      // Glitzer
+      if (Math.floor(zeit * 3) % 2 === 0) r(c, x - 3, y - 5, 1, 1, '#fff8ee');
+    }
+    return bob;
+  }
+
   // ab v0.19: kleiner Pixel-Fisch (Pastell, dicke Kontur)
   function zeichneFisch(c, f, sx, sy, zeit) {
     var bob = Math.round(Math.sin((f.phase || 0) + zeit) * 1.2);
@@ -2004,8 +2054,30 @@
       if (sx < -16 || sx > W + 16 || sy < -16 || sy > H + 16) return;
       liste.push({ y: fisch.y - 0.2, f: function () { zeichneFisch(c, fisch, sx, sy, zeit); } });
     });
+    // ab v0.20: Boot und Flamingo
+    var wass = st.wasser, bootBesetzt = !!(wass && wass.boot && wass.boot.besetzt), flamBesetzt = !!(wass && wass.flamingo && wass.flamingo.besetzt);
+    if (wass && wass.boot) {
+      (function (b) {
+        var sx = b.x - cx, sy = b.y - cy;
+        if (sx > -28 && sx < W + 28 && sy > -24 && sy < H + 24) liste.push({ y: b.y + 0.05, f: function () {
+          var bob = zeichneBoot(c, b, sx, sy, zeit, bootBesetzt);
+          if (bootBesetzt) zeichnePerson(c, st.spieler.x - cx, st.spieler.y - cy - 4 + bob, BIEL, st.spieler.dir, st.spieler.frame, { zeit: zeit, ruhig: true });
+        } });
+      })(wass.boot);
+    }
+    if (wass && wass.flamingo) {
+      (function (fl) {
+        var sx = fl.x - cx, sy = fl.y - cy;
+        if (sx > -24 && sx < W + 24 && sy > -28 && sy < H + 24) liste.push({ y: fl.y + 0.08, f: function () {
+          var bob = zeichneFlamingo(c, fl, sx, sy, zeit, flamBesetzt);
+          if (flamBesetzt) zeichnePerson(c, st.spieler.x - cx, st.spieler.y - cy - 2, BIEL, 'unten', 0, { zeit: zeit, ruhig: true, hop: bob });
+        } });
+      })(wass.flamingo);
+    }
     var sp = st.spieler;
-    liste.push({ y: sp.y + 0.1, f: function () { zeichnePerson(c, sp.x - cx, sp.y - cy, BIEL, sp.dir, sp.frame, { zeit: zeit, hop: huepfer(st, 'Biel', 0) }); } });
+    if (!bootBesetzt && !flamBesetzt) {
+      liste.push({ y: sp.y + 0.1, f: function () { zeichnePerson(c, sp.x - cx, sp.y - cy, BIEL, sp.dir, sp.frame, { zeit: zeit, hop: huepfer(st, 'Biel', 0) }); } });
+    }
     liste.sort(function (a, b) { return a.y - b.y; });
     liste.forEach(function (e) { e.f(); });
     zeichneKochen(c, karte, st, cx, cy);

@@ -3,7 +3,7 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.19';
+  var VERSION = 'v0.20';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
   var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
@@ -14,7 +14,7 @@
   var SPEICHER_TAKT = 5;      // alle 5 Sekunden wird der Spielstand gesichert
   var FLUG_KORB = 0.6;        // ab v0.8: so lange fliegt eine Frucht oder ein Ei in den Korb unten links
   var AKTION_PULS = 3;        // der grosse Knopf pulsiert nur bei den ersten drei Malen
-  var AKTION_NAME = { reden: 'Reden', streicheln: 'Streicheln', fuettern: 'Füttern', ernten: 'Ernten', sammeln: 'Ei aufheben', kochen: 'Kochen', weiter: 'Neuer Tag', musik: 'Musik machen' };
+  var AKTION_NAME = { reden: 'Reden', streicheln: 'Streicheln', fuettern: 'Füttern', ernten: 'Ernten', sammeln: 'Ei aufheben', kochen: 'Kochen', weiter: 'Neuer Tag', musik: 'Musik machen', boot: 'Einsteigen', aussteigen: 'Aussteigen', flamingo: 'Draufsetzen', absteigen: 'Aufstehen' };
   var WACKEL = 0.5, MENUE_ZU = 0.9;   // ab v0.9: Karte mit fehlenden Zutaten wackelt, danach geht das Menue zu
   // ab v0.10: Elternbereich (3 Sekunden auf das Zahnrad drücken), Instrumente, Zoom am Handy
   var ELTERN_HALT = 3;
@@ -65,6 +65,7 @@
     st.garten = Dorf.Garten.erstelle(karte);
     st.vorrat = Dorf.Garten.leererVorrat();
     st.tiere = Dorf.Tiere.erstelle(karte, seed);
+    st.wasser = Dorf.Wasser ? Dorf.Wasser.erstelle(karte) : null;
     Dorf.Kamera.sofort(st.kamera, st.spieler.x, st.spieler.y - 12);
     sage(st, 'Biel', 'Bon dia! (Guten Morgen!) Willkommen auf der Finca.', 5, ['sonne', 'lachen']);
     return st;
@@ -131,6 +132,10 @@
     st.garten.liste.forEach(function (p) { var q = Dorf.Garten.punkt(p); pruef(Math.hypot(wx - q.x, wy - (q.y - (p.baum ? 14 : 6))) - (p.baum ? 6 : 3), { pflanze: p }); });
     pruef(Math.hypot(wx - HERD_MITTE.x, wy - HERD_MITTE.y) - 12, { herd: true });
     (st.karte.instrumente || []).forEach(function (ins) { pruef(Math.hypot(wx - (ins.x * 16 + 8), wy - (ins.y * 16 + 6)) - 6, { instrument: ins }); });
+    if (st.wasser && Dorf.Wasser) {
+      var wb = st.wasser.boot; if (wb) pruef(Math.hypot(wx - wb.x, wy - (wb.y - 4)) - 6, { boot: true });
+      var wf = st.wasser.flamingo; if (wf) pruef(Math.hypot(wx - wf.x, wy - (wf.y - 6)) - 8, { flamingo: true });
+    }
     return best;
   }
 
@@ -150,17 +155,45 @@
     if (st.menue) { schliesseMenue(st); return 'zurueck'; }
     var karte = st.karte, K = karte.kachel, T = Dorf.Karte.T;
     var tx = Math.floor(wx / K), ty = Math.floor(wy / K), sp = st.spieler, ziel = null, aktion = null;
+    // ab v0.20: im Boot → Meer/Strand tippen zum Segeln; Boot tippen zum Aussteigen
+    if (st.wasser && Dorf.Wasser && st.wasser.boot && st.wasser.boot.besetzt) {
+      var bootHit = Dorf.Wasser.bootAn(st.wasser, wx, wy, st.eingabe.touch ? 18 : 14);
+      if (bootHit) { tippBoot(st); return 'boot'; }
+      if (Dorf.Wasser.setzeBootZiel(st.wasser, karte, tx, ty)) {
+        st.marker = { x: tx, y: ty, t: 0 }; return 'segeln';
+      }
+      st.marker = { x: tx, y: ty, t: 0, nein: true }; return 'nein';
+    }
+    if (st.wasser && Dorf.Wasser && st.wasser.flamingo && st.wasser.flamingo.besetzt) {
+      tippFlamingo(st); return 'flamingo';
+    }
     var gast = gastAn(st, wx, wy), ei = gast ? null : Dorf.Tiere.eiAn(st.tiere, wx, wy, 6);
     var tier = (gast || ei) ? null : Dorf.Tiere.an(st.tiere, wx, wy);
     var fisch = (gast || ei || tier) ? null : Dorf.Tiere.fischAn(st.tiere, wx, wy, st.eingabe.touch ? 14 : 10);
-    var pf = (gast || tier || ei || fisch) ? null : Dorf.Garten.an(st.garten, tx, ty);
-    var herd = !gast && !tier && !pf && !ei && !fisch && karte.tile(tx, ty) === T.HERD;
-    var ins = (!gast && !tier && !pf && !ei && !herd && !fisch) ? instrumentAn(st, tx, ty) : null;
-    if (!gast && !tier && !pf && !herd && !ei && !ins && !fisch) {
+    var bootZiel = (!gast && !ei && !tier && !fisch && st.wasser && Dorf.Wasser) ? Dorf.Wasser.bootAn(st.wasser, wx, wy, st.eingabe.touch ? 18 : 14) : null;
+    var flamingoZiel = (!gast && !ei && !tier && !fisch && !bootZiel && st.wasser && Dorf.Wasser) ? Dorf.Wasser.flamingoAn(st.wasser, wx, wy, st.eingabe.touch ? 20 : 16) : null;
+    var pf = (gast || tier || ei || fisch || bootZiel || flamingoZiel) ? null : Dorf.Garten.an(st.garten, tx, ty);
+    var herd = !gast && !tier && !pf && !ei && !fisch && !bootZiel && !flamingoZiel && karte.tile(tx, ty) === T.HERD;
+    var ins = (!gast && !tier && !pf && !ei && !herd && !fisch && !bootZiel && !flamingoZiel) ? instrumentAn(st, tx, ty) : null;
+    if (!gast && !tier && !pf && !herd && !ei && !ins && !fisch && !bootZiel && !flamingoZiel) {
       var f = naechstesZiel(st, wx, wy, st.eingabe.touch ? 14 : 8);
-      if (f) { gast = f.gast || null; tier = f.tier || null; pf = f.pflanze || null; herd = !!f.herd; ei = f.ei || null; ins = f.instrument || null; fisch = f.fisch || null; }
+      if (f) { gast = f.gast || null; tier = f.tier || null; pf = f.pflanze || null; herd = !!f.herd; ei = f.ei || null; ins = f.instrument || null; fisch = f.fisch || null; bootZiel = f.boot ? st.wasser.boot : null; flamingoZiel = f.flamingo ? st.wasser.flamingo : null; }
     }
     if (fisch) { tippFisch(st, fisch); return 'fisch'; }
+    if (bootZiel) {
+      if (Dorf.Wasser.bootNah(st.wasser, sp)) { tippBoot(st); return 'boot'; }
+      ziel = bootNachbar(st);
+      aktion = { art: 'boot' };
+      if (!ziel || !Dorf.Spieler.geheZu(sp, karte, ziel.x, ziel.y, aktion)) { st.marker = { x: Math.floor(bootZiel.x / K), y: Math.floor(bootZiel.y / K), t: 0, nein: true }; return 'nein'; }
+      st.marker = { x: ziel.x, y: ziel.y, t: 0 }; return 'boot';
+    }
+    if (flamingoZiel) {
+      if (Dorf.Wasser.flamingoNah(st.wasser, sp)) { tippFlamingo(st); return 'flamingo'; }
+      ziel = flamingoNachbar(st);
+      aktion = { art: 'flamingo' };
+      if (!ziel || !Dorf.Spieler.geheZu(sp, karte, ziel.x, ziel.y, aktion)) { st.marker = { x: Math.floor(flamingoZiel.x / K), y: Math.floor(flamingoZiel.y / K), t: 0, nein: true }; return 'nein'; }
+      st.marker = { x: ziel.x, y: ziel.y, t: 0 }; return 'flamingo';
+    }
     if (ins) {
       if (instrumentNah(st, ins)) { musiziere(st, ins); return 'musik'; }
       ziel = besterNachbar(st, ins.x, ins.y);
@@ -268,6 +301,49 @@
     st.herzchen.push({ x: fisch.x, y: fisch.y - 10, t: 0, farbe: '#7ec8e3' });
     klang(st, 'blubber');
     if ((fisch.tipps || 0) % 3 === 1) sage(st, 'Biel', 'Ein Fisch! Blub blub.', 2.5, ['herz']);
+  }
+
+  // ab v0.20: Boot ein-/aussteigen, Flamingo sitzen/aufstehen
+  function tippBoot(st) {
+    var w = st.wasser; if (!w || !Dorf.Wasser) return false;
+    if (w.boot && w.boot.besetzt) {
+      if (Dorf.Wasser.aussteigen(w, st.spieler, st.karte)) {
+        klang(st, 'boot'); sage(st, 'Biel', 'Wieder an Land!', 2.5, ['sonne', 'lachen']);
+        lerne(st, 'boot'); merke(st, 'boot'); return true;
+      }
+      sage(st, 'Biel', 'Zum Strand fahren, dann aussteigen!', 2.5, ['sonne', 'frage']); return true;
+    }
+    if (Dorf.Wasser.einsteigen(w, st.spieler)) {
+      klang(st, 'boot'); sage(st, 'Biel', 'Los geht die Bootfahrt! Tippe aufs Meer.', 3, ['sonne', 'lachen']);
+      lerne(st, 'boot'); merke(st, 'boot'); return true;
+    }
+    return false;
+  }
+  function tippFlamingo(st) {
+    var w = st.wasser; if (!w || !Dorf.Wasser) return false;
+    if (w.flamingo && w.flamingo.besetzt) {
+      if (Dorf.Wasser.abFlamingo(w, st.spieler, st.karte)) {
+        klang(st, 'flamingo'); sage(st, 'Biel', 'Wieder auf den Füßen!', 2.5, ['herz', 'lachen']);
+        return true;
+      }
+      return false;
+    }
+    if (Dorf.Wasser.aufFlamingo(w, st.spieler)) {
+      klang(st, 'flamingo'); sage(st, 'Biel', 'Schwimm, Flamingo!', 2.5, ['herz', 'lachen']);
+      lerne(st, 'flamingo'); merke(st, 'flamingo'); return true;
+    }
+    return false;
+  }
+  function bootNachbar(st) {
+    var b = st.wasser && st.wasser.boot; if (!b) return null;
+    var tx = Math.floor(b.x / 16), ty = Math.floor(b.y / 16);
+    return besterNachbar(st, tx, ty) || { x: tx, y: ty };
+  }
+  function flamingoNachbar(st) {
+    var f = st.wasser && st.wasser.flamingo; if (!f) return null;
+    var orte = (st.karte.orte && st.karte.orte.pool) || [];
+    var kandidaten = orte.map(function (o) { return { x: o.x, y: o.y }; });
+    return besterNachbar(st, Math.floor(f.x / 16), Math.floor(f.y / 16), kandidaten);
   }
 
   function streichle(st, tier) {
@@ -743,6 +819,8 @@
     else if (a.art === 'sammeln') { if (st.tiere.eier.indexOf(a.ei) >= 0 && Math.hypot(a.ei.x - st.spieler.x, a.ei.y - st.spieler.y) <= Dorf.Tiere.EI_NAH + 6) sammle(st, a.ei); }
     else if (a.art === 'ernten') { if (Dorf.Garten.nah(a.pflanze, st.spieler)) ernte(st, a.pflanze); }
     else if (a.art === 'musik') { if (instrumentNah(st, a.instrument)) musiziere(st, a.instrument); }
+    else if (a.art === 'boot') { tippBoot(st); }
+    else if (a.art === 'flamingo') { tippFlamingo(st); }
     else if (a.art === 'streicheln') {
       var t = a.tier;
       if (Dorf.Tiere.nah(t, st.spieler)) { if (t.ziel && t.lockt) { st.wartetAuf = { tier: t, rest: 3 }; return; } streichle(st, t); }
@@ -783,6 +861,12 @@
     if (amHerd(st)) return { art: 'kochen' };
     var ins = naechstesInstrument(st);
     if (ins) return { art: 'musik', ziel: ins };
+    if (st.wasser && Dorf.Wasser) {
+      if (st.wasser.boot && st.wasser.boot.besetzt) return { art: 'aussteigen' };
+      if (st.wasser.flamingo && st.wasser.flamingo.besetzt) return { art: 'absteigen' };
+      if (Dorf.Wasser.bootNah(st.wasser, sp)) return { art: 'boot' };
+      if (Dorf.Wasser.flamingoNah(st.wasser, sp)) return { art: 'flamingo' };
+    }
     return null;
   }
   function tueKontext(st, k) {
@@ -793,6 +877,8 @@
     else if (k.art === 'sammeln') sammle(st, k.ziel);
     else if (k.art === 'kochen') oeffneMenue(st);
     else if (k.art === 'musik') musiziere(st, k.ziel);
+    else if (k.art === 'boot' || k.art === 'aussteigen') tippBoot(st);
+    else if (k.art === 'flamingo' || k.art === 'absteigen') tippFlamingo(st);
     else return false;
     return true;
   }
@@ -905,8 +991,10 @@
     if (!menueOffen) gaehnTon(st);
     if (st.menue && !buchJetzt && !st.buch) { st.menue.t += dt; menueSchritt(st, e, dt); }
     var hatteZiel = !!st.spieler.ziel, vx = st.spieler.x, vy = st.spieler.y;
-    var angekommen = menueOffen ? null : Dorf.Spieler.update(st.spieler, e, st.karte, dt);
+    var wasserBesetzt = !!(st.wasser && Dorf.Wasser && Dorf.Wasser.besetzt(st.wasser));
+    var angekommen = (menueOffen || wasserBesetzt) ? null : Dorf.Spieler.update(st.spieler, e, st.karte, dt);
     if (menueOffen) { st.spieler.laeuft = false; st.spieler.frame = 0; }
+    if (!menueOffen && st.wasser && Dorf.Wasser) Dorf.Wasser.update(st.wasser, st.karte, st.spieler, e, dt);
     // sehr leise Schritte
     st.schrittWeg += Math.hypot(st.spieler.x - vx, st.spieler.y - vy);
     if (st.schrittWeg >= 14) { st.schrittWeg = 0; klang(st, 'schritt'); }
@@ -940,6 +1028,13 @@
     st.lampenAn = lz;
     if (Dorf.Uhr.vorbei(st.uhr)) {
       st.abend = true; st.abendZeit = st.zeit; st.blase = null; st.kochen = null; st.menue = null; st.buch = null; Dorf.Spieler.stoppe(st.spieler); st.marker = null; st.wartetAuf = null;
+      if (st.wasser && Dorf.Wasser) {
+        if (st.wasser.flamingo && st.wasser.flamingo.besetzt) Dorf.Wasser.abFlamingo(st.wasser, st.spieler, st.karte);
+        if (st.wasser.boot && st.wasser.boot.besetzt) {
+          var sb = st.wasser.boot; sb.x = 15 * 16 + 8; sb.y = (st.karte.meer ? st.karte.meer.strandY : 30) * 16 + 10; sb.ziel = null; sb.pfad = []; sb.pfadIndex = 0;
+          Dorf.Wasser.aussteigen(st.wasser, st.spieler, st.karte);
+        }
+      }
       st.denk = null; st.speichernJetzt = true; st.abendZaehler = 0; st.stickerGezeigt = false; st.abendBuchGezeigt = false;
       // ab v0.10: Spieltag fuer dieses Bild ist heute vorbei
       if (st.konto && st.profil && Dorf.Profile) { Dorf.Profile.setzeFertig(st.konto, st.profil); st.kontoAendern = true; }

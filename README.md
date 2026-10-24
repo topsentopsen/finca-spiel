@@ -1,4 +1,4 @@
-# Finca v0.19
+# Finca v0.20
 
 A small browser game with a handheld look, written in pure JavaScript. There is no build and no npm. Music and sounds are generated in code with WebAudio; from v0.13 the evening lullaby is one small MP3 in `assets/` (no other media files).
 
@@ -27,6 +27,8 @@ Optional: `index.html?seed=12345` uses a different seed for flowers and guest de
 | Action button | One big round button on phones and tablets (bottom right). Its picture shows what it will do right now (egg, talk, pet, harvest, cook) and it does exactly that, same as E |
 | Click / tap a hen or an egg | Walk there and collect the egg into the basket |
 | Click / tap a fish in the sea | Bubbles and a little heart (from v0.19); fish swim on their own |
+| Click / tap the boat on the beach | Board, sail on the sea (tap water or arrows), disembark on the sand (from v0.20) |
+| Click / tap the flamingo in the pool | Sit and float; tap again to stand on the pool rim (from v0.20) |
 | Read aloud button (top right) | Only shown if the browser has a German voice. Short calm lines are read aloud; off when the sound is off, pressing it while muted turns the sound back on (saved in the browser) |
 | B or book button (top right) | Open or close the picture book: recipe pages and the sticker album. Tap the right half or press the right arrow to turn forward, the left half or left arrow to turn back; the pot tab jumps to the recipes, the star tab to the album; the X, Esc, B or a tap next to the book closes it. The book button in the cooking menu opens the recipe of the selected dish |
 | Enter / Space / tap | Close the dialog; after "Bona nit!" start the next day |
@@ -115,7 +117,7 @@ The table holds at most 6 plates. Guests take their favorite dish when it is the
 Developer helpers: `?start=x,y` places Biel on a tile, `?debug=1` opens the debug overlay, `?touch=1` shows the touch buttons on a desktop, `?menue=1` opens the cooking menu right away, `?uhr=20` sets the clock to 20:00, `?abend=1` jumps to the evening scene, `?herzen=1` makes all guests almost happy, `?korb=1` puts three of every ingredient in the basket, `?neu=1` deletes the saved game. With any developer helper except `?neu=1` the saved game is neither loaded nor overwritten.
 
 ## Structure
-- `index.html` loads the scripts in this order: rng, karte, pfad, kamera, eingabe, uhr, spieler, gerichte, garten, glueck, gaeste, tiere, speicher, sticker, hinweise, vorlesen, render, ton, profile, leben, main. Everything hangs on `globalThis.Dorf`.
+- `index.html` loads the scripts in this order: rng, karte, pfad, kamera, eingabe, uhr, spieler, gerichte, garten, glueck, gaeste, tiere, wasser, speicher, sticker, hinweise, vorlesen, render, ton, profile, leben, main. Everything hangs on `globalThis.Dorf`.
 - `js/rng.js` – mulberry32
 - `js/karte.js` – 40x30 Finca map with kitchen, living room and guest house, furniture, collision, target locations
 - `js/pfad.js` – A* (4 directions)
@@ -162,7 +164,11 @@ On mobile the logical canvas is **320×400** (taller than wide) — a real portr
 ## Sea and fish (from v0.19)
 South of the gate the map grows a pastel beach and open sea (tiles `STRAND` / `MEER`). Paths, pool and buildings stay as they were; the gate is walkable onto the sand. Several small pixel fish swim calmly left and right; tapping one shows bubbles, a heart and a soft blub sound.
 
+## Boat and flamingo (from v0.20)
+A small pastel rowboat rests on the beach left of the gate. Tap it (or walk close and press the action button) to board; then tap sea or beach tiles — or use arrows/WASD — to sail on `MEER`/`STRAND`. Tap the boat again on the sand to hop off. An inflatable flamingo floats in the pool: tap or use the action button nearby to sit and bob; tap again to stand on the pool rim. Paths and buildings stay untouched.
+
 ## Version history
+- **v0.20** (24.10.2026): boat on the beach (board, sail on the sea, disembark); inflatable flamingo in the pool (sit/stand); pastel GBA style; desktop landscape + mobile portrait unchanged.
 - **v0.19** (24.10.2026): sea and beach south of the gate; swimming pastel fish; optional tap → bubble/heart/blubber; mobile portrait and desktop landscape unchanged.
 - **v0.18** (24.10.2026): real mobile portrait canvas 320×400 (stacked chooser cards); desktop 320×176 unchanged; Schlafenszeit locks only finished pictures — siblings with minutes stay tippable; clear tip + parent gear when all are done; reload must not leave a dead screen.
 - **v0.14** (24.10.2026): lemon trees in the garden (own fruit `zitrone` / llimona, yellow-green GBA style); Ensaïmada accepts lemon instead of orange; on phones only, portrait is preferred (`screen.orientation.lock('portrait')` when available, landscape shows a rotate-to-portrait tip). Desktop layout unchanged.
