@@ -25,6 +25,9 @@
     gras: '#a8d68f', gras2: '#8cc27a', gras3: '#c4e6a4', weg: '#dcb98e', weg2: '#c79f74',
     pflaster: '#e8d3ae', pflaster2: '#d6bb90', boden: '#eab48c', boden2: '#d39470',
     fliese1: '#f7efe2', fliese2: '#8fcbe3', wasser: '#7fd3ec', wasser2: '#e8fbff', wasser3: '#4fb0d6',
+    // ab v0.19: Meer (etwas tiefer als der Pool) und warmer Strand
+    meer: '#5eb8d9', meer2: '#a8e4f5', meer3: '#3a8fb0', meerTief: '#4aa3c8',
+    strand: '#f3e2b8', strand2: '#e8c98a', strand3: '#fff6de',
     rand: '#f4e6d0', rand2: '#d9c2a0', mauerTop: '#f1d6ac', mauerFront: '#d9a878', mauerFuge: '#c39066',
     dach: '#f08a6a', dach2: '#d2694f', putz: '#fff3e2', putz2: '#ecd6b8', fenster: '#9fd4f0', fensterNacht: '#ffd77a', fensterKern: '#fff1c2',
     holz: '#c98b5e', holz2: '#a56c48', tuch: '#fffdf8', herd: '#dfe3ef', herd2: '#9aa3bb',
@@ -55,7 +58,7 @@
   // ---------- Vorgezeichneter Hintergrund (ab v0.6) ----------
   // Alle Kacheln, die sich nie aendern, und die Blumen werden einmal auf eine Leinwand in Kartengroesse gemalt.
   // Pro Frame wird davon nur der sichtbare Ausschnitt kopiert. Wasser (Wellen) und Tafel (Teller) kommen frisch obendrauf.
-  function istLebendig(t) { var T = Dorf.Karte.T; return t === T.WASSER || t === T.TAFEL; }
+  function istLebendig(t) { var T = Dorf.Karte.T; return t === T.WASSER || t === T.MEER || t === T.TAFEL; }
   function zeichneBlumen(c, karte, cx, cy, ganz) {
     for (var i = 0; i < karte.blumen.length; i++) {
       var b = karte.blumen[i], bx = b.x - cx, by = b.y - cy;
@@ -232,6 +235,34 @@
     r(c, kx + s, ky - 1, 1, 1, P.kontur);
     r(c, kx + (s > 0 ? 1 : -2), ky + 2, 2, 1, '#ff7a7a');
   }
+  // ab v0.19: kleiner Pixel-Fisch (Pastell, dicke Kontur)
+  function zeichneFisch(c, f, sx, sy, zeit) {
+    var bob = Math.round(Math.sin((f.phase || 0) + zeit) * 1.2);
+    var x = Math.round(sx), y = Math.round(sy) + bob, links = f.dir < 0;
+    var farbe = f.farbe || '#7ec8e3';
+    c.save();
+    if (links) { c.translate(x, y); c.scale(-1, 1); x = 0; y = 0; }
+    // Koerper
+    rr(c, x - 5, y - 3, 9, 6, P.kontur);
+    rr(c, x - 4, y - 2, 7, 4, farbe);
+    r(c, x - 3, y - 1, 2, 1, '#ffffff');
+    // Schwanz
+    r(c, x + 4, y - 3, 1, 1, P.kontur); r(c, x + 5, y - 2, 1, 3, P.kontur); r(c, x + 4, y + 1, 1, 1, P.kontur);
+    r(c, x + 4, y - 2, 1, 3, farbe);
+    // Auge
+    r(c, x - 2, y - 1, 1, 1, P.kontur);
+    // Flosse wackelt
+    var flop = Math.sin((f.phase || 0) * 3) > 0 ? -1 : 1;
+    r(c, x, y - 4 + flop, 2, 1, P.kontur); r(c, x, y - 3 + flop, 2, 1, farbe);
+    c.restore();
+    if (f.blub > 0) {
+      var a = Math.min(1, f.blub * 1.4), bx = Math.round(sx + (links ? -4 : 4)), by = Math.round(sy - 6 - (0.9 - f.blub) * 10);
+      kreis(c, bx, by, 2, 'rgba(255,255,255,' + (0.7 * a).toFixed(2) + ')');
+      kreis(c, bx + 3, by - 3, 1, 'rgba(232,251,255,' + (0.8 * a).toFixed(2) + ')');
+      if (f.blub > 0.35) herz(c, Math.round(sx), Math.round(sy - 12 - (0.9 - f.blub) * 6), '#ff7fa0');
+    }
+  }
+
   function zeichneEiBoden(c, e, sx, sy, zeit) {
     var auf = e.neu > 0 ? Math.round(Math.sin((0.6 - e.neu) / 0.6 * Math.PI) * 4) : 0;
     ellipse(c, Math.round(sx), Math.round(sy) + 1, 3, 1, 'rgba(75,58,90,0.18)');
@@ -594,6 +625,28 @@
         if (karte.tile(x, y + 1) !== T.BEET) { r(c, sx, sy + 14, K, 1, P.holz); r(c, sx, sy + 15, K, 1, P.konturHolz); }
         if (karte.tile(x - 1, y) !== T.BEET) r(c, sx, sy, 1, K, P.konturHolz);
         if (karte.tile(x + 1, y) !== T.BEET) r(c, sx + 15, sy, 1, K, P.konturHolz);
+        break;
+      case T.STRAND:
+        r(c, sx, sy, K, K, P.strand);
+        rr(c, sx + (hs % 10) + 2, sy + ((hs >> 4) % 9) + 3, 3, 2, P.strand2);
+        if (hs % 5 === 0) { r(c, sx + ((hs >> 7) % 11) + 2, sy + ((hs >> 9) % 10) + 4, 2, 1, P.strand3); }
+        // Schaumkante zum Meer
+        if (karte.tile(x, y + 1) === T.MEER) {
+          r(c, sx, sy + 13, K, 1, P.meer2);
+          r(c, sx + ((Math.floor(zeit * 4) + x * 3) % 12), sy + 14, 4, 1, '#ffffff');
+        }
+        // leichte Kante zur Mauer/Tor
+        if (karte.tile(x, y - 1) === T.MAUER || karte.tile(x, y - 1) === T.TOR) r(c, sx, sy, K, 1, P.konturHolz);
+        break;
+      case T.MEER:
+        r(c, sx, sy, K, K, (y + x) % 5 === 0 ? P.meerTief : P.meer);
+        if (karte.tile(x, y - 1) !== T.MEER) {
+          r(c, sx, sy, K, 2, P.meer3);
+          r(c, sx + ((Math.floor(zeit * 5) + x * 2) % 14), sy + 1, 5, 1, P.meer2);
+        }
+        var mx = Math.floor((zeit * 5 + x * 7 + y * 2) % 16);
+        rr(c, sx + mx, sy + 5 + (x + y) % 4 * 2, 6, 2, P.meer2);
+        r(c, sx + ((mx + 8) % 14), sy + 11, 4, 1, P.meer2);
         break;
       case T.TOR:
         r(c, sx, sy, K, K, P.weg);
@@ -1944,6 +1997,12 @@
       if (t.art === 'esel') liste.push({ y: t.y, f: function () { zeichneEsel(c, t, sx, sy, zeit); } });
       else if (t.art === 'huhn') liste.push({ y: t.y, f: function () { zeichneHuhn(c, t, sx, sy, zeit); } });
       else liste.push({ y: t.y - 30, f: function () { zeichneGecko(c, t, sx, sy, zeit); } });   // Wand: vor allem dahinter
+    });
+    // ab v0.19: Fische im Meer (unter der Wasserlinie sortiert)
+    (st.tiere && st.tiere.fische ? st.tiere.fische : []).forEach(function (fisch) {
+      var sx = fisch.x - cx, sy = fisch.y - cy;
+      if (sx < -16 || sx > W + 16 || sy < -16 || sy > H + 16) return;
+      liste.push({ y: fisch.y - 0.2, f: function () { zeichneFisch(c, fisch, sx, sy, zeit); } });
     });
     var sp = st.spieler;
     liste.push({ y: sp.y + 0.1, f: function () { zeichnePerson(c, sp.x - cx, sp.y - cy, BIEL, sp.dir, sp.frame, { zeit: zeit, hop: huepfer(st, 'Biel', 0) }); } });

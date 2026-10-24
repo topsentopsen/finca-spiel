@@ -555,6 +555,7 @@
       else if (name === 'schlaf') { ton(523.25, j, 0.6, 0.02, 'sine', 440); ton(392, j + 0.35, 0.8, 0.016); }
       else if (name === 'eltern') { ton(660, j, 0.07, 0.02, 'triangle'); ton(990, j + 0.08, 0.12, 0.016, 'triangle'); }
       else if (name === 'vogel') { ton(2900, j, 0.07, 0.006, 'sine', 3600); ton(3300, j + 0.1, 0.06, 0.005, 'sine', 4100); }
+      else if (name === 'blubber') { ton(520, j, 0.08, 0.02, 'sine', 380); ton(700, j + 0.07, 0.1, 0.018, 'sine', 480); ton(880, j + 0.16, 0.14, 0.014, 'sine', 620); }
       else if (name === 'flattern') { ton(1800, j, 0.05, 0.004, 'triangle', 1200); ton(1600, j + 0.06, 0.05, 0.003, 'triangle', 1100); }
       else if (name === 'schritt') {
         if (!rauschen) return false;

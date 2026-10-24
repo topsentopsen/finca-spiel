@@ -1,5 +1,6 @@
 /* Tiere zum Streicheln (ab v0.4): Eselin Bruna auf ihrer Wiese und ein kleiner Gecko an der Hauswand.
    Ab v0.8 zwei Huehner vor ihrem Stall, die ab und zu ein Ei ins Gras legen.
+   Ab v0.19: kleine Fische im Meer suedlich vom Tor (schwimmen, Antippen → Blubber).
    Eigener Zufall, damit die Gaeste genauso entscheiden wie vorher (die Huehner haben noch einmal einen eigenen). */
 (function (g) {
   'use strict';
@@ -11,6 +12,25 @@
   var EI_NAH = 22;                // so nah muss Biel fuer ein Ei sein
   var EIER_MAX = 3;               // hoechstens so viele Eier liegen gleichzeitig im Gras
   var LEGEN = [35, 65];           // Sekunden zwischen zwei Eiern pro Huhn (echte Spielzeit)
+  var FISCHE = 5;                 // ab v0.19: Pixel-Fische im Meer
+  var FISCH_FARBEN = ['#ff9eb5', '#7ec8e3', '#ffd07a', '#b8e0a0', '#d4b3ff'];
+
+  function erstelleFische(karte, seed) {
+    var meer = karte.meer; if (!meer) return [];
+    var rng = Dorf.RNG.erstelle(((seed >>> 0) ^ 0xF15C) >>> 0), out = [];
+    for (var i = 0; i < FISCHE; i++) {
+      var x0 = meer.x0 * K + 6, x1 = (meer.x1 + 1) * K - 6;
+      var y0 = meer.y0 * K + 4, y1 = (meer.y1 + 1) * K - 4;
+      out.push({
+        art: 'fisch', id: i, name: 'Fisch',
+        x: x0 + rng.next() * (x1 - x0), y: y0 + rng.next() * (y1 - y0),
+        dir: rng.next() < 0.5 ? -1 : 1, tempo: 7 + rng.next() * 9,
+        phase: rng.next() * 6.28, farbe: FISCH_FARBEN[i % FISCH_FARBEN.length],
+        blub: 0, tipps: 0
+      });
+    }
+    return out;
+  }
 
   function erstelle(karte, seed) {
     var rng = Dorf.RNG.erstelle(((seed >>> 0) ^ 0x51ED) >>> 0), w = karte.wiese, gk = karte.gecko;
@@ -30,6 +50,7 @@
       t.huehner.forEach(function (h) { t.liste.push(h); });
       morgenEier(t, karte);
     }
+    t.fische = erstelleFische(karte, seed);
     return t;
   }
   // Am Morgen liegen schon zwei Eier vor dem Stall
@@ -98,6 +119,39 @@
       if (t.art === 'esel') { var w = karte.wiese; t.ziel = wiesenPunkt(karte, rng.int(w.x0, w.x1), rng.int(w.y0, w.y1)); }
       else { var gk = karte.gecko; t.ziel = { x: rng.int(gk.x0, gk.x1), y: gk.y }; }
     });
+    updateFische(tiere, karte, dt);
+  }
+
+  function updateFische(tiere, karte, dt) {
+    var meer = karte && karte.meer, liste = tiere.fische || [];
+    if (!meer || !liste.length) return;
+    var x0 = meer.x0 * K + 6, x1 = (meer.x1 + 1) * K - 6;
+    var y0 = meer.y0 * K + 4, y1 = (meer.y1 + 1) * K - 4;
+    liste.forEach(function (f) {
+      f.phase += dt * (2.2 + f.tempo * 0.08);
+      if (f.blub > 0) f.blub = Math.max(0, f.blub - dt);
+      f.x += f.dir * f.tempo * dt;
+      f.y += Math.sin(f.phase) * 6 * dt;
+      if (f.y < y0) f.y = y0;
+      if (f.y > y1) f.y = y1;
+      if (f.x <= x0) { f.x = x0; f.dir = 1; }
+      if (f.x >= x1) { f.x = x1; f.dir = -1; }
+    });
+  }
+
+  function fischAn(tiere, wx, wy, rad) {
+    var best = null, bd = rad || 10;
+    (tiere.fische || []).forEach(function (f) {
+      var d = Math.hypot(wx - f.x, wy - f.y);
+      if (d <= bd) { bd = d; best = f; }
+    });
+    return best;
+  }
+
+  function tippFisch(fisch) {
+    if (!fisch) return false;
+    fisch.blub = 0.9; fisch.tipps = (fisch.tipps || 0) + 1; fisch.dir = -fisch.dir;
+    return true;
   }
 
   // Tier unter einem Weltpunkt (Klick oder Tippen), grosszuegig fuer kleine Finger
@@ -145,6 +199,7 @@
   var BILDER = { esel: ['esel', 'herz'], gecko: ['gecko', 'herz'], huhn: ['huhn', 'herz'] };
   function spruch(tier) { var l = SPRUECHE[tier.art]; return l[(tier.gestreichelt - 1 + l.length) % l.length]; }
 
-  Dorf.Tiere = { REICHWEITE: REICHWEITE, FREUDE: FREUDE, HUHN_NAH: HUHN_NAH, EI_NAH: EI_NAH, EIER_MAX: EIER_MAX, LEGEN: LEGEN, BILDER: BILDER,
-    neuerTag: neuerTag, naechstesEi: naechstesEi, eiAn: eiAn, nimmEi: nimmEi, erstelle: erstelle, update: update, an: an, nah: nah, naechstes: naechstes, locke: locke, streichle: streichle, fuettere: fuettere, fuetterSpruch: fuetterSpruch, MAMPFEN: MAMPFEN, spruch: spruch, SPRUECHE: SPRUECHE };
+  Dorf.Tiere = { REICHWEITE: REICHWEITE, FREUDE: FREUDE, HUHN_NAH: HUHN_NAH, EI_NAH: EI_NAH, EIER_MAX: EIER_MAX, LEGEN: LEGEN, FISCHE: FISCHE, BILDER: BILDER,
+    neuerTag: neuerTag, naechstesEi: naechstesEi, eiAn: eiAn, nimmEi: nimmEi, erstelle: erstelle, update: update, an: an, nah: nah, naechstes: naechstes, locke: locke, streichle: streichle, fuettere: fuettere, fuetterSpruch: fuetterSpruch, MAMPFEN: MAMPFEN, spruch: spruch, SPRUECHE: SPRUECHE,
+    fischAn: fischAn, tippFisch: tippFisch, updateFische: updateFische };
 })(globalThis);

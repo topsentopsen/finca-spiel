@@ -204,12 +204,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.18', function () {
+test('Version: sichtbares Label ist v0.19', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.18');
+  gleich(D.VERSION, 'v0.19');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.18 (Prototyp)') >= 0, 'Titel enthaelt v0.18');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.17"') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.19 (Prototyp)') >= 0, 'Titel enthaelt v0.19');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.19"') >= 0, n + ' eingebunden'); });
   wahr(html.indexOf('js/profile.js') < html.indexOf('js/main.js') && html.indexOf('js/leben.js') < html.indexOf('js/main.js'), 'neue Dateien vor main');
   wahr(/html\.mobil\.quer/.test(html) && /hochkant halten/.test(html), 'Handy-Hochformat-Hinweis (Klasse mobil.quer)');
   wahr(fs.existsSync(path.join(__dirname, '..', 'assets', 'schlaflied-a.mp3')), 'Schlaflied A');
@@ -1041,7 +1041,7 @@ test('Langer Lauf: drei Tage mit Zufallsklicks, Ernten, Fuettern und Kochen ohne
   var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 9 }), rng = D.RNG.erstelle(77);
   for (var tag = 0; tag < 3; tag++) {
     for (var i = 0; i < 10 * 700 && !st.abend; i++) {
-      if (i % 25 === 0) D.Spiel.klick(st, rng.int(0, 40 * 16 - 1), rng.int(0, 30 * 16 - 1));
+      if (i % 25 === 0) D.Spiel.klick(st, rng.int(0, st.karte.w * 16 - 1), rng.int(0, st.karte.h * 16 - 1));
       if (i % 97 === 0) tasteE(D, st);
       if (i % 301 === 0) D.Spiel.kochen(st, D.Gerichte.REIHE[rng.int(0, 2)]);
       D.Spiel.schritt(st, 1 / 10);
@@ -1101,7 +1101,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand.esel']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.18'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.19'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -1342,7 +1342,7 @@ test('Dauerlauf: zehn Tage mit Zufallstipps, Tasten, Neu-Frage, Speichern und La
       if (st.frage && st.uhr.tag > 1 && rng.next() < 0.05) st.frage = null;   // meistens Nein
       if (i % 50 === 0) D.Render.zeichne(R, st);
       var sp2 = st.spieler;
-      wahr(isFinite(sp2.x) && isFinite(sp2.y) && sp2.x >= 0 && sp2.y >= 0 && sp2.x <= 40 * 16 && sp2.y <= 30 * 16, 'Biel in der Karte');
+      wahr(isFinite(sp2.x) && isFinite(sp2.y) && sp2.x >= 0 && sp2.y >= 0 && sp2.x <= st.karte.w * 16 && sp2.y <= st.karte.h * 16, 'Biel in der Karte');
       wahr(!D.Spieler.kollidiert(st.karte, sp2.x, sp2.y), 'Biel steckt nirgends fest');
       st.gaeste.forEach(function (g) { wahr(isFinite(g.x) && isFinite(g.y) && g.glueck >= 0 && g.glueck <= D.Glueck.MAX, 'Gast ok'); });
       D.Garten.REIHE.forEach(function (a) { wahr(st.vorrat[a] >= 0 && st.vorrat[a] <= D.Garten.VORRAT_MAX, 'Korb im Rahmen'); });
@@ -2678,6 +2678,39 @@ test('v0.18: Schlafenszeit sperrt nur fertige Bilder, Geschwister mit Minuten ti
   wahr(b.h.R.letzteWahl.karten.every(function (k) { return k.schlaeft; }), 'alle schlafen');
   S.oeffneEltern(s2); wahr(s2.eltern, 'Elternbereich als Ausweg');
 });
+
+// ---------- v0.19: Meer mit Fischen ----------
+test('v0.19: Strand und Meer suedlich vom Tor, Finca unveraendert, Tor begehbar', function () {
+  var D = ladeKontext().Dorf, T = D.Karte.T, k = D.Karte.erstelle(D.RNG.erstelle(1));
+  gleich(k.h, 36); gleich(D.Karte.FINCA_H, 30);
+  gleich(k.tile(19, 29), T.TOR); wahr(!k.blockiert(19, 29), 'Tor begehbar');
+  gleich(k.tile(19, 30), T.STRAND); wahr(!k.blockiert(19, 30), 'Strand begehbar');
+  gleich(k.tile(19, 31), T.MEER); wahr(k.blockiert(19, 31), 'Meer blockiert');
+  gleich(k.tile(0, 35), T.MEER); gleich(k.tile(39, 33), T.MEER);
+  // Pool bleibt Wasser (nicht Meer)
+  gleich(k.tile(28, 5), T.WASSER);
+  // Wege und Hof unangetastet
+  gleich(k.tile(19, 24), T.WEG); gleich(k.tile(19, 15), T.BRUNNEN);
+  wahr(D.Pfad.suche(k, 19, 18, 19, 30), 'Weg vom Hof zum Strand');
+  wahr(k.meer && k.meer.y0 === 31 && k.meer.strandY === 30, 'meer-Bounds');
+});
+test('v0.19: Fische schwimmen und Antippen macht Blubber', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 3 }), T = D.Tiere;
+  wahr(st.tiere.fische && st.tiere.fische.length >= 4, 'mehrere Fische');
+  var f0 = st.tiere.fische[0], x0 = f0.x, y0 = f0.y;
+  for (var i = 0; i < 30; i++) D.Spiel.schritt(st, 1 / 30);
+  wahr(Math.abs(f0.x - x0) > 0.5 || Math.abs(f0.y - y0) > 0.1, 'Fisch bewegt sich');
+  var f = st.tiere.fische[1];
+  gleich(D.Spiel.klick(st, f.x, f.y), 'fisch');
+  wahr(f.blub > 0, 'Blubber-Timer');
+  wahr(st.toene.indexOf('blubber') >= 0, 'Blubber-Sound');
+  wahr(st.herzchen.some(function (h) { return Math.hypot(h.x - f.x, h.y - (f.y - 10)) < 8; }), 'Herzchen am Fisch');
+  // Seed der Finca-Blumen bleibt gleich (Vergleich mit zweiter Karte gleichen Seeds)
+  var k1 = D.Karte.erstelle(D.RNG.erstelle(7)), k2 = D.Karte.erstelle(D.RNG.erstelle(7));
+  gleich(k1.blumen.length, k2.blumen.length);
+  gleich(k1.blumen[0].x, k2.blumen[0].x);
+});
+
 
 // ---------- Ausfuehren ----------
 tests.forEach(function (t) {

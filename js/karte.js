@@ -19,13 +19,16 @@
     // ab v0.10: Musikinstrumente zum Antippen (Gitarre, Kastagnetten, Trommel) auf der Wiese unter dem Hof
     INSTRUMENT: 28,
     // ab v0.14: Zitronenbaum am Garten
-    ZITRONE: 29
+    ZITRONE: 29,
+    // ab v0.19: Strand und Meer suedlich vom Tor (Finca-Mauer bleibt bei y=29)
+    STRAND: 30, MEER: 31
   };
   var BLOCK = {};
-  [T.MAUER, T.WAND, T.WASSER, T.BRUNNEN, T.OLIVE, T.TAFEL, T.HERD, T.TOR,
-    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH, T.ZAUN, T.WIESE, T.ORANGE, T.STALL, T.KUEBEL, T.INSTRUMENT, T.ZITRONE].forEach(function (t) { BLOCK[t] = true; });
+  [T.MAUER, T.WAND, T.WASSER, T.BRUNNEN, T.OLIVE, T.TAFEL, T.HERD,
+    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH, T.ZAUN, T.WIESE, T.ORANGE, T.STALL, T.KUEBEL, T.INSTRUMENT, T.ZITRONE, T.MEER].forEach(function (t) { BLOCK[t] = true; });
+  // Tor ist ab v0.19 begehbar (Weg zum Strand)
 
-  var KACHEL = 16, BREITE = 40, HOEHE = 30;
+  var KACHEL = 16, BREITE = 40, FINCA_H = 30, HOEHE = 36;
 
   // Raeume (Innenflaeche ohne Waende). v0.1: Kueche 6x7, Wohnbereich 5x7, Gaestehaus 6x6.
   var RAEUME = {
@@ -102,9 +105,9 @@
     rect(19, 21, 20, 28, T.WEG);
     rect(4, 24, 28, 24, T.WEG);
 
-    // Mauer drumherum mit Tor
-    ring(0, 0, w - 1, h - 1, T.MAUER);
-    set(19, h - 1, T.TOR); set(20, h - 1, T.TOR);
+    // Mauer um die Finca (nicht ums Meer), Tor nach Sueden zum Strand
+    ring(0, 0, w - 1, FINCA_H - 1, T.MAUER);
+    set(19, FINCA_H - 1, T.TOR); set(20, FINCA_H - 1, T.TOR);
 
     // Olivenbaeume (fest platziert)
     var oliven = [[3, 22], [7, 26], [10, 21], [13, 27], [4, 27], [15, 22], [23, 22], [24, 27],
@@ -131,8 +134,9 @@
     // Blumen als Deko (Seed-Zufall, nur auf Gras)
     var blumen = [];
     var farben = ['#ffb3c7', '#ffe9a0', '#d8c2ff', '#ffffff', '#b8e8ff'];
+    // Blumen nur in der Finca (alte Hoehe), damit der Seed gleich bleibt
     for (var i = 0; i < 80; i++) {
-      var bx = rng.int(1, w - 2), by = rng.int(1, h - 2);
+      var bx = rng.int(1, w - 2), by = rng.int(1, FINCA_H - 2);
       if (tiles[by * w + bx] === T.GRAS) blumen.push({ x: bx * KACHEL + rng.int(2, 13), y: by * KACHEL + rng.int(2, 13), farbe: rng.pick(farben) });
     }
 
@@ -141,11 +145,16 @@
     INSTRUMENTE.forEach(function (p) { set(p.x, p.y, T.INSTRUMENT); });
     blumen = blumen.filter(function (b) { return tiles[Math.floor(b.y / KACHEL) * w + Math.floor(b.x / KACHEL)] === T.GRAS; });
 
+    // ab v0.19: Strand und Meer suedlich vom Tor (volle Breite, offenes Meer)
+    rect(0, FINCA_H, w - 1, FINCA_H, T.STRAND);
+    rect(0, FINCA_H + 1, w - 1, h - 1, T.MEER);
+    var MEER = { x0: 0, y0: FINCA_H + 1, x1: w - 1, y1: h - 1, strandY: FINCA_H };
+
     var karte = {
       instrumente: INSTRUMENTE.map(function (p) { return { art: p.art, x: p.x, y: p.y, wackel: 0, schlag: 0 }; }),
       kuebel: KUEBEL.map(function (p) { return { x: p[0], y: p[1] }; }),
       w: w, h: h, kachel: KACHEL, tiles: tiles, baeume: baeume, blumen: blumen, raeume: RAEUME,
-      brunnen: { x: 19, y: 15 }, wiese: WIESE, garten: garten, huehner: HUEHNER, stall: STALL,
+      brunnen: { x: 19, y: 15 }, wiese: WIESE, garten: garten, huehner: HUEHNER, stall: STALL, meer: MEER,
       // Gecko sitzt an der Hauswand rechts der Haustuer (Pixelbereich auf der Wandfront)
       gecko: { x0: 14 * KACHEL + 3, x1: 16 * KACHEL + 12, y: 10 * KACHEL + 12 },
       tile: function (x, y) { if (x < 0 || y < 0 || x >= w || y >= h) return T.MAUER; return tiles[y * w + x]; },
@@ -184,5 +193,5 @@
     return karte;
   }
 
-  Dorf.Karte = { T: T, KACHEL: KACHEL, BREITE: BREITE, HOEHE: HOEHE, RAEUME: RAEUME, erstelle: erstelle };
+  Dorf.Karte = { T: T, KACHEL: KACHEL, BREITE: BREITE, HOEHE: HOEHE, FINCA_H: FINCA_H, RAEUME: RAEUME, erstelle: erstelle };
 })(globalThis);

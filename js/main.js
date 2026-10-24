@@ -3,7 +3,7 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.18';
+  var VERSION = 'v0.19';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
   var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
@@ -127,6 +127,7 @@
     st.gaeste.forEach(function (gs) { var gy = gs.y - (Dorf.Gaeste.sitzt(gs) ? 14 : 0) - 10; pruef(Math.hypot(wx - gs.x, wy - gy) - 4, { gast: gs }); });
     st.tiere.liste.forEach(function (t) { var e = t.art === 'esel', h = t.art === 'huhn'; pruef(Math.hypot(wx - t.x, wy - (t.y - (e ? 10 : (h ? 5 : 2)))) - (e ? 8 : (h ? 3 : 2)), { tier: t }); });
     (st.tiere.eier || []).forEach(function (ei) { pruef(Math.hypot(wx - ei.x, wy - (ei.y - 3)) - 1, { ei: ei }); });
+    (st.tiere.fische || []).forEach(function (f) { pruef(Math.hypot(wx - f.x, wy - f.y) - 4, { fisch: f }); });
     st.garten.liste.forEach(function (p) { var q = Dorf.Garten.punkt(p); pruef(Math.hypot(wx - q.x, wy - (q.y - (p.baum ? 14 : 6))) - (p.baum ? 6 : 3), { pflanze: p }); });
     pruef(Math.hypot(wx - HERD_MITTE.x, wy - HERD_MITTE.y) - 12, { herd: true });
     (st.karte.instrumente || []).forEach(function (ins) { pruef(Math.hypot(wx - (ins.x * 16 + 8), wy - (ins.y * 16 + 6)) - 6, { instrument: ins }); });
@@ -151,13 +152,15 @@
     var tx = Math.floor(wx / K), ty = Math.floor(wy / K), sp = st.spieler, ziel = null, aktion = null;
     var gast = gastAn(st, wx, wy), ei = gast ? null : Dorf.Tiere.eiAn(st.tiere, wx, wy, 6);
     var tier = (gast || ei) ? null : Dorf.Tiere.an(st.tiere, wx, wy);
-    var pf = (gast || tier || ei) ? null : Dorf.Garten.an(st.garten, tx, ty);
-    var herd = !gast && !tier && !pf && !ei && karte.tile(tx, ty) === T.HERD;
-    var ins = (!gast && !tier && !pf && !ei && !herd) ? instrumentAn(st, tx, ty) : null;
-    if (!gast && !tier && !pf && !herd && !ei && !ins) {
+    var fisch = (gast || ei || tier) ? null : Dorf.Tiere.fischAn(st.tiere, wx, wy, st.eingabe.touch ? 14 : 10);
+    var pf = (gast || tier || ei || fisch) ? null : Dorf.Garten.an(st.garten, tx, ty);
+    var herd = !gast && !tier && !pf && !ei && !fisch && karte.tile(tx, ty) === T.HERD;
+    var ins = (!gast && !tier && !pf && !ei && !herd && !fisch) ? instrumentAn(st, tx, ty) : null;
+    if (!gast && !tier && !pf && !herd && !ei && !ins && !fisch) {
       var f = naechstesZiel(st, wx, wy, st.eingabe.touch ? 14 : 8);
-      if (f) { gast = f.gast || null; tier = f.tier || null; pf = f.pflanze || null; herd = !!f.herd; ei = f.ei || null; ins = f.instrument || null; }
+      if (f) { gast = f.gast || null; tier = f.tier || null; pf = f.pflanze || null; herd = !!f.herd; ei = f.ei || null; ins = f.instrument || null; fisch = f.fisch || null; }
     }
+    if (fisch) { tippFisch(st, fisch); return 'fisch'; }
     if (ins) {
       if (instrumentNah(st, ins)) { musiziere(st, ins); return 'musik'; }
       ziel = besterNachbar(st, ins.x, ins.y);
@@ -259,6 +262,14 @@
     return null;
   }
   // Streicheln: Herz, leiser Laut, Biel erzaehlt etwas. Gaeste in der Naehe freuen sich mit.
+  // ab v0.19: Fisch antippen → Blubber, Herzchen, kurzer Sound (auch aus der Ferne)
+  function tippFisch(st, fisch) {
+    if (!Dorf.Tiere.tippFisch(fisch)) return;
+    st.herzchen.push({ x: fisch.x, y: fisch.y - 10, t: 0, farbe: '#7ec8e3' });
+    klang(st, 'blubber');
+    if ((fisch.tipps || 0) % 3 === 1) sage(st, 'Biel', 'Ein Fisch! Blub blub.', 2.5, ['herz']);
+  }
+
   function streichle(st, tier) {
     var sp = st.spieler, dx = tier.x - sp.x, dy = tier.y - sp.y;
     if (Math.abs(dx) > Math.abs(dy)) sp.dir = dx < 0 ? 'links' : 'rechts'; else sp.dir = dy < 0 ? 'oben' : 'unten';
