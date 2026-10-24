@@ -204,14 +204,17 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.14', function () {
+test('Version: sichtbares Label ist v0.15', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.14');
+  gleich(D.VERSION, 'v0.15');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.14 (Prototyp)') >= 0, 'Titel enthaelt v0.14');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.14"') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.15 (Prototyp)') >= 0, 'Titel enthaelt v0.15');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.15"') >= 0, n + ' eingebunden'); });
   wahr(html.indexOf('js/profile.js') < html.indexOf('js/main.js') && html.indexOf('js/leben.js') < html.indexOf('js/main.js'), 'neue Dateien vor main');
-  wahr(/orientation:\s*landscape/.test(html) && /pointer:\s*coarse/.test(html) && /hochkant halten/.test(html), 'Handy-Hochformat-Hinweis');
+  wahr(/html\.mobil\.quer/.test(html) && /hochkant halten/.test(html), 'Handy-Hochformat-Hinweis (Klasse mobil.quer)');
+  wahr(fs.existsSync(path.join(__dirname, '..', 'assets', 'schlaflied-a.mp3')), 'Schlaflied A');
+  wahr(fs.existsSync(path.join(__dirname, '..', 'assets', 'schlaflied-b.mp3')), 'Schlaflied B');
+  wahr(fs.existsSync(path.join(__dirname, '..', 'assets', 'schlaflied-c.mp3')), 'Schlaflied C');
 });
 test('Debug: F1 ist frei, Debug liegt auf Backquote', function () {
   var D = ladeKontext().Dorf;
@@ -1097,7 +1100,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand.esel']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.14'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.15'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -2365,16 +2368,23 @@ test('Elternbereich v0.13: solange er offen ist, sind die Knoepfe oben rechts we
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   wahr(/#rahmen\.eltern #oben\s*\{\s*visibility:\s*hidden/.test(html), 'CSS versteckt die obere Leiste');
 });
-test('Schlaflied v0.13: Variante C als Datei, a-Moll mit A-Dur-Schluss, etwa eine halbe Minute', function () {
+test('Schlaflied v0.15: drei Varianten A/B/C, Default C, a-Moll mit A-Dur-Schluss', function () {
   var T = ladeKontext().Dorf.Ton, S = T.SCHLAFLIED, n = T.schlafliedNoten();
   gleich(S.variante, 'C');
   wahr(S.datei.indexOf('schlaflied-c.mp3') >= 0, 'Datei: ' + S.datei);
-  wahr(fs.existsSync(path.join(__dirname, '..', S.datei)), 'Datei liegt im Repo');
+  wahr(T.SCHLAFLIEDER.A && T.SCHLAFLIEDER.B && T.SCHLAFLIEDER.C, 'drei Varianten');
+  ['A', 'B', 'C'].forEach(function (id) {
+    var m = T.schlafliedMeta(id);
+    wahr(fs.existsSync(path.join(__dirname, '..', m.datei)), 'Datei ' + id);
+    wahr(m.dauer > 30 && m.dauer < 40, 'Dauer ' + id);
+  });
   var d = T.schlafliedDauer(); wahr(d > 30 && d < 40, 'Dauer ' + d);
   wahr(n.length >= 3, 'Stichprobe der Noten');
   wahr(n.every(function (x) { return isFinite(x.sek) && x.staerke > 0 && x.staerke <= S.max; }), 'Stichprobe gueltig');
   gleich(T.WIEGEN_FOLGE[T.WIEGEN_FOLGE.length - 1], 'A', 'endet hell auf A-Dur');
   wahr(T.WIEGEN_FOLGE.indexOf('Am') === 0, 'beginnt in a-Moll');
+  gleich(T.normalisiereLied('b'), 'B');
+  gleich(T.normalisiereLied('x'), 'C');
 });
 test('Schlaflied im Ton: Datei einmal pro Abend, Schleife macht Platz, nicht wenn stumm, am Morgen vorbei', function () {
   var T = ladeKontext().Dorf.Ton, au = fakeAudio(), win = fakeTonFenster(fakeSpeicher(), au);
@@ -2401,6 +2411,26 @@ test('Schlaflied im Ton: Datei einmal pro Abend, Schleife macht Platz, nicht wen
   t.setzeStumm(true); t.tageszeit(23, true); gleich(t.schlafliedNoten, n1, 'stumm: kein Lied');
   t.setzeStumm(false); t.tageszeit(23, true); wahr(t.schlaflied, 'nach dem Einschalten');
   t.tageszeit(6, false); gleich(t.schlaflied, null, 'Lied abgesagt');
+});
+test('Schlaflied Wahl: Eltern tippen A/B/C, Speichern, Ton uebernimmt Datei', function () {
+  var sp = fakeSpeicher(), a = starteFake({ speicher: sp }), st = a.h.st, S = a.D.Spiel, P = a.D.Profile, E = S.ELTERN, R = a.h.R;
+  gleich(st.schlafliedWahl, 'C', 'Default C');
+  S.oeffneEltern(st); st.eltern.t = 1; a.frames(2);
+  wahr(E.liedA && E.liedB && E.liedC, 'drei Knoepfe');
+  gleich(R.letzteEltern.schlaflied, 'C');
+  gleich(S.klickBild(st, E.liedA.x + 5, E.liedA.y + 5, true), 'liedA');
+  gleich(st.schlafliedWahl, 'A');
+  wahr(st.ton && st.ton.schlafliedWahl === 'A', 'Ton auf A');
+  a.frames(2); gleich(R.letzteEltern.schlaflied, 'A');
+  S.elternTat(st, 'liedB'); gleich(st.schlafliedWahl, 'B');
+  st.speichernJetzt = true; a.frames(2);
+  wahr(sp.d['finca.schlaflied'] === 'B' || P.ladeSchlafliedWahl(sp, 'C') === 'B', 'gespeichert B');
+  // neues Spiel liest die Wahl
+  var b = starteFake({ speicher: sp });
+  gleich(b.h.st.schlafliedWahl, 'B', 'nach Reload B');
+  wahr(b.h.st.ton.schlafliedWahl === 'B', 'Ton nach Reload B');
+  wahr(S.ELTERN_REIHE.indexOf('liedA') > S.ELTERN_REIHE.indexOf('langsam'), 'Pfeile erreichen Lieder');
+  wahr(P.erlaubt('finca.schlaflied'), 'Sicherung kennt Schlaflied');
 });
 test('Abendbuch: geht einmal von selbst auf der Seite Heute auf, Sticker gross, Taten als Bilder, Satz wird vorgelesen', function () {
   var gesagt = [];

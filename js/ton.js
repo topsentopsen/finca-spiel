@@ -28,14 +28,21 @@
     [4, 0, 65], [4, 4, 69], [5, 0, 64], [5, 4, 67], [6, 0, 69], [6, 4, 72], [7, 0, 71], [7, 4, 68]];
 
   // ab v0.12 / v0.13: Schlaflied fuer "Bona nit". Spielt einmal pro Abend und hoert von selbst auf.
-  // ab v0.13: Variante C als gerenderte Datei (weiche Floete, warme Flaeche, leiser Gitarren-Dreiertakt in a-Moll,
-  // mallorquinischer Hauch, heller A-Dur-Schluss, etwa 30 s Musik + Ausklang, Lautheit etwa minus 16 LUFS).
-  // Die Datei wird per decodeAudioData abgespielt. Es gibt absichtlich keinen Knopf zum Wiederholen.
-  var SCHLAFLIED = {
-    vorlauf: 2.0, datei: 'assets/schlaflied-c.mp3', laut: 0.72, dauer: 34.4, variante: 'C', max: 0.72
+  // ab v0.15: drei Varianten A/B/C als Dateien; Wahl im Elternbereich (gespeichert als finca.schlaflied).
+  // A = klassische Spieluhr/Gitarre, B = Sterne/Celesta, C = Floete/Mallorca (Default).
+  var SCHLAFLIED_VORLAUF = 2.0;
+  var SCHLAFLIEDER = {
+    A: { id: 'A', datei: 'assets/schlaflied-a.mp3', laut: 0.70, dauer: 34.4, name: 'Spieluhr', label: 'Gitarre', variante: 'A', max: 0.70 },
+    B: { id: 'B', datei: 'assets/schlaflied-b.mp3', laut: 0.68, dauer: 34.4, name: 'Sterne', label: 'Celesta', variante: 'B', max: 0.68 },
+    C: { id: 'C', datei: 'assets/schlaflied-c.mp3', laut: 0.72, dauer: 34.4, name: 'Flöte', label: 'Mallorca', variante: 'C', max: 0.72 }
   };
-  // Kurze Stichprobe der Noten von Variante C (vollstaendige Liste liegt neben der Datei beim Erzeugen).
-  // Dient Tests und Dokumentation; die Wiedergabe nutzt die Datei, nicht diese Noten.
+  function schlafliedMeta(id) {
+    var k = String(id || 'C').toUpperCase();
+    return SCHLAFLIEDER[k] || SCHLAFLIEDER.C;
+  }
+  // aktive Meta als eigene Kopie (nicht dieselbe Referenz wie SCHLAFLIEDER.C)
+  var SCHLAFLIED = Object.assign({ vorlauf: SCHLAFLIED_VORLAUF }, schlafliedMeta('C'));
+  // Kurze Stichprobe der Noten von Variante C (Tests/Doku). Wiedergabe nutzt die Datei.
   var SCHLAFLIED_STICH = [
     { sek: 0.0, midi: 45, staerke: 0.32, art: 'bass' },
     { sek: 0.0, midi: 69, staerke: 0.34, art: 'floete' },
@@ -43,9 +50,10 @@
     { sek: 26.087, midi: 57, staerke: 0.18, art: 'gitarre' },
     { sek: 26.087, midi: 61, staerke: 0.18, art: 'gitarre' }
   ];
-  var WIEGEN_FOLGE = ['Am', 'G', 'F', 'E', 'Am', 'Dm', 'E', 'Am', 'F', 'E', 'A'];   // Akkorde der Variante C
+  var WIEGEN_FOLGE = ['Am', 'G', 'F', 'E', 'Am', 'Dm', 'E', 'Am', 'F', 'E', 'A'];
   function schlafliedNoten() { return SCHLAFLIED_STICH.slice(); }
-  function schlafliedDauer() { return SCHLAFLIED.dauer; }
+  function schlafliedDauer(id) { return schlafliedMeta(id || SCHLAFLIED.variante).dauer; }
+  function normalisiereLied(id) { return schlafliedMeta(id).id; }
 
   function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
@@ -272,14 +280,19 @@
     // ab v0.13: Wiedergabe aus der Datei (AudioBuffer), nicht mehr Note fuer Note aus der Zupfsaite.
     t.schlaflied = null; t.schlafliedGespielt = false; t.schlafliedNoten = 0;
     t.schlafliedPuffer = null; t.schlafliedLaden = false; t.schlafliedWartet = false;
+    t.schlafliedWahl = SCHLAFLIED.variante || 'C';
+    t.schlafliedGeladenFuer = null;
+    function metaJetzt() { return schlafliedMeta(t.schlafliedWahl); }
     function ladeSchlaflied() {
-      if (t.schlafliedPuffer || t.schlafliedLaden || !t.ctx) return;
+      if (t.schlafliedLaden || !t.ctx) return;
+      if (t.schlafliedPuffer && t.schlafliedGeladenFuer === t.schlafliedWahl) return;
       // Tests und Offline: Puffer kann schon gesetzt sein. Sonst Datei laden.
       if (typeof t.schlafliedPufferSetzen === 'function') return;
       var fetchFn = win.fetch;
       if (!fetchFn || !t.ctx.decodeAudioData) return;
-      t.schlafliedLaden = true;
-      fetchFn.call(win, SCHLAFLIED.datei).then(function (r) {
+      var meta = metaJetzt(), fuer = meta.id;
+      t.schlafliedLaden = true; t.schlafliedPuffer = null; t.schlafliedGeladenFuer = null;
+      fetchFn.call(win, meta.datei).then(function (r) {
         if (!r || !r.ok) throw new Error('schlaflied fehlte');
         return r.arrayBuffer();
       }).then(function (roh) {
@@ -288,22 +301,45 @@
           if (ret && typeof ret.then === 'function') ret.then(ok, fehl);
         });
       }).then(function (buf) {
-        t.schlafliedPuffer = buf; t.schlafliedLaden = false;
+        // nur uebernehmen, wenn die Wahl inzwischen nicht gewechselt wurde
+        if (t.schlafliedWahl !== fuer) { t.schlafliedLaden = false; ladeSchlaflied(); return; }
+        t.schlafliedPuffer = buf; t.schlafliedGeladenFuer = fuer; t.schlafliedLaden = false;
         if (t.schlafliedWartet && !t.schlafliedGespielt && !t.stumm) { t.schlafliedWartet = false; schlafliedStart(); }
       }).catch(function () { t.schlafliedLaden = false; });
     }
+    t.setzeSchlafliedWahl = function (id) {
+      var n = normalisiereLied(id), meta = schlafliedMeta(n);
+      if (t.schlafliedWahl === n) return n;
+      t.schlafliedWahl = n;
+      // Felder der Export-Referenz aktualisieren (Katalog SCHLAFLIEDER bleibt unangetastet)
+      SCHLAFLIED.id = meta.id; SCHLAFLIED.datei = meta.datei; SCHLAFLIED.laut = meta.laut;
+      SCHLAFLIED.dauer = meta.dauer; SCHLAFLIED.name = meta.name; SCHLAFLIED.label = meta.label;
+      SCHLAFLIED.variante = meta.variante; SCHLAFLIED.max = meta.max; SCHLAFLIED.vorlauf = SCHLAFLIED_VORLAUF;
+      // laufendes Lied stoppen und neuen Puffer laden
+      schlafliedStopp(); t.schlafliedGespielt = false;
+      t.schlafliedPuffer = null; t.schlafliedGeladenFuer = null;
+      if (t.bereit && !t.stumm) ladeSchlaflied();
+      return n;
+    };
+    t.schlafliedWahlJetzt = function () { return t.schlafliedWahl; };
     function schlafliedStart() {
       if (!t.ctx || !knoten.wiegen || t.stumm) return;
+      // Puffer fehlt oder gehoert zu anderer Variante → laden. null GeladenFuer = Test/Offline-Puffer ok.
       if (!t.schlafliedPuffer) { t.schlafliedWartet = true; ladeSchlaflied(); return; }
-      var c = t.ctx, start = c.currentTime + SCHLAFLIED.vorlauf;
+      if (t.schlafliedGeladenFuer && t.schlafliedGeladenFuer !== t.schlafliedWahl) {
+        t.schlafliedPuffer = null; t.schlafliedGeladenFuer = null;
+        t.schlafliedWartet = true; ladeSchlaflied(); return;
+      }
+      if (!t.schlafliedGeladenFuer) t.schlafliedGeladenFuer = t.schlafliedWahl;
+      var meta = metaJetzt(), c = t.ctx, start = c.currentTime + SCHLAFLIED_VORLAUF;
       knoten.wiegen.gain.cancelScheduledValues(c.currentTime);
-      knoten.wiegen.gain.setValueAtTime(SCHLAFLIED.laut, c.currentTime);
+      knoten.wiegen.gain.setValueAtTime(meta.laut, c.currentTime);
       var quelle = c.createBufferSource();
       quelle.buffer = t.schlafliedPuffer;
       quelle.connect(knoten.wiegen);
       quelle.start(start);
-      var dauer = (t.schlafliedPuffer.duration > 0 ? t.schlafliedPuffer.duration : SCHLAFLIED.dauer);
-      t.schlaflied = { start: start, ende: start + dauer, quellen: [quelle] };
+      var dauer = (t.schlafliedPuffer.duration > 0 ? t.schlafliedPuffer.duration : meta.dauer);
+      t.schlaflied = { start: start, ende: start + dauer, quellen: [quelle], variante: meta.id };
       t.schlafliedGespielt = true;
       t.schlafliedNoten = 1;
       t.schlafliedWartet = false;
@@ -518,6 +554,7 @@
 
   Dorf.Ton = { SCHLUESSEL: SCHLUESSEL, BPM: BPM, LAUT: LAUT, UEBERBLENDEN: UEBERBLENDEN, AKKORDE: AKKORDE, FOLGE: FOLGE, mtof: mtof, noten: noten, zupfe: zupfe, mischung: mischung, zirpen: zirpen,
     akkordBei: akkordBei, instrumentNoten: instrumentNoten, raster: raster, ACHTEL: ACHTEL,
-    SCHLAFLIED: SCHLAFLIED, WIEGEN_FOLGE: WIEGEN_FOLGE, schlafliedNoten: schlafliedNoten, schlafliedDauer: schlafliedDauer,
+    SCHLAFLIED: SCHLAFLIED, SCHLAFLIEDER: SCHLAFLIEDER, schlafliedMeta: schlafliedMeta, normalisiereLied: normalisiereLied,
+    WIEGEN_FOLGE: WIEGEN_FOLGE, schlafliedNoten: schlafliedNoten, schlafliedDauer: schlafliedDauer,
     stummLaden: stummLaden, stummSpeichern: stummSpeichern, erstelle: erstelle };
 })(globalThis);

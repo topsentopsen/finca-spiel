@@ -1726,9 +1726,9 @@
     var Pr = Dorf.Profile, maxG = Pr && Pr.maxGrenze ? Pr.maxGrenze() : 15, minG = Pr && Pr.MIN_GRENZE ? Pr.MIN_GRENZE : 5;
     c.fillStyle = 'rgba(58,44,80,0.6)'; c.fillRect(0, 0, W, H);
     pille(c, E.x - 1, E.y - 1, E.w + 2, E.h + 2, P.kontur); pille(c, E.x, E.y, E.w, E.h, P.box);
-    text(R, 'Für Eltern', E.x + 12, E.y + 8, { fett: true, groesse: 9 });
+    text(R, 'Für Eltern', E.x + 12, E.y + 6, { fett: true, groesse: 8 });
     knopfFlaeche(c, E.zu, '#e6dcef', e.wahl === 'zu'); kreuz(c, E.zu.x + E.zu.w / 2, E.zu.y + E.zu.h / 2, P.kontur);
-    text(R, 'Minuten heute, Grenze je Bild (' + minG + ' bis ' + maxG + ') und die letzten 7 Tage:', E.x + 12, E.y + 22, { groesse: 6, farbe: '#7a5a9a' });
+    text(R, 'Minuten · Grenze (' + minG + '–' + maxG + ') · Woche', E.x + 12, E.y + 17, { groesse: 5, farbe: '#7a5a9a' });
     (e.info || []).forEach(function (u, i) {
       var B = E.bilder[i]; if (!B) return;
       var x = B.x, y = B.y, g = u.grenze || maxG, min = Math.min(g, Math.floor((u.sek || 0) / 60));
@@ -1761,32 +1761,68 @@
     // ab v0.12: vier kleine Schalter nebeneinander: Weniger Bewegung, Namen vorlesen, Saetze vorlesen, Langsam sprechen
     var art = st.vorleseArt || { namen: true, saetze: true, langsam: false }, stimme = st.vorlesenDa !== false;
     info.schalter = {};
-    [['ruhig', 'Weniger', 'Bewegung', !!st.ruhig, true], ['namen', 'Namen', 'vorlesen', art.namen !== false, stimme],
-      ['saetze', 'Sätze', 'vorlesen', art.saetze !== false, stimme], ['langsam', 'Langsam', 'sprechen', !!art.langsam, stimme]].forEach(function (d) {
-      var K = E[d[0]], an = d[3], geht = d[4];
+    [['ruhig', 'Weniger', !!st.ruhig, true], ['namen', 'Namen', art.namen !== false, stimme],
+      ['saetze', 'Sätze', art.saetze !== false, stimme], ['langsam', 'Langsam', !!art.langsam, stimme]].forEach(function (d) {
+      var K = E[d[0]], an = d[2], geht = d[3];
       knopfFlaeche(c, K, geht ? '#fff4dc' : '#f3eef6', e.wahl === d[0]);
-      text(R, d[1], K.x + 4, K.y + 4, { fett: true, groesse: 5, farbe: geht ? P.kontur : '#a898b8' });
-      text(R, d[2], K.x + 4, K.y + 11, { groesse: 5, farbe: geht ? '#7a5a9a' : '#b8aac6' });
-      var sx = K.x + K.w - 21, sy = K.y + 6;
-      pille(c, sx, sy, 18, 9, an ? (geht ? '#7ed492' : '#c4e6cc') : '#d8cce6');
-      var kx = an ? sx + 13 : sx + 4; kreis(c, kx, sy + 4, 4, P.kontur); kreis(c, kx, sy + 4, 3, '#ffffff');
+      text(R, d[1], K.x + 3, K.y + 7, { fett: true, groesse: 5, farbe: geht ? P.kontur : '#a898b8' });
+      var sx = K.x + K.w - 20, sy = K.y + 5;
+      pille(c, sx, sy, 16, 9, an ? (geht ? '#7ed492' : '#c4e6cc') : '#d8cce6');
+      var kx = an ? sx + 11 : sx + 4; kreis(c, kx, sy + 4, 3.5, P.kontur); kreis(c, kx, sy + 4, 2.5, '#ffffff');
       info.schalter[d[0]] = an;
     });
     info.stimme = stimme;
+    // ab v0.15: Schlaflied A/B/C — Bildsprache Pastell/GBA, ohne Lesen verständlich
+    var wahlLied = st.schlafliedWahl || 'C';
+    info.schlaflied = wahlLied;
+    function zeichneLiedKnopf(K, id, farbe, iconFn, label) {
+      var an = wahlLied === id, fokus = e.wahl === ('lied' + id);
+      knopfFlaeche(c, K, an ? farbe : '#f7f0e8', fokus || an);
+      if (an) { pille(c, K.x - 1, K.y - 1, K.w + 2, K.h + 2, '#7ed492'); knopfFlaeche(c, K, farbe, fokus); }
+      iconFn(K.x + 14, K.y + 12);
+      text(R, label, K.x + 28, K.y + 9, { fett: true, groesse: 6, farbe: P.kontur });
+    }
+    // A = klassische Spieluhr + kleiner Gitarren-Hinweis
+    function iconSpieluhr(cx, cy) {
+      kreis(c, cx, cy, 8, '#e8c89a'); kreis(c, cx, cy, 7, '#fff4dc'); kreis(c, cx, cy, 1.5, P.kontur);
+      // Zeiger
+      r(c, cx - 0.5, cy - 5, 1, 5, P.kontur); r(c, cx - 0.5, cy - 0.5, 4, 1, P.kontur);
+      // kleine Gitarre rechts
+      kreis(c, cx + 7, cy + 4, 2.5, '#c4a06a'); r(c, cx + 8, cy - 4, 1.5, 6, '#d4b07a');
+    }
+    // B = Sterne / Celesta-Glitzer
+    function iconSterne(cx, cy) {
+      function stern(x, y, s, f) {
+        r(c, x - s, y - 0.5, s * 2, 1, f); r(c, x - 0.5, y - s, 1, s * 2, f);
+        r(c, x - s * 0.6, y - s * 0.6, 1, 1, f); r(c, x + s * 0.4, y - s * 0.6, 1, 1, f);
+      }
+      stern(cx - 2, cy - 1, 5, '#ffe27a'); stern(cx + 6, cy + 3, 3, '#ffd1e0'); stern(cx + 2, cy + 6, 2, '#c9e4ff');
+    }
+    // C = Floete + Sonne Mallorca
+    function iconFloete(cx, cy) {
+      // Sonne
+      kreis(c, cx - 2, cy - 2, 5, '#ffd36e'); kreis(c, cx - 2, cy - 2, 3.5, '#ffe9a8');
+      // Floete schraeg
+      r(c, cx + 1, cy + 2, 10, 2.5, '#d4e8f8'); r(c, cx + 1, cy + 2, 10, 1, '#a8c8e0');
+      kreis(c, cx + 3, cy + 3, 0.8, P.kontur); kreis(c, cx + 6, cy + 3, 0.8, P.kontur); kreis(c, cx + 9, cy + 3, 0.8, P.kontur);
+    }
+    if (E.liedA) {
+      text(R, 'Bona nit', E.x + 12, E.liedA.y - 7, { groesse: 5, farbe: '#7a5a9a' });
+      zeichneLiedKnopf(E.liedA, 'A', '#fff0d8', iconSpieluhr, 'Spieluhr');
+      zeichneLiedKnopf(E.liedB, 'B', '#e8e4ff', iconSterne, 'Sterne');
+      zeichneLiedKnopf(E.liedC, 'C', '#dff6f0', iconFloete, 'Flöte');
+    }
     var Wk = E.wechseln, Nk = E.neu, Sk = E.sichern;
     knopfFlaeche(c, Wk, '#e6defb', e.wahl === 'wechseln');
-    grossesBild(c, 'esel', Wk.x + 10, Wk.y + Wk.h / 2, 1);
-    text(R, 'Anderes Bild', Wk.x + 20, Wk.y + 8, { fett: true, groesse: 6 });
+    grossesBild(c, 'esel', Wk.x + 8, Wk.y + Wk.h / 2, 1);
+    text(R, 'Anderes Bild', Wk.x + 18, Wk.y + 6, { fett: true, groesse: 5 });
     knopfFlaeche(c, Nk, '#ffd1e0', e.wahl === 'neu');
-    kreispfeil(c, Nk.x + 11, Nk.y + Nk.h / 2 + 1, '#ff7fa0');
-    text(R, 'Neu anfangen', Nk.x + 21, Nk.y + 8, { fett: true, groesse: 6 });
+    kreispfeil(c, Nk.x + 9, Nk.y + Nk.h / 2 + 1, '#ff7fa0');
+    text(R, 'Neu anfangen', Nk.x + 18, Nk.y + 6, { fett: true, groesse: 5 });
     knopfFlaeche(c, Sk, '#d4f2ee', e.wahl === 'sichern');
-    // kleine Kiste mit Pfeil
-    r(c, Sk.x + 5, Sk.y + 10, 11, 8, P.kontur); r(c, Sk.x + 6, Sk.y + 11, 9, 6, '#ffe27a'); r(c, Sk.x + 10, Sk.y + 4, 1, 8, P.kontur); r(c, Sk.x + 8, Sk.y + 9, 5, 1, P.kontur);
-    text(R, 'Sichern', Sk.x + 21, Sk.y + 8, { fett: true, groesse: 6 });
-    r(c, E.x + 40, E.y + E.h - 18, 6, 4, '#9fd4ac');
-    text(R, 'Grüner Balken: der Tag endete vor der Grenze.' + (stimme ? '' : ' Vorlesen: keine Stimme da.'), E.x + 49, E.y + E.h - 19, { groesse: 5, farbe: '#7a5a9a' });
-    text(R, 'Öffnen: 3 Sekunden auf das Zahnrad drücken. Weniger Minuten gelten sofort.', W / 2, E.y + E.h - 10, { align: 'center', groesse: 5, farbe: '#7a5a9a' });
+    r(c, Sk.x + 4, Sk.y + 7, 10, 7, P.kontur); r(c, Sk.x + 5, Sk.y + 8, 8, 5, '#ffe27a'); r(c, Sk.x + 9, Sk.y + 2, 1, 7, P.kontur); r(c, Sk.x + 7, Sk.y + 6, 5, 1, P.kontur);
+    text(R, 'Sichern', Sk.x + 18, Sk.y + 6, { fett: true, groesse: 5 });
+    text(R, 'Grün = Tag vor Grenze · Zahnrad 3 Sek. halten', W / 2, E.y + E.h - 8, { align: 'center', groesse: 5, farbe: '#7a5a9a' });
     R.letzteEltern = info;
     return info;
   }

@@ -14,7 +14,7 @@
     { id: 'huhn', bild: 'huhn', name: 'Huhn', wer: 'Das Huhn', farbe: '#fff1c9', rand: '#e0ad3e' },
     { id: 'gecko', bild: 'gecko', name: 'Gecko', wer: 'Der Gecko', farbe: '#d4f2e6', rand: '#56b06c' }
   ];
-  var KONTO = 'finca.zeitkonto', LETZTES = 'finca.profil', RUHIG = 'finca.ruhig';
+  var KONTO = 'finca.zeitkonto', LETZTES = 'finca.profil', RUHIG = 'finca.ruhig', SCHLAFLIED = 'finca.schlaflied';
   var MAX_SEK = 24 * 3600;
 
   function hole(id) { for (var i = 0; i < LISTE.length; i++) if (LISTE[i].id === id) return LISTE[i]; return null; }
@@ -63,6 +63,16 @@
   function merkeLetztes(sp, id) { return schreib(sp, LETZTES, id); }
   function ladeRuhig(sp, std) { var v = lies(sp, RUHIG); return v === '1' ? true : (v === '0' ? false : !!std); }
   function schreibeRuhig(sp, an) { return schreib(sp, RUHIG, an ? '1' : '0'); }
+  // ab v0.15: gewaehltes Schlaflied A/B/C (pro Geraet, Elternbereich)
+  function ladeSchlafliedWahl(sp, std) {
+    var v = lies(sp, SCHLAFLIED), n = Dorf.Ton && Dorf.Ton.normalisiereLied ? Dorf.Ton.normalisiereLied(v || std || 'C') : String(v || std || 'C').toUpperCase();
+    return (n === 'A' || n === 'B' || n === 'C') ? n : 'C';
+  }
+  function schreibeSchlafliedWahl(sp, id) {
+    var n = Dorf.Ton && Dorf.Ton.normalisiereLied ? Dorf.Ton.normalisiereLied(id) : String(id || 'C').toUpperCase();
+    if (n !== 'A' && n !== 'B' && n !== 'C') n = 'C';
+    return schreib(sp, SCHLAFLIED, n);
+  }
 
   // Alte Spielstaende (bis v0.9, ein gemeinsamer Stand) gehoeren ab jetzt dem Esel-Profil
   function migriere(sp) {
@@ -187,12 +197,12 @@
 
   // ---------- ab v0.11: Sicherung als Text-Code (Spielstaende, Alben, Einstellungen; nie das Zeitkonto) ----------
   function erlaubt(k) {
-    if (k === GRENZEN || k === RUHIG || k === LETZTES || k === 'finca.stumm' || k === 'finca.vorlesen' || k === 'finca.vorleseart') return true;
+    if (k === GRENZEN || k === RUHIG || k === LETZTES || k === SCHLAFLIED || k === 'finca.stumm' || k === 'finca.vorlesen' || k === 'finca.vorleseart') return true;
     for (var i = 0; i < LISTE.length; i++) if (k === spielstandSchluessel(LISTE[i].id) || k === albumSchluessel(LISTE[i].id)) return true;
     return false;
   }
   function erlaubteSchluessel() {
-    var l = [GRENZEN, RUHIG, LETZTES, 'finca.stumm', 'finca.vorlesen', 'finca.vorleseart'];
+    var l = [GRENZEN, RUHIG, LETZTES, SCHLAFLIED, 'finca.stumm', 'finca.vorlesen', 'finca.vorleseart'];
     LISTE.forEach(function (p) { l.push(spielstandSchluessel(p.id), albumSchluessel(p.id)); });
     return l;
   }
@@ -281,5 +291,7 @@
     spielstandSchluessel: spielstandSchluessel, albumSchluessel: albumSchluessel, datum: datum,
     ladeKonto: ladeKonto, schreibeKonto: schreibeKonto, pruefeDatum: pruefeDatum, buche: buche, sekunden: sekunden,
     fertig: fertig, setzeFertig: setzeFertig, gespielt: gespielt, letztes: letztes, merkeLetztes: merkeLetztes,
-    ladeRuhig: ladeRuhig, schreibeRuhig: schreibeRuhig, migriere: migriere, uebersicht: uebersicht };
+    ladeRuhig: ladeRuhig, schreibeRuhig: schreibeRuhig, SCHLAFLIED: SCHLAFLIED,
+    ladeSchlafliedWahl: ladeSchlafliedWahl, schreibeSchlafliedWahl: schreibeSchlafliedWahl,
+    migriere: migriere, uebersicht: uebersicht };
 })(globalThis);

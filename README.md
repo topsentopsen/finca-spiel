@@ -1,4 +1,4 @@
-# Finca v0.14
+# Finca v0.15
 
 A small browser game with a handheld look, written in pure JavaScript. There is no build and no npm. Music and sounds are generated in code with WebAudio; from v0.13 the evening lullaby is one small MP3 in `assets/` (no other media files).
 
@@ -157,6 +157,11 @@ Next to the orange tree grow lemon trees. Lemons are their own ingredient (`zitr
 
 ## Version history
 - **v0.14** (24.10.2026): lemon trees in the garden (own fruit `zitrone` / llimona, yellow-green GBA style); Ensaïmada accepts lemon instead of orange; on phones only, portrait is preferred (`screen.orientation.lock('portrait')` when available, landscape shows a rotate-to-portrait tip). Desktop layout unchanged.
+
+## Schlaflied choice and portrait polish (from v0.15)
+
+- **v0.15** (24.10.2026): Elternbereich — choose lullaby A/B/C (Spieluhr/Gitarre, Sterne/Celesta, Flöte/Mallorca) with clear pastel icons; choice saved as `finca.schlaflied` (default C); all three MP3s in `assets/`. Mobile portrait: `.mobil`/`.quer` classes, orientation lock on gesture/fullscreen, landscape tip without hiding the game permanently. Desktop unchanged.
+
 - **v0.13** (24.10.2026): lullaby Variante C (flute / pad / guitar) as `assets/schlaflied-c.mp3` during "Bona nit"; iPhone silent-switch fix (playback session, wake interrupted context, slightly louder on phones).
 - **v0.12** (23.10.2026): evening book page "Heute" with today's sticker large and a calm sentence read aloud; short lullaby in "Bona nit" that ends by itself (no repeat button); week bars turn soft green when a day ended before the limit (no reward); read aloud switches for names, sentences and slower speech in the parent area; the top right buttons are hidden while the parent area is open.
 - **v0.11** (23.10.2026): parents set minutes per picture (5 to 15, never above 15) with minus and plus, weekly review as pixel bars in the parent area, backup and transfer as a code ("Sichern"). Gentle sign two minutes before the end (Biel says it once, a moon fades in). Three taps on an instrument play a little tune and give a music sticker. Picture names are read aloud in the chooser. Album with 16 stickers (new: song, guitar, bird, moon, star, butterfly).

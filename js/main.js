@@ -3,7 +3,7 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.14';
+  var VERSION = 'v0.15';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
   var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
@@ -19,13 +19,16 @@
   // ab v0.10: Elternbereich (3 Sekunden auf das Zahnrad drücken), Instrumente, Zoom am Handy
   var ELTERN_HALT = 3;
   // ab v0.11: je Bild eine Karte mit Minuten heute, Grenze (minus und plus) und 7 Balken fuer die Woche; unten drei Knoepfe
-  var ELTERN = { x: 30, y: 10, w: 260, h: 156, zu: { x: 262, y: 14, w: 24, h: 22 },
-    ruhig: { x: 42, y: 94, w: 56, h: 20 }, namen: { x: 102, y: 94, w: 56, h: 20 }, saetze: { x: 162, y: 94, w: 56, h: 20 },
-    langsam: { x: 222, y: 94, w: 56, h: 20 }, wechseln: { x: 42, y: 118, w: 76, h: 24 }, neu: { x: 122, y: 118, w: 76, h: 24 },
-    sichern: { x: 202, y: 118, w: 76, h: 24 }, bilder: [] };
+  // ab v0.15: Schlaflied A/B/C; Knoepfe mind. 20px hoch (Tests/Touch)
+  var ELTERN = { x: 30, y: 2, w: 260, h: 172, zu: { x: 262, y: 6, w: 24, h: 20 },
+    ruhig: { x: 42, y: 74, w: 56, h: 20 }, namen: { x: 102, y: 74, w: 56, h: 20 }, saetze: { x: 162, y: 74, w: 56, h: 20 },
+    langsam: { x: 222, y: 74, w: 56, h: 20 },
+    liedA: { x: 42, y: 98, w: 68, h: 24 }, liedB: { x: 116, y: 98, w: 68, h: 24 }, liedC: { x: 190, y: 98, w: 68, h: 24 },
+    wechseln: { x: 42, y: 126, w: 76, h: 20 }, neu: { x: 122, y: 126, w: 76, h: 20 },
+    sichern: { x: 202, y: 126, w: 76, h: 20 }, bilder: [] };
   [0, 1, 2].forEach(function (i) {
     var x = 42 + i * 80;
-    ELTERN.bilder.push({ x: x, y: 40, w: 76, h: 50, minus: { x: x + 2, y: 63, w: 18, h: 14 }, plus: { x: x + 56, y: 63, w: 18, h: 14 } });
+    ELTERN.bilder.push({ x: x, y: 24, w: 76, h: 44, minus: { x: x + 2, y: 46, w: 18, h: 14 }, plus: { x: x + 56, y: 46, w: 18, h: 14 } });
   });
   // ab v0.11: zwei Minuten vor Schluss ein sanftes Zeichen; drei Toene schnell hintereinander sind ein Lied
   var BALD_SEK = 120, LIED_ABSTAND = 3, LIED_TOENE = 3;
@@ -428,7 +431,8 @@
     var behalte = { eingabe: st.eingabe, ton: st.ton, debug: st.debug, speicher: st.speicher, fps: st.fps, vorlesen: st.vorlesen,
       profil: st.profil, profilGeladen: st.profilGeladen, konto: st.konto, ruhig: st.ruhig, darfSpeichern: st.darfSpeichern,
       datumJetzt: st.datumJetzt, sichern: st.sichern, albumFest: st.albumFest, elternDruck: st.elternDruck,
-      grenzen: st.grenzen, woche: st.woche, grenzenAendern: st.grenzenAendern, vorleseArt: st.vorleseArt };
+      grenzen: st.grenzen, woche: st.woche, grenzenAendern: st.grenzenAendern, vorleseArt: st.vorleseArt,
+      schlafliedWahl: st.schlafliedWahl, schlafliedAendern: st.schlafliedAendern };
     Object.keys(zusatz || {}).forEach(function (k) { behalte[k] = zusatz[k]; });
     var neu = erstelle({ seed: st.seed, eingabe: st.eingabe, zoom: st.zoom });
     Object.keys(st).forEach(function (k) { if (!(k in neu)) delete st[k]; });
@@ -541,9 +545,19 @@
     return a[k];
   }
   function setzeRuhig(st, an) { st.ruhig = !!an; st.ruhigAendern = true; st.speichernJetzt = true; klang(st, 'menue'); }
+  function setzeSchlaflied(st, id) {
+    var n = Dorf.Ton && Dorf.Ton.normalisiereLied ? Dorf.Ton.normalisiereLied(id) : String(id || 'C').toUpperCase();
+    if (n !== 'A' && n !== 'B' && n !== 'C') n = 'C';
+    if (st.schlafliedWahl === n) { klang(st, 'menue'); return n; }
+    st.schlafliedWahl = n; st.schlafliedAendern = true; st.speichernJetzt = true;
+    if (st.ton && st.ton.setzeSchlafliedWahl) st.ton.setzeSchlafliedWahl(n);
+    klang(st, 'menue');
+    return n;
+  }
   function elternTat(st, was) {
     if (was === 'zu') { schliesseEltern(st); return 'zu'; }
     if (was === 'ruhig') { setzeRuhig(st, !st.ruhig); return 'ruhig'; }
+    if (was === 'liedA' || was === 'liedB' || was === 'liedC') { setzeSchlaflied(st, was.charAt(4)); return was; }
     if (VORLESE_ART.indexOf(was) >= 0) { setzeVorleseArt(st, was); return was; }
     if (was === 'wechseln') { schliesseEltern(st); oeffneWahl(st, { zurueck: !!st.profilGeladen && !tagGesperrt(st) }); return 'wechseln'; }
     if (was === 'neu') { schliesseEltern(st); st.wahl = null; frageAuf(st); return 'frage'; }
@@ -565,12 +579,15 @@
     if (drin(ELTERN.sichern, bx, by)) return elternTat(st, 'sichern');
     if (drin(ELTERN.ruhig, bx, by)) return elternTat(st, 'ruhig');
     for (var j = 0; j < VORLESE_ART.length; j++) if (drin(ELTERN[VORLESE_ART[j]], bx, by)) return elternTat(st, VORLESE_ART[j]);
+    if (drin(ELTERN.liedA, bx, by)) return elternTat(st, 'liedA');
+    if (drin(ELTERN.liedB, bx, by)) return elternTat(st, 'liedB');
+    if (drin(ELTERN.liedC, bx, by)) return elternTat(st, 'liedC');
     if (drin(ELTERN.wechseln, bx, by)) return elternTat(st, 'wechseln');
     if (drin(ELTERN.neu, bx, by)) return elternTat(st, 'neu');
     if (!drin(ELTERN, bx, by)) return elternTat(st, 'zu');
     return 'nein';
   }
-  var ELTERN_REIHE = ['minus_esel', 'plus_esel', 'minus_huhn', 'plus_huhn', 'minus_gecko', 'plus_gecko', 'ruhig', 'namen', 'saetze', 'langsam', 'wechseln', 'neu', 'sichern', 'zu'];
+  var ELTERN_REIHE = ['minus_esel', 'plus_esel', 'minus_huhn', 'plus_huhn', 'minus_gecko', 'plus_gecko', 'ruhig', 'namen', 'saetze', 'langsam', 'liedA', 'liedB', 'liedC', 'wechseln', 'neu', 'sichern', 'zu'];
   function elternSchritt(st, e, dt) {
     var el = st.eltern; el.t += dt;
     if (el.stups) { el.stups.t -= dt; if (el.stups.t <= 0) el.stups = null; }
@@ -1020,6 +1037,9 @@
     if (speicher && P) P.migriere(speicher);
     var reduziert = !!(win.matchMedia && win.matchMedia('(prefers-reduced-motion: reduce)').matches);
     st.ruhig = speicher && P ? P.ladeRuhig(speicher, reduziert) : reduziert;
+    // ab v0.15: gewaehltes Schlaflied A/B/C (Default C = Tobis letzte Wahl)
+    st.schlafliedWahl = speicher && P && P.ladeSchlafliedWahl ? P.ladeSchlafliedWahl(speicher, 'C') : 'C';
+    if (ton && ton.setzeSchlafliedWahl) ton.setzeSchlafliedWahl(st.schlafliedWahl);
     // ab v0.11: Minuten pro Bild und Wochenrueckblick
     st.grenzen = P ? P.ladeGrenzen(speicher) : null;
     st.woche = speicher && P ? P.ladeWoche(speicher) : null;
@@ -1058,6 +1078,7 @@
       }
       if (speicher && st.vorleseArtAendern && Dorf.Vorlesen && st.vorleseArt) { Dorf.Vorlesen.schreibeArt(speicher, st.vorleseArt); st.vorleseArtAendern = false; }
       if (speicher && P && st.ruhigAendern) { P.schreibeRuhig(speicher, st.ruhig); st.ruhigAendern = false; }
+      if (speicher && P && st.schlafliedAendern && P.schreibeSchlafliedWahl) { P.schreibeSchlafliedWahl(speicher, st.schlafliedWahl); st.schlafliedAendern = false; }
       // ab v0.11: Grenzen sind eine Einstellung der Eltern (gilt auch beim Ausprobieren), die Woche nur mit echtem Stand
       if (speicher && P && st.grenzenAendern) { P.schreibeGrenzen(speicher, st.grenzen); st.grenzenAendern = false; }
       if (speicher && P && st.darfSpeichern && st.konto) { st.woche = P.merkeWoche(st.woche || P.ladeWoche(speicher), st.konto, st.grenzen || {}); P.schreibeWoche(speicher, st.woche); }
@@ -1228,7 +1249,8 @@
     if (doc.addEventListener) doc.addEventListener('visibilitychange', function () { if (ton) ton.pausiere(doc.hidden); if (doc.hidden) { sichere(); if (vorlesen) vorlesen.stopp(); } last = null; });
     if (win.addEventListener) win.addEventListener('pagehide', function () { sichere(); });
 
-    // ab v0.14: Hochformat nur auf dem Handy erzwingen (Desktop bleibt unverändert)
+    // ab v0.15: Hochformat nur auf dem Handy (istMobilGeraet). Desktop unveraendert.
+    // Klasse .mobil am <html> steuert Overlay zuverlaessiger als reine Media-Query (iOS).
   function istMobilGeraet() {
     try {
       if (win.matchMedia) {
@@ -1239,7 +1261,24 @@
     } catch (e) {}
     return false;
   }
+  function istQuerformat() {
+    try {
+      if (win.matchMedia && win.matchMedia('(orientation: landscape)').matches) return true;
+      return (win.innerWidth || 0) > (win.innerHeight || 0);
+    } catch (e) { return false; }
+  }
+  function mobilKlasse() {
+    try {
+      var root = doc.documentElement;
+      if (!root || !root.classList) return;
+      var mobil = istMobilGeraet();
+      root.classList.toggle('mobil', mobil);
+      // Overlay nur wenn wirklich mobil + landscape (nicht permanent stoerend)
+      root.classList.toggle('quer', mobil && istQuerformat());
+    } catch (e) {}
+  }
   function hochkantSperren() {
+    mobilKlasse();
     if (!istMobilGeraet()) return;
     try {
       var o = win.screen && win.screen.orientation;
@@ -1278,8 +1317,16 @@
       R.obenBreite = Math.ceil(anzahl * bw + (anzahl - 1) * 2 + 2 + 3);
       R.knopfAnzahl = anzahl;
     }
-    win.addEventListener('resize', groesse);
-    win.addEventListener('orientationchange', hochkantSperren);
+    win.addEventListener('resize', function () { groesse(); mobilKlasse(); });
+    win.addEventListener('orientationchange', function () { hochkantSperren(); groesse(); });
+    // Orientation-Lock braucht oft eine Geste (iOS/Android); bei Touch und Vollbild erneut versuchen
+    ['pointerdown', 'touchstart', 'click'].forEach(function (ev) {
+      if (doc.addEventListener) doc.addEventListener(ev, function () { hochkantSperren(); }, { passive: true, once: false });
+    });
+    if (doc.addEventListener) {
+      doc.addEventListener('fullscreenchange', hochkantSperren);
+      doc.addEventListener('webkitfullscreenchange', hochkantSperren);
+    }
     groesse();
     hochkantSperren();
     zeigeVorlesen();
@@ -1345,7 +1392,7 @@
   }
 
   Dorf.Spiel = { STANDARD_SEED: STANDARD_SEED, VERSION: VERSION, KOCHDAUER: KOCHDAUER, PORTIONEN: PORTIONEN, erstelle: erstelle, schritt: schritt, sage: sage, klick: klick, klickBild: klickBild, kochen: kochen, streichle: streichle, tierPlatz: tierPlatz, oeffneMenue: oeffneMenue, zumHerd: zumHerd, frageAuf: frageAuf, neuAnfangen: neuAnfangen, rette: rette, naechstesZiel: naechstesZiel, kontext: kontext, tueKontext: tueKontext, sammle: sammle, FLUG_KORB: FLUG_KORB, AKTION_PULS: AKTION_PULS, AKTION_NAME: AKTION_NAME, FRAGE: FRAGE, ABEND_SPERRE: ABEND_SPERRE, LAMPEN: LAMPEN, TIPP_DAUER: TIPP_DAUER, SPEICHER_TAKT: SPEICHER_TAKT, menueKarten: menueKarten, MENUE: MENUE, TAFEL_MAX: TAFEL_MAX, starte: starte, ABEND: ABEND, abendHerzen: abendHerzen, BUCH: BUCH, BUCH_SEITEN: BUCH_SEITEN, ALBUM_SEITE: ALBUM_SEITE, HEUTE_SEITE: HEUTE_SEITE, buchSeiten: buchSeiten, ansage: ansage, MENUE_BUCH: MENUE_BUCH, oeffneBuch: oeffneBuch, schliesseBuch: schliesseBuch, blaettere: blaettere, WACKEL: WACKEL, MENUE_ZU: MENUE_ZU, gaehnen: gaehnen, GAEHN: GAEHN,
-    waehleProfil: waehleProfil, oeffneWahl: oeffneWahl, oeffneEltern: oeffneEltern, schliesseEltern: schliesseEltern, elternTat: elternTat, musiziere: musiziere,
+    waehleProfil: waehleProfil, oeffneWahl: oeffneWahl, oeffneEltern: oeffneEltern, schliesseEltern: schliesseEltern, elternTat: elternTat, setzeSchlaflied: setzeSchlaflied, musiziere: musiziere,
     wahlKarten: wahlKarten, ELTERN: ELTERN, ELTERN_HALT: ELTERN_HALT, VORLESE_ART: VORLESE_ART, vorleseArt: vorleseArt, ladeProfil: ladeProfil, heute: heute, tagGesperrt: tagGesperrt, HERZCHEN_MAX: HERZCHEN_MAX, NOTEN_MAX: NOTEN_MAX,
     uhrZeit: uhrZeit, grenzeSek: grenzeSek, grenzeAendern: grenzeAendern, BALD_SEK: BALD_SEK, LIED_ABSTAND: LIED_ABSTAND, LIED_TOENE: LIED_TOENE, ELTERN_REIHE: ELTERN_REIHE };
 
