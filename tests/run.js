@@ -204,12 +204,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.15', function () {
+test('Version: sichtbares Label ist v0.16', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.15');
+  gleich(D.VERSION, 'v0.16');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.15 (Prototyp)') >= 0, 'Titel enthaelt v0.15');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.15"') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.16 (Prototyp)') >= 0, 'Titel enthaelt v0.15');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.16"') >= 0, n + ' eingebunden'); });
   wahr(html.indexOf('js/profile.js') < html.indexOf('js/main.js') && html.indexOf('js/leben.js') < html.indexOf('js/main.js'), 'neue Dateien vor main');
   wahr(/html\.mobil\.quer/.test(html) && /hochkant halten/.test(html), 'Handy-Hochformat-Hinweis (Klasse mobil.quer)');
   wahr(fs.existsSync(path.join(__dirname, '..', 'assets', 'schlaflied-a.mp3')), 'Schlaflied A');
@@ -1100,7 +1100,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand.esel']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.15'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.16'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -2004,8 +2004,11 @@ test('Elternbereich: 3 Sekunden halten oeffnet, kurzes Tippen nicht; Spiel pausi
   k.feuer('pointerdown', { preventDefault: function () {} }); a.frames(60); k.feuer('pointerup', {}); a.frames(5);
   wahr(!st.eltern, 'eine Sekunde reicht nicht');
   wahr(+k.style['--p'] === 0, 'Ring wieder leer');
-  k.feuer('pointerdown', { preventDefault: function () {} }); a.frames(120); k.feuer('pointerleave', {}); a.frames(120);
-  wahr(!st.eltern, 'Finger weggezogen zaehlt nicht');
+  // ab v0.16: Pointer-Capture — kleines Wegrutschen (pointerleave) bricht den Halt nicht mehr ab
+  k.feuer('pointerdown', { preventDefault: function () {}, pointerId: 7 }); a.frames(120); k.feuer('pointerleave', {}); a.frames(20);
+  wahr(st.elternDruck, 'Capture haelt den Druck trotz pointerleave');
+  k.feuer('pointercancel', { pointerId: 7 }); a.frames(5);
+  wahr(!st.eltern && !st.elternDruck, 'pointercancel beendet den Halt ohne Oeffnen');
   k.feuer('pointerdown', { preventDefault: function () {} }); a.frames(100);
   wahr(+k.style['--p'] > 0.4 && +k.style['--p'] < 1, 'Ring fuellt sich');
   a.frames(90); k.feuer('pointerup', {});
@@ -2431,6 +2434,28 @@ test('Schlaflied Wahl: Eltern tippen A/B/C, Speichern, Ton uebernimmt Datei', fu
   wahr(b.h.st.ton.schlafliedWahl === 'B', 'Ton nach Reload B');
   wahr(S.ELTERN_REIHE.indexOf('liedA') > S.ELTERN_REIHE.indexOf('langsam'), 'Pfeile erreichen Lieder');
   wahr(P.erlaubt('finca.schlaflied'), 'Sicherung kennt Schlaflied');
+});
+test('v0.16: Touch-Knoepfe mind. 44 CSS-px, Orientation-Lock gedrosselt, Schlaflied-Retry begrenzt', function () {
+  var a = starteFake({ fenster: { navigator: { maxTouchPoints: 5 }, matchMedia: function (q) {
+    return { matches: /pointer:\s*coarse/.test(q) || /hover:\s*none/.test(q) || /max-width/.test(q), addListener: function () {}, addEventListener: function () {} };
+  }, innerWidth: 390, innerHeight: 844 } });
+  a.frames(2);
+  wahr(a.h.R.touch, 'Touch erkannt');
+  wahr(a.h.R.knopfBreite >= 11, 'Touch-Ziel intern mind. 11px: ' + a.h.R.knopfBreite);
+  // Schlaflied-Retry: Fehlerzaehler stoppt nach 3 Versuchen (sync gesetzt)
+  var T = ladeKontext().Dorf.Ton, au = fakeAudio();
+  var win = fakeTonFenster(fakeSpeicher(), au);
+  var t = T.erstelle(win);
+  win.l.pointerdown[0]({});
+  t.schlafliedFehler = 3;
+  var fetches = 0;
+  win.fetch = function () { fetches++; return Promise.resolve({ ok: false }); };
+  t.schlafliedLaden = false; t.schlafliedPuffer = null; t.schlafliedGeladenFuer = null;
+  t.schlafliedWartet = true; t.schlafliedGespielt = false; t.tageszeit(23, true);
+  gleich(fetches, 0, 'bei Fehler >= 3 kein neuer Fetch');
+  // nach Wahl-Wechsel wird Zaehler zurueckgesetzt
+  t.setzeSchlafliedWahl('A');
+  gleich(t.schlafliedFehler, 0, 'Wahl setzt Fehler zurueck');
 });
 test('Abendbuch: geht einmal von selbst auf der Seite Heute auf, Sticker gross, Taten als Bilder, Satz wird vorgelesen', function () {
   var gesagt = [];

@@ -3,7 +3,7 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.15';
+  var VERSION = 'v0.16';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
   var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
@@ -1166,10 +1166,19 @@
     // ab v0.10: der Elternbereich steckt hinter dem kleinen Zahnrad: 3 Sekunden gedrueckt halten (ein Ring fuellt sich)
     var elternKnopf = doc.getElementById('eltern-knopf');
     if (elternKnopf && elternKnopf.addEventListener) {
-      var los = function (ev) { if (ev && ev.preventDefault) ev.preventDefault(); if (ton) ton.entsperre(); st.elternDruck = true; };
-      var halt = function () { st.elternDruck = false; };
+      // ab v0.16: Pointer-Capture, damit ein kleines Wegrutschen den 3-Sekunden-Halt nicht abbricht
+      var los = function (ev) {
+        if (ev && ev.preventDefault) ev.preventDefault();
+        if (ton) ton.entsperre(); st.elternDruck = true;
+        try { if (ev && ev.pointerId != null && elternKnopf.setPointerCapture) elternKnopf.setPointerCapture(ev.pointerId); } catch (e) {}
+      };
+      var halt = function (ev) {
+        st.elternDruck = false;
+        try { if (ev && ev.pointerId != null && elternKnopf.releasePointerCapture) elternKnopf.releasePointerCapture(ev.pointerId); } catch (e) {}
+      };
       elternKnopf.addEventListener('pointerdown', los);
-      ['pointerup', 'pointerleave', 'pointercancel', 'blur'].forEach(function (n) { elternKnopf.addEventListener(n, halt); });
+      // pointerleave absichtlich weg: Capture haelt den Druck, cancel/up/blur beenden
+      ['pointerup', 'pointercancel', 'blur'].forEach(function (n) { elternKnopf.addEventListener(n, halt); });
       elternKnopf.addEventListener('keydown', function (ev) { if (ev.key === 'Enter' || ev.key === ' ') { if (ev.preventDefault) ev.preventDefault(); if (!ev.repeat) st.elternDruck = true; } });
       elternKnopf.addEventListener('keyup', halt);
       elternKnopf.addEventListener('contextmenu', function (ev) { if (ev.preventDefault) ev.preventDefault(); });
@@ -1277,20 +1286,28 @@
       root.classList.toggle('quer', mobil && istQuerformat());
     } catch (e) {}
   }
-  function hochkantSperren() {
+  var hochkantZuletzt = 0, hochkantOk = false;
+  function hochkantSperren(erzwingen) {
     mobilKlasse();
     if (!istMobilGeraet()) return;
+    var jetzt = (win.performance && win.performance.now) ? win.performance.now() : Date.now();
+    // ab v0.16: hoechstens alle 2 s locken (sonst 3× pro Tipp abgelehnte Promises)
+    if (!erzwingen && hochkantOk) return;
+    if (!erzwingen && jetzt - hochkantZuletzt < 2000) return;
+    hochkantZuletzt = jetzt;
     try {
       var o = win.screen && win.screen.orientation;
       if (o && typeof o.lock === 'function') {
         var p = o.lock('portrait');
-        if (p && typeof p.catch === 'function') p.catch(function () {});
+        if (p && typeof p.then === 'function') {
+          p.then(function () { hochkantOk = true; }).catch(function () { hochkantOk = false; });
+        } else { hochkantOk = true; }
       }
-    } catch (e) {}
+    } catch (e) { hochkantOk = false; }
     try {
-      if (win.screen && typeof win.screen.lockOrientation === 'function') win.screen.lockOrientation('portrait');
-      else if (win.screen && typeof win.screen.mozLockOrientation === 'function') win.screen.mozLockOrientation('portrait');
-      else if (win.screen && typeof win.screen.msLockOrientation === 'function') win.screen.msLockOrientation('portrait');
+      if (win.screen && typeof win.screen.lockOrientation === 'function') { win.screen.lockOrientation('portrait'); hochkantOk = true; }
+      else if (win.screen && typeof win.screen.mozLockOrientation === 'function') { win.screen.mozLockOrientation('portrait'); hochkantOk = true; }
+      else if (win.screen && typeof win.screen.msLockOrientation === 'function') { win.screen.msLockOrientation('portrait'); hochkantOk = true; }
     } catch (e2) {}
   }
     function groesse() {
@@ -1312,23 +1329,22 @@
       if (rahmen && rahmen.style && rahmen.style.setProperty) rahmen.style.setProperty('--s', String(s));
       if (ui) { ui.width = Math.round(Dorf.Render.W * s * dpr); ui.height = Math.round(Dorf.Render.H * s * dpr); ui.style.width = cw; ui.style.height = ch; R.uiSkala = s * dpr; }
       // Platz der Knoepfe oben rechts in internen Pixeln, damit der Hilfetext nicht darunter liegt
-      var bw = R.touch ? Math.max(36 / s, 11) : Math.max(26 / s, 9), anzahl = ((vollKnopf && vollGeht) ? 3 : 2) + (elternKnopf ? 1 : 0) + (buchKnopf ? 1 : 0) + (vorlesenKnopf && vorlesen && vorlesen.verfuegbar ? 1 : 0);
+      // ab v0.16: auf Touch mind. ~44 CSS-px (Kinderfinger), Desktop wie bisher
+      var bw = R.touch ? Math.max(44 / s, 11) : Math.max(26 / s, 9), anzahl = ((vollKnopf && vollGeht) ? 3 : 2) + (elternKnopf ? 1 : 0) + (buchKnopf ? 1 : 0) + (vorlesenKnopf && vorlesen && vorlesen.verfuegbar ? 1 : 0);
       R.knopfBreite = bw;
       R.obenBreite = Math.ceil(anzahl * bw + (anzahl - 1) * 2 + 2 + 3);
       R.knopfAnzahl = anzahl;
     }
     win.addEventListener('resize', function () { groesse(); mobilKlasse(); });
-    win.addEventListener('orientationchange', function () { hochkantSperren(); groesse(); });
-    // Orientation-Lock braucht oft eine Geste (iOS/Android); bei Touch und Vollbild erneut versuchen
-    ['pointerdown', 'touchstart', 'click'].forEach(function (ev) {
-      if (doc.addEventListener) doc.addEventListener(ev, function () { hochkantSperren(); }, { passive: true, once: false });
-    });
+    win.addEventListener('orientationchange', function () { hochkantOk = false; hochkantSperren(true); groesse(); });
+    // ab v0.16: Lock nur bei pointerup (eine Geste) und Vollbild/Orientierungswechsel — gedrosselt
     if (doc.addEventListener) {
-      doc.addEventListener('fullscreenchange', hochkantSperren);
-      doc.addEventListener('webkitfullscreenchange', hochkantSperren);
+      doc.addEventListener('pointerup', function () { hochkantSperren(false); }, { passive: true });
+      doc.addEventListener('fullscreenchange', function () { hochkantOk = false; hochkantSperren(true); });
+      doc.addEventListener('webkitfullscreenchange', function () { hochkantOk = false; hochkantSperren(true); });
     }
     groesse();
-    hochkantSperren();
+    hochkantSperren(true);
     zeigeVorlesen();
 
     // Fehlerschutz (ab v0.6): die Schleife bittet immer zuerst um den naechsten Frame. Geht in Logik, Ton oder
@@ -1340,8 +1356,11 @@
       if (fehler.folge >= 3) { try { rette(st); } catch (e2) { /* weiter */ } fehler.folge = 0; }
     }
     function frame(t) {
+      // Fehlerschutz: immer zuerst den naechsten Frame bestellen
       win.requestAnimationFrame(frame);
       if (!isFinite(t)) t = last === null ? 0 : last + 16.7;
+      // ab v0.16: auf ~60 fps deckeln (ProMotion/120 Hz bringt Pixelart nichts)
+      if (last !== null && (t - last) < 15) return;
       if (last === null) last = t;
       var roh = Math.max(0, (t - last) / 1000), dt = Math.min(0.05, roh); last = t;
       var ok = true;

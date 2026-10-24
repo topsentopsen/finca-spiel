@@ -1,4 +1,4 @@
-# Finca v0.15
+# Finca v0.16
 
 A small browser game with a handheld look, written in pure JavaScript. There is no build and no npm. Music and sounds are generated in code with WebAudio; from v0.13 the evening lullaby is one small MP3 in `assets/` (no other media files).
 
@@ -161,6 +161,8 @@ Next to the orange tree grow lemon trees. Lemons are their own ingredient (`zitr
 ## Schlaflied choice and portrait polish (from v0.15)
 
 - **v0.15** (24.10.2026): Elternbereich — choose lullaby A/B/C (Spieluhr/Gitarre, Sterne/Celesta, Flöte/Mallorca) with clear pastel icons; choice saved as `finca.schlaflied` (default C); all three MP3s in `assets/`. Mobile portrait: `.mobil`/`.quer` classes, orientation lock on gesture/fullscreen, landscape tip without hiding the game permanently. Desktop unchanged.
+- **v0.16** (24.10.2026): quieter under the hood — throttle orientation lock, cap ~60 fps, touch targets ≥44px, pointer-capture on parent gear, lullaby load retries capped at 3.
+
 
 - **v0.13** (24.10.2026): lullaby Variante C (flute / pad / guitar) as `assets/schlaflied-c.mp3` during "Bona nit"; iPhone silent-switch fix (playback session, wake interrupted context, slightly louder on phones).
 - **v0.12** (23.10.2026): evening book page "Heute" with today's sticker large and a calm sentence read aloud; short lullaby in "Bona nit" that ends by itself (no repeat button); week bars turn soft green when a day ended before the limit (no reward); read aloud switches for names, sentences and slower speech in the parent area; the top right buttons are hidden while the parent area is open.

@@ -282,10 +282,12 @@
     t.schlafliedPuffer = null; t.schlafliedLaden = false; t.schlafliedWartet = false;
     t.schlafliedWahl = SCHLAFLIED.variante || 'C';
     t.schlafliedGeladenFuer = null;
+    t.schlafliedFehler = 0;   // ab v0.16: max. 3 Ladeversuche, dann still
     function metaJetzt() { return schlafliedMeta(t.schlafliedWahl); }
     function ladeSchlaflied() {
       if (t.schlafliedLaden || !t.ctx) return;
       if (t.schlafliedPuffer && t.schlafliedGeladenFuer === t.schlafliedWahl) return;
+      if (t.schlafliedFehler >= 3) return;   // offline/404: nicht bei jedem Tipp neu versuchen
       // Tests und Offline: Puffer kann schon gesetzt sein. Sonst Datei laden.
       if (typeof t.schlafliedPufferSetzen === 'function') return;
       var fetchFn = win.fetch;
@@ -303,9 +305,9 @@
       }).then(function (buf) {
         // nur uebernehmen, wenn die Wahl inzwischen nicht gewechselt wurde
         if (t.schlafliedWahl !== fuer) { t.schlafliedLaden = false; ladeSchlaflied(); return; }
-        t.schlafliedPuffer = buf; t.schlafliedGeladenFuer = fuer; t.schlafliedLaden = false;
+        t.schlafliedPuffer = buf; t.schlafliedGeladenFuer = fuer; t.schlafliedLaden = false; t.schlafliedFehler = 0;
         if (t.schlafliedWartet && !t.schlafliedGespielt && !t.stumm) { t.schlafliedWartet = false; schlafliedStart(); }
-      }).catch(function () { t.schlafliedLaden = false; });
+      }).catch(function () { t.schlafliedLaden = false; t.schlafliedFehler++; });
     }
     t.setzeSchlafliedWahl = function (id) {
       var n = normalisiereLied(id), meta = schlafliedMeta(n);
@@ -317,7 +319,7 @@
       SCHLAFLIED.variante = meta.variante; SCHLAFLIED.max = meta.max; SCHLAFLIED.vorlauf = SCHLAFLIED_VORLAUF;
       // laufendes Lied stoppen und neuen Puffer laden
       schlafliedStopp(); t.schlafliedGespielt = false;
-      t.schlafliedPuffer = null; t.schlafliedGeladenFuer = null;
+      t.schlafliedPuffer = null; t.schlafliedGeladenFuer = null; t.schlafliedFehler = 0;
       if (t.bereit && !t.stumm) ladeSchlaflied();
       return n;
     };
