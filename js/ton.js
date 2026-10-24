@@ -1,31 +1,32 @@
 /* Musik und Geraeusche, komplett im eigenen Code mit WebAudio erzeugt (ab v0.3).
-   Ruhige gezupfte Gitarrenschleife (Karplus-Strong), leise Effekte, Brunnenrauschen.
+   Fröhliche gezupfte Gitarrenschleife in C-Dur (Karplus-Strong), leise Effekte, Brunnenrauschen.
    Startet erst nach der ersten Beruehrung oder Taste (Regel der Browser). */
 (function (g) {
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
 
   var SCHLUESSEL = 'finca.stumm';
-  var BPM = 66;                        // langsam und entspannt
+  var BPM = 76;                        // ab v0.21: etwas frischeres Tempo (weiter kindgerecht)
   var ACHTEL = 60 / BPM / 2;           // Sekunden pro Achtel
   var LAUT = { gesamt: 0.6, musik: 0.55, effekte: 0.9, umgebung: 0.05, grillen: 0.06, handy: 1.6 };   // handy: etwa 4 dB mehr fuer kleine Lautsprecher
   var UEBERBLENDEN = 2.5;              // Zeitkonstante in Sekunden fuer Tag zu Abend (ganz weich)
 
-  // Akkorde in MIDI: Bass und drei Toene. Spanische Kadenz in a-Moll, sanft gezupft.
+  // Akkorde in MIDI: Bass und drei Toene. Ab v0.21 helle C-Dur-Kadenz (I–V–vi–IV), sanft gezupft.
   var AKKORDE = {
-    Am: [45, 57, 60, 64], G: [43, 55, 59, 62], F: [41, 53, 57, 60], E: [40, 56, 59, 64], Dm: [38, 50, 57, 62]
+    C: [48, 60, 64, 67], G: [43, 55, 59, 62], Am: [45, 57, 60, 64], F: [41, 53, 57, 60],
+    Em: [40, 52, 55, 59], Dm: [38, 50, 53, 57], E: [40, 56, 59, 64]
   };
-  var FOLGE = ['Am', 'G', 'F', 'E', 'Dm', 'Am', 'F', 'E'];
-  // Zupfmuster pro Takt (8 Achtel): 0 = Bass, 1..3 = Akkordtoene
-  var MUSTER = [0, 1, 2, 3, 1, 2, 3, 2];
-  // Kleine Melodie, nur in jeder zweiten Runde: [Takt, Achtel, MIDI]
-  var MELODIE = [[0, 0, 76], [0, 4, 72], [1, 0, 74], [1, 4, 71], [2, 0, 72], [2, 3, 69], [2, 5, 72], [3, 0, 71], [3, 4, 68],
-    [4, 0, 69], [4, 4, 74], [5, 0, 72], [5, 4, 76], [6, 0, 77], [6, 3, 76], [6, 5, 74], [7, 0, 71], [7, 4, 68]];
+  var FOLGE = ['C', 'G', 'Am', 'F', 'C', 'G', 'F', 'G'];
+  // Zupfmuster pro Takt (8 Achtel): 0 = Bass, 1..3 = Akkordtoene — etwas luftiger
+  var MUSTER = [0, 1, 2, 1, 3, 2, 1, 2];
+  // Kleine Melodie, nur in jeder zweiten Runde: [Takt, Achtel, MIDI] — hellere Intervalle
+  var MELODIE = [[0, 0, 72], [0, 4, 76], [1, 0, 79], [1, 4, 76], [2, 0, 77], [2, 3, 74], [2, 5, 72], [3, 0, 76], [3, 4, 79],
+    [4, 0, 81], [4, 4, 79], [5, 0, 76], [5, 4, 74], [6, 0, 72], [6, 3, 74], [6, 5, 76], [7, 0, 79], [7, 4, 72]];
 
-  // Abendvariante (ab v0.4): gleiche Akkorde, aber sparsamer gezupft, tiefer und mit Schlaflied-Melodie
+  // Abendvariante: gleiche Dur-Folge, sparsamer gezupft, ruhigere Melodie
   var MUSTER_ABEND = [[0, 0], [2, 1], [3, 2], [4, 3], [6, 2]];     // [Achtel, Stufe]
-  var MELODIE_ABEND = [[0, 0, 72], [0, 4, 69], [1, 0, 71], [1, 4, 67], [2, 0, 69], [2, 4, 65], [3, 0, 68], [3, 6, 64],
-    [4, 0, 65], [4, 4, 69], [5, 0, 64], [5, 4, 67], [6, 0, 69], [6, 4, 72], [7, 0, 71], [7, 4, 68]];
+  var MELODIE_ABEND = [[0, 0, 72], [0, 4, 67], [1, 0, 71], [1, 4, 67], [2, 0, 69], [2, 4, 72], [3, 0, 74], [3, 6, 72],
+    [4, 0, 76], [4, 4, 72], [5, 0, 71], [5, 4, 67], [6, 0, 69], [6, 4, 72], [7, 0, 71], [7, 4, 67]];
 
   // ab v0.12 / v0.13: Schlaflied fuer "Bona nit". Spielt einmal pro Abend und hoert von selbst auf.
   // ab v0.15: drei Varianten A/B/C als Dateien; Wahl im Elternbereich (gespeichert als finca.schlaflied).

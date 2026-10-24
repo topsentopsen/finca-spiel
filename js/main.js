@@ -3,7 +3,7 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.20';
+  var VERSION = 'v0.21';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
   var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
@@ -155,7 +155,7 @@
     if (st.menue) { schliesseMenue(st); return 'zurueck'; }
     var karte = st.karte, K = karte.kachel, T = Dorf.Karte.T;
     var tx = Math.floor(wx / K), ty = Math.floor(wy / K), sp = st.spieler, ziel = null, aktion = null;
-    // ab v0.20: im Boot → Meer/Strand tippen zum Segeln; Boot tippen zum Aussteigen
+    // ab v0.20: im Boot → Meer tippen zum Segeln (Strand nur landen); Boot tippen zum Aussteigen
     if (st.wasser && Dorf.Wasser && st.wasser.boot && st.wasser.boot.besetzt) {
       var bootHit = Dorf.Wasser.bootAn(st.wasser, wx, wy, st.eingabe.touch ? 18 : 14);
       if (bootHit) { tippBoot(st); return 'boot'; }

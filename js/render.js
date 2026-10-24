@@ -237,50 +237,61 @@
   }
 
   // ab v0.20: kleines Pastell-Ruderboot (dicke Kontur)
+  // ab v0.21: Boot etwas groesser
   function zeichneBoot(c, b, sx, sy, zeit, besetzt) {
     var bob = Math.round(Math.sin((b.phase || 0) * 2.4 + zeit) * (besetzt ? 1.2 : 0.8));
     var x = Math.round(sx), y = Math.round(sy) + bob;
     var links = b.dir === 'links';
     c.save();
     if (links) { c.translate(x, y); c.scale(-1, 1); x = 0; y = 0; }
-    ellipse(c, x, y + 3, 11, 3, 'rgba(74,52,120,0.18)');
-    // Rumpf
-    rr(c, x - 11, y - 4, 22, 8, P.kontur);
-    rr(c, x - 10, y - 3, 20, 6, '#f0b27a');
-    r(c, x - 8, y - 1, 16, 2, '#e09a5c');
+    ellipse(c, x, y + 4, 14, 4, 'rgba(74,52,120,0.18)');
+    // Rumpf (breiter/hoeher)
+    rr(c, x - 14, y - 5, 28, 10, P.kontur);
+    rr(c, x - 13, y - 4, 26, 8, '#f0b27a');
+    r(c, x - 11, y - 1, 22, 3, '#e09a5c');
     // Bordkante hell
-    r(c, x - 9, y - 3, 18, 1, '#ffe0b8');
-    // kleiner Mast + Wimpel
-    r(c, x + 1, y - 14, 2, 11, P.kontur); r(c, x + 2, y - 13, 1, 9, '#d9c2a0');
-    r(c, x + 3, y - 13, 5, 3, P.kontur); r(c, x + 3, y - 12, 4, 2, '#ff9fb0');
+    r(c, x - 12, y - 4, 24, 2, '#ffe0b8');
+    // Bug-Spitze leicht gerundet (Pixel)
+    r(c, x + 12, y - 2, 2, 4, '#f0b27a');
+    // Mast + Wimpel
+    r(c, x + 1, y - 18, 2, 14, P.kontur); r(c, x + 2, y - 17, 1, 12, '#d9c2a0');
+    r(c, x + 3, y - 17, 7, 4, P.kontur); r(c, x + 3, y - 16, 6, 2, '#ff9fb0');
     // Sitzbank
-    r(c, x - 5, y - 2, 8, 2, '#c98b5e');
+    r(c, x - 6, y - 2, 10, 2, '#c98b5e');
     c.restore();
     return bob;
   }
-  // ab v0.20: aufblasbarer Flamingo (cute, Pastell)
+  // ab v0.21: aufblasbarer Flamingo (Pastell, klarere Form, Shine)
   function zeichneFlamingo(c, f, sx, sy, zeit, besetzt) {
     var bob = Math.round(Math.sin((f.phase || 0) * 2.2 + zeit) * 1.5);
     var x = Math.round(sx), y = Math.round(sy) + bob;
-    var rosa = '#ff9fb8', rosa2 = '#ffc0d4', rosa3 = '#ff7fa0';
-    ellipse(c, x, y + 4, 12, 3, 'rgba(74,52,120,0.16)');
-    // Ring / Koerper
-    kreis(c, x, y, 11, P.kontur);
-    kreis(c, x, y, 10, rosa);
-    kreis(c, x, y, 6, rosa2);
-    kreis(c, x, y, 4, '#fff6f9');
-    // Hals nach oben rechts
-    r(c, x + 6, y - 8, 3, 8, P.kontur); r(c, x + 7, y - 7, 1, 6, rosa);
-    r(c, x + 5, y - 12, 5, 4, P.kontur); r(c, x + 6, y - 11, 3, 2, rosa3);
-    // Schnabel
-    r(c, x + 10, y - 11, 3, 2, P.kontur); r(c, x + 10, y - 10, 2, 1, '#ffcf70');
-    // Auge
-    r(c, x + 7, y - 11, 1, 1, P.kontur);
-    // kleiner Fluegel-Hint
-    r(c, x - 8, y - 1, 4, 2, P.kontur); r(c, x - 7, y, 3, 1, rosa3);
+    var rosa = '#ff9fb8', rosa2 = '#ffc4d8', rosa3 = '#ff7fa6', hell = '#ffe6ef';
+    ellipse(c, x, y + 5, 13, 4, 'rgba(74,52,120,0.16)');
+    // Aufblas-Ring (dicker, mit Innenloch)
+    kreis(c, x, y, 12, P.kontur);
+    kreis(c, x, y, 11, rosa);
+    kreis(c, x, y, 8, rosa2);
+    kreis(c, x, y, 5, hell);
+    kreis(c, x, y, 3, '#fffafc');
+    // Glanzstreifen (aufblasbar)
+    r(c, x - 7, y - 6, 3, 1, '#ffffff');
+    r(c, x - 8, y - 4, 2, 1, '#ffffff');
+    // Ventil hinten links (kleiner Nupsi)
+    r(c, x - 12, y - 1, 2, 2, P.kontur); r(c, x - 11, y, 1, 1, rosa3);
+    // Fluegel-Buckel
+    rr(c, x - 9, y - 3, 6, 4, P.kontur); rr(c, x - 8, y - 2, 4, 2, rosa3);
+    // S-Hals (gestuft)
+    r(c, x + 7, y - 6, 3, 5, P.kontur); r(c, x + 8, y - 5, 1, 3, rosa);
+    r(c, x + 6, y - 11, 4, 5, P.kontur); r(c, x + 7, y - 10, 2, 3, rosa2);
+    // Kopf
+    rr(c, x + 5, y - 15, 7, 5, P.kontur); rr(c, x + 6, y - 14, 5, 3, rosa3);
+    // Auge mit Huebchen
+    r(c, x + 8, y - 13, 2, 2, '#ffffff'); r(c, x + 9, y - 12, 1, 1, P.kontur);
+    // Schnabel (geknickt, pastell-gelb)
+    r(c, x + 12, y - 13, 3, 2, P.kontur); r(c, x + 12, y - 12, 2, 1, '#ffd27a');
+    r(c, x + 14, y - 12, 2, 2, P.kontur); r(c, x + 14, y - 11, 1, 1, '#ffb070');
     if (besetzt) {
-      // Glitzer
-      if (Math.floor(zeit * 3) % 2 === 0) r(c, x - 3, y - 5, 1, 1, '#fff8ee');
+      if (Math.floor(zeit * 3) % 2 === 0) { r(c, x - 2, y - 6, 1, 1, '#fff8ee'); r(c, x + 3, y - 4, 1, 1, '#fff8ee'); }
     }
     return bob;
   }

@@ -204,12 +204,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.20', function () {
+test('Version: sichtbares Label ist v0.21', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.20');
+  gleich(D.VERSION, 'v0.21');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.20 (Prototyp)') >= 0, 'Titel enthaelt v0.20');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.20"') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.21 (Prototyp)') >= 0, 'Titel enthaelt v0.21');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.21"') >= 0, n + ' eingebunden'); });
   wahr(html.indexOf('js/profile.js') < html.indexOf('js/main.js') && html.indexOf('js/leben.js') < html.indexOf('js/main.js'), 'neue Dateien vor main');
   wahr(/html\.mobil\.quer/.test(html) && /hochkant halten/.test(html), 'Handy-Hochformat-Hinweis (Klasse mobil.quer)');
   wahr(fs.existsSync(path.join(__dirname, '..', 'assets', 'schlaflied-a.mp3')), 'Schlaflied A');
@@ -441,15 +441,15 @@ function fakeTonFenster(speicher, audio) {
   };
 }
 
-test('Musik: ruhige Schleife in a-Moll, langsames Tempo, Melodie nur jede zweite Runde', function () {
+test('Musik: fröhliche Schleife in C-Dur, kindgerechtes Tempo, Melodie nur jede zweite Runde', function () {
   var T = ladeKontext().Dorf.Ton;
-  wahr(T.BPM <= 80, 'langsam');
+  wahr(T.BPM >= 70 && T.BPM <= 84, 'frischeres Tempo');
   var a = T.noten(0), b = T.noten(1);
   wahr(a.every(function (n) { return n.zeit >= 0 && n.zeit < 64; }), '8 Takte zu 8 Achteln');
   gleich(a.filter(function (n) { return n.art === 'melodie'; }).length, 0, 'erste Runde nur Begleitung');
   wahr(b.filter(function (n) { return n.art === 'melodie'; }).length > 10, 'zweite Runde mit Melodie');
-  var tonleiter = [9, 11, 0, 2, 4, 5, 7, 8];   // a-Moll mit gis
-  wahr(b.every(function (n) { return tonleiter.indexOf(n.midi % 12) >= 0; }), 'nur Toene aus a-Moll');
+  var tonleiter = [0, 2, 4, 5, 7, 9, 11];   // C-Dur
+  wahr(b.every(function (n) { return tonleiter.indexOf(n.midi % 12) >= 0; }), 'nur Toene aus C-Dur');
   wahr(b.every(function (n) { return n.staerke <= 0.6; }), 'keine lauten Noten');
   nah(T.mtof(69), 440, 1e-9);
 });
@@ -790,18 +790,18 @@ test('Streicheln: Taste E beim Gecko, Gaeste in der Naehe freuen sich mit', func
   st.eingabe.druecke('KeyE'); D.Spiel.schritt(st, 1 / 60); st.eingabe.ende();
   gleich(st.blase.sprecher, 'Mia', 'Gast geht vor Tier'); gleich(g.gestreichelt, 1);
 });
-test('Abendmusik: weiche Mischung nach Uhrzeit, Abendvariante in a-Moll und leise', function () {
+test('Abendmusik: weiche Mischung nach Uhrzeit, Abendvariante in C-Dur und leise', function () {
   var T = ladeKontext().Dorf.Ton;
   var m = T.mischung(12, false); gleich(m.tag, 1); gleich(m.abend, 0); gleich(m.grillen, 0);
   m = T.mischung(19.25, false); nah(m.abend, 0.5, 1e-9); nah(m.tag + m.abend, 1, 1e-9); gleich(m.grillen, 0);
   m = T.mischung(21, false); gleich(m.abend, 1); nah(m.grillen, 0.5, 1e-9);
   m = T.mischung(22.5, false); gleich(m.grillen, 1);
   m = T.mischung(8, true); gleich(m.abend, 0, 'ab v0.13: in der Abendszene spielt das Schlaflied statt der Schleife'); gleich(m.grillen, 1, 'Abendszene immer mit Grillen');
-  var tonleiter = [9, 11, 0, 2, 4, 5, 7, 8];
+  var tonleiter = [0, 2, 4, 5, 7, 9, 11];   // C-Dur (gleiche Folge wie Tag)
   [0, 1].forEach(function (rd) {
     var n = T.noten(rd, 'abend');
     wahr(n.length > 20 && n.length < T.noten(1).length, 'sparsamer als am Tag');
-    wahr(n.every(function (x) { return tonleiter.indexOf(x.midi % 12) >= 0 && x.staerke <= 0.5 && x.zeit >= 0 && x.zeit < 64; }), 'ruhig und in a-Moll');
+    wahr(n.every(function (x) { return tonleiter.indexOf(x.midi % 12) >= 0 && x.staerke <= 0.5 && x.zeit >= 0 && x.zeit < 64; }), 'ruhig und in C-Dur');
   });
   var z = T.zirpen(1, 4200);
   gleich(z.length, 3); wahr(z.every(function (p) { return p.dauer < 0.05 && p.freq > 3000; }), 'kurze, hohe Zirper');
@@ -1101,7 +1101,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand.esel']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.20'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.21'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -2069,7 +2069,7 @@ test('Instrumente: Gitarre, Kastagnetten, Trommel; Tippen spielt, Noten passen z
     T.instrumentNoten('kastagnetten', ak, 2).forEach(function (no) { wahr(no.freq && no.staerke <= 0.06, 'Klick leise'); });
   });
   for (var s = 0; s < 64; s++) wahr(T.FOLGE.indexOf(T.akkordBei(s)) >= 0);
-  gleich(T.akkordBei(0), 'Am'); gleich(T.akkordBei(8), 'G');
+  gleich(T.akkordBei(0), 'C'); gleich(T.akkordBei(8), 'G');
   // hinlaufen und spielen
   var g = ins[0];
   var r = S.klick(st, g.x * 16 + 8, g.y * 16 + 8);
@@ -2775,6 +2775,46 @@ test('v0.20: Klick Boot/Flamingo und Wege bleiben', function () {
   wahr(f.besetzt, 'sitzt');
   gleich(D.Spiel.klick(st, f.x, f.y - 6), 'flamingo');
   wahr(!f.besetzt, 'wieder auf');
+});
+
+
+// ---------- v0.21: Boot nur Meer, Flamingo/Musik-Feinschliff ----------
+test('v0.21: Boot fährt nur auf Meer, nicht am Strand entlang', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle({ seed: 5 }), W = D.Wasser, T = D.Karte.T;
+  var b = st.wasser.boot;
+  st.spieler.x = b.x; st.spieler.y = b.y;
+  wahr(W.einsteigen(st.wasser, st.spieler), 'einsteigen');
+  // Am Strand seitlich tippen → kein Ziel (kein Strand-Cruise)
+  wahr(!W.setzeBootZiel(st.wasser, st.karte, Math.floor(b.x / 16) + 3, 30), 'kein Strand-entlang');
+  // Aufs offene Meer ok
+  wahr(W.setzeBootZiel(st.wasser, st.karte, Math.floor(b.x / 16), 33), 'Meer ok');
+  for (var i = 0; i < 240; i++) D.Spiel.schritt(st, 1 / 30);
+  wahr(st.karte.tile(Math.floor(b.x / 16), Math.floor(b.y / 16)) === T.MEER, 'auf Meer');
+  // Landungsziel: Pfad geht übers Meer, endet am Strand
+  var landX = Math.floor(b.x / 16) + 4;
+  if (landX > 38) landX = Math.floor(b.x / 16) - 4;
+  wahr(W.setzeBootZiel(st.wasser, st.karte, landX, 30), 'Landungsziel Strand');
+  var pf = b.pfad.slice();
+  wahr(pf && pf.length >= 2, 'Pfad vorhanden');
+  for (var k = 1; k < pf.length - 1; k++) {
+    wahr(st.karte.tile(pf[k].x, pf[k].y) === T.MEER, 'Zwischenstopp nur Meer #' + k);
+  }
+  gleich(st.karte.tile(pf[pf.length - 1].x, pf[pf.length - 1].y), T.STRAND, 'endet am Strand');
+  // Pfad abfahren → landen
+  for (var j = 0; j < 400 && !W.aufStrand(st.karte, b.x, b.y); j++) D.Spiel.schritt(st, 1 / 30);
+  wahr(W.aufStrand(st.karte, b.x, b.y), 'am Strand zum Aussteigen');
+  // Tastatur: Strand→Strand blockiert, Meer freigeben
+  b.ziel = null; b.pfad = []; b.pfadIndex = 0;
+  var x0 = b.x;
+  wahr(W.bootKollidiert(st.karte, b.x + 8, b.y, b.x, b.y), 'seitlich Strand blockiert');
+  wahr(!W.bootKollidiert(st.karte, b.x, b.y + 10, b.x, b.y), 'aufs Meer freigeben');
+  gleich(x0, b.x, 'ohne Eingabe unverändert');
+});
+test('v0.21: Tagesschleife beginnt auf C-Dur, BPM frischer', function () {
+  var T = ladeKontext().Dorf.Ton;
+  gleich(T.FOLGE[0], 'C');
+  wahr(T.AKKORDE.C && T.AKKORDE.C[0] === 48, 'C-Bass');
+  wahr(T.BPM >= 70, 'nicht zu langsam');
 });
 
 // ---------- Ausfuehren ----------
