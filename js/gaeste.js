@@ -4,8 +4,8 @@
   var Dorf = g.Dorf = g.Dorf || {};
   var K = 16, TEMPO = 40;
   var BASIS = { satt: 8, spielen: 6, ruhe: 5 }; // Abfall pro Spielstunde
-  var AUFFUELLEN = { tafel: 80, pool: 70, couch: 60 }; // Anstieg pro Spielstunde am Ziel
-  var WIRKT_AUF = { tafel: 'satt', pool: 'spielen', couch: 'ruhe' };
+  var AUFFUELLEN = { tafel: 80, pool: 70, couch: 60, feuer: 40 }; // Anstieg pro Spielstunde am Ziel
+  var WIRKT_AUF = { tafel: 'satt', pool: 'spielen', couch: 'ruhe', feuer: 'ruhe' };
   var PORTION_BONUS = 2;                         // Pa amb oli fuellt doppelt so schnell (siehe gerichte.js)
 
   var DEFS = {
@@ -44,7 +44,7 @@
     if (b.ruhe < 30) return 'couch';
     return null;
   }
-  function sitzt(gast) { return gast.zustand === 'aktiv' && gast.ziel === 'couch'; }
+  function sitzt(gast) { return gast.zustand === 'aktiv' && (gast.ziel === 'couch' || gast.ziel === 'feuer'); }
   function tileVon(gast) { return { x: Math.floor(gast.x / K), y: Math.floor(gast.y / K) }; }
 
   function plane(gast, welt, art) {
@@ -74,6 +74,30 @@
   function update(gast, welt, dt, stunden) {
     abfall(gast, stunden);
     var b = gast.beduerfnisse;
+    // ab v0.24: Feuer an → alle kommen zur Sitzrunde und bleiben, bis es aus ist
+    if (welt.feuer && welt.feuer.an) {
+      if (gast.planPause > 0) gast.planPause -= dt;
+      if (gast.ziel !== 'feuer' && !(gast.planPause > 0)) {
+        if (!plane(gast, welt, 'feuer')) gast.planPause = 0.5;
+      }
+      if (gast.zustand === 'aktiv' && gast.ziel === 'feuer') {
+        b.ruhe = clamp(b.ruhe + AUFFUELLEN.feuer * stunden);
+        gast.frame = 0;
+        if (Dorf.Feuer && Dorf.Feuer.faceFeuer) Dorf.Feuer.faceFeuer(gast, welt.feuer);
+        return;
+      }
+      if (gast.zustand === 'unterwegs' && gast.ziel === 'feuer') {
+        if (laufe(gast, dt)) {
+          gast.frame = 0; gast.animT = 0; gast.zustand = 'aktiv';
+          if (Dorf.Feuer && Dorf.Feuer.faceFeuer) Dorf.Feuer.faceFeuer(gast, welt.feuer);
+          else gast.dir = 'unten';
+        }
+        return;
+      }
+      return;
+    } else if (gast.ziel === 'feuer') {
+      gast.zustand = 'frei'; gast.ziel = null; gast.zielTile = null; gast.pfad = []; gast.warte = 0.8; gast.portion = false;
+    }
     if (gast.zustand === 'aktiv') {
       var wert = WIRKT_AUF[gast.ziel];
       var gericht = gast.portion && Dorf.Gerichte ? Dorf.Gerichte.hole(gast.portion) : null;
@@ -104,6 +128,7 @@
       else {
         gast.zustand = 'aktiv';
         if (gast.ziel === 'couch') gast.dir = 'unten';
+        else if (gast.ziel === 'feuer' && Dorf.Feuer && welt.feuer) Dorf.Feuer.faceFeuer(gast, welt.feuer);
         else gast.dir = gast.ziel === 'pool' ? 'oben' : (gast.zielTile.y < 12 ? 'unten' : 'oben');
         // Hat Biel gekocht, nimmt sich der Gast eine Portion von der Tafel
         if (gast.ziel === 'tafel') nimmTeller(gast, welt);
@@ -123,10 +148,11 @@
 
   // Wunsch-Symbol fuer die Gedankenblase
   function symbol(gast) {
-    if (gast.zustand === 'aktiv') return gast.ziel === 'couch' ? 'zzz' : 'herz';
+    if (gast.zustand === 'aktiv') return gast.ziel === 'couch' ? 'zzz' : (gast.ziel === 'feuer' ? 'herz' : 'herz');
     if (gast.ziel === 'tafel') return 'teller';
     if (gast.ziel === 'pool') return 'ball';
     if (gast.ziel === 'couch') return 'kissen';
+    if (gast.ziel === 'feuer') return 'sonne';
     return null;
   }
 
@@ -141,6 +167,8 @@
       portion_tumbet: ['Tumbet ist warm und lecker. Ich werd ganz gemütlich.'],
       couch: ['Ich bin ein bisschen müde.'],
       aktiv_couch: ['Die Couch ist so kuschelig!'],
+      feuer: ['Ohhh, ein Feuer! Darf ich mich dazu setzen?'],
+      aktiv_feuer: ['So warm und schön!', 'Erzähl eine Geschichte, Amo Biel!'],
       frei: ['Bon dia! (Guten Morgen!) Spielst du mit?', 'Ich hab den Gecko gesehen!', 'Wo ist eigentlich der Esel?']
     },
     jonas: {
@@ -153,6 +181,8 @@
       portion_tumbet: ['Tumbet! Wie bei meiner Lieblingsbar in Sóller.'],
       couch: ['Ich leg mich kurz hin. Migdiada (Mittagsruhe)!'],
       aktiv_couch: ['Herrlich ruhig hier drinnen.'],
+      feuer: ['Ein Lagerfeuer — klasse Idee.'],
+      aktiv_feuer: ['So gemütlich. Musik dazu wäre perfekt.'],
       frei: ['Moltes gràcies (Vielen Dank) für den Kaffee!', 'Herrlich ruhig hier am Brunnen.', 'Die Clastra (Innenhof) ist wunderschön.']
     },
     padrina: {
@@ -165,6 +195,8 @@
       portion_tumbet: ['Tumbet wärmt den Bauch. Danke, fillet.'],
       couch: ['Meine alten Knochen wollen aufs Sofa.'],
       aktiv_couch: ['Ah, so ein Sofa ist Gold wert. Ich strick ein bisschen.', 'Hier sitz ich am liebsten.'],
+      feuer: ['Ein Feuer wie früher auf dem Land.'],
+      aktiv_feuer: ['Poc a poc am Feuer. Das wärmt die alten Knochen.'],
       frei: ['Bon dia, fillet! (Guten Morgen, mein Kleiner!)', 'Hast du schon die Tomaten im Garten gesehen?', 'Bruna ist ein gutes Eselchen.', 'Poc a poc. (Immer schön langsam.) So sagt man hier.']
     }
   };
@@ -176,6 +208,8 @@
     aktiv_tafel: function () { return ['teller', 'herz']; },
     couch: function () { return ['kissen', 'zzz']; },
     aktiv_couch: function () { return ['kissen', 'herz']; },
+    feuer: function () { return ['sonne', 'herz']; },
+    aktiv_feuer: function () { return ['sonne', 'lachen']; },
     portion: function (g) { return ['gericht:' + g.portion, 'herz']; }
   };
   var FREI_BILDER = {
@@ -187,7 +221,7 @@
   function spruchInfo(gast, rng) {
     var s = SPRUECHE[gast.id], key;
     if (gast.zustand === 'aktiv') key = (gast.ziel === 'tafel' && gast.portion) ? 'portion_' + gast.portion : 'aktiv_' + gast.ziel;
-    else if (gast.ziel === 'tafel' || gast.ziel === 'pool' || gast.ziel === 'couch') key = gast.ziel;
+    else if (gast.ziel === 'tafel' || gast.ziel === 'pool' || gast.ziel === 'couch' || gast.ziel === 'feuer') key = gast.ziel;
     else key = 'frei';
     var liste = s[key] ? s[key] : s.frei, k = s[key] ? key : 'frei';
     var text = rng.pick(liste), bilder;

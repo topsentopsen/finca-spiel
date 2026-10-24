@@ -21,11 +21,13 @@
     // ab v0.14: Zitronenbaum am Garten
     ZITRONE: 29,
     // ab v0.19: Strand und Meer suedlich vom Tor (Finca-Mauer bleibt bei y=29)
-    STRAND: 30, MEER: 31
+    STRAND: 30, MEER: 31,
+    // ab v0.24: Feuerstelle im Garten (Sitzrunde)
+    FEUER: 32
   };
   var BLOCK = {};
   [T.MAUER, T.WAND, T.WASSER, T.BRUNNEN, T.OLIVE, T.TAFEL, T.HERD,
-    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH, T.ZAUN, T.WIESE, T.ORANGE, T.STALL, T.KUEBEL, T.INSTRUMENT, T.ZITRONE, T.MEER].forEach(function (t) { BLOCK[t] = true; });
+    T.COUCH, T.PFLANZE, T.ECKBANK, T.ANRICHTE, T.BETT, T.SESSEL, T.TISCH, T.ZAUN, T.WIESE, T.ORANGE, T.STALL, T.KUEBEL, T.INSTRUMENT, T.ZITRONE, T.MEER, T.FEUER].forEach(function (t) { BLOCK[t] = true; });
   // Tor ist ab v0.19 begehbar (Weg zum Strand)
 
   var KACHEL = 16, BREITE = 40, FINCA_H = 30, HOEHE = 36;
@@ -145,6 +147,14 @@
     INSTRUMENTE.forEach(function (p) { set(p.x, p.y, T.INSTRUMENT); });
     blumen = blumen.filter(function (b) { return tiles[Math.floor(b.y / KACHEL) * w + Math.floor(b.x / KACHEL)] === T.GRAS; });
 
+    // ab v0.24: Feuerstelle oestlich vom Hofweg (Gras), Gitarre daneben als Deko-Treffer im Feuer-Modul
+    var FEUER = { x: 24, y: 23 };
+    set(FEUER.x, FEUER.y, T.FEUER);
+    blumen = blumen.filter(function (b) {
+      var bx = Math.floor(b.x / KACHEL), by = Math.floor(b.y / KACHEL);
+      return tiles[by * w + bx] === T.GRAS;
+    });
+
     // ab v0.19: Strand und Meer suedlich vom Tor (volle Breite, offenes Meer)
     rect(0, FINCA_H, w - 1, FINCA_H, T.STRAND);
     rect(0, FINCA_H + 1, w - 1, h - 1, T.MEER);
@@ -154,7 +164,7 @@
       instrumente: INSTRUMENTE.map(function (p) { return { art: p.art, x: p.x, y: p.y, wackel: 0, schlag: 0 }; }),
       kuebel: KUEBEL.map(function (p) { return { x: p[0], y: p[1] }; }),
       w: w, h: h, kachel: KACHEL, tiles: tiles, baeume: baeume, blumen: blumen, raeume: RAEUME,
-      brunnen: { x: 19, y: 15 }, wiese: WIESE, garten: garten, huehner: HUEHNER, stall: STALL, meer: MEER,
+      brunnen: { x: 19, y: 15 }, feuer: { x: FEUER.x, y: FEUER.y }, wiese: WIESE, garten: garten, huehner: HUEHNER, stall: STALL, meer: MEER,
       // Gecko sitzt an der Hauswand rechts der Haustuer (Pixelbereich auf der Wandfront)
       gecko: { x0: 14 * KACHEL + 3, x1: 16 * KACHEL + 12, y: 10 * KACHEL + 12 },
       tile: function (x, y) { if (x < 0 || y < 0 || x >= w || y >= h) return T.MAUER; return tiles[y * w + x]; },
@@ -180,7 +190,9 @@
       herd: zieleNeben(T.HERD, null, function (xx, yy) { return karte.tile(xx, yy - 1) === T.HERD; }),
       bummeln: (function () { var o = []; for (var yy = 12; yy <= 20; yy++) for (var xx = 12; xx <= 27; xx++) if (!karte.blockiert(xx, yy)) o.push({ x: xx, y: yy }); return o; })(),
       // ab v0.5 schauen Gaeste auch mal bei Bruna am Zaun vorbei
-      zaun: [{ x: 29, y: 11 }, { x: 29, y: 13 }, { x: 32, y: 15 }, { x: 35, y: 15 }]
+      zaun: [{ x: 29, y: 11 }, { x: 29, y: 13 }, { x: 32, y: 15 }, { x: 35, y: 15 }],
+      // ab v0.24: Sitzplaetze um die Feuerstelle
+      feuer: [{ x: 23, y: 23 }, { x: 25, y: 23 }, { x: 24, y: 22 }, { x: 24, y: 24 }]
     };
     karte.start = { biel: { x: 19, y: 18 }, mia: { x: 16, y: 17 }, jonas: { x: 23, y: 17 }, padrina: { x: 21, y: 13 } };
     // Begehbare Bodenflaeche eines Raums (inklusive Teppich, ohne Moebel)

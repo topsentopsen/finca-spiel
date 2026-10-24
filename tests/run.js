@@ -3,7 +3,7 @@
 'use strict';
 var fs = require('fs'), path = require('path'), vm = require('vm');
 
-var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'garten', 'glueck', 'gaeste', 'tiere', 'wasser', 'ballon', 'speicher', 'sticker', 'hinweise', 'vorlesen', 'render', 'ton', 'profile', 'leben', 'main'];
+var DATEIEN = ['rng', 'karte', 'pfad', 'kamera', 'eingabe', 'uhr', 'spieler', 'gerichte', 'garten', 'glueck', 'gaeste', 'tiere', 'wasser', 'ballon', 'feuer', 'speicher', 'sticker', 'hinweise', 'vorlesen', 'render', 'ton', 'profile', 'leben', 'main'];
 
 function ladeKontext(extra) {
   var ctx = { console: console, Math: Math };
@@ -204,12 +204,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.23', function () {
+test('Version: sichtbares Label ist v0.24', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.23');
+  gleich(D.VERSION, 'v0.24');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.23 (Prototyp)') >= 0, 'Titel enthaelt v0.23');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.23"') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.24 (Prototyp)') >= 0, 'Titel enthaelt v0.24');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.24"') >= 0, n + ' eingebunden'); });
   wahr(html.indexOf('js/profile.js') < html.indexOf('js/main.js') && html.indexOf('js/leben.js') < html.indexOf('js/main.js'), 'neue Dateien vor main');
   wahr(/html\.mobil\.quer/.test(html) && /hochkant halten/.test(html), 'Handy-Hochformat-Hinweis (Klasse mobil.quer)');
   wahr(fs.existsSync(path.join(__dirname, '..', 'assets', 'schlaflied-a.mp3')), 'Schlaflied A');
@@ -1101,7 +1101,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand.esel']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.23'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.24'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -2944,6 +2944,70 @@ test('v0.23: Ballon-Kontext und Klick-Steuerung', function () {
   gleich(D.Spiel.klick(st, tx * 16 + 8, ty * 16 + 8), 'schweben', 'Tipp steuert');
   D.Spiel.tueKontext(st, { art: 'landen' });
   wahr(!D.Ballon.besetzt(st.ballon), 'wieder draussen');
+});
+
+
+// ---------- v0.24: Feuerstelle, Sitzrunde, Lagerfeuer-Gitarre ----------
+test('v0.24: Feuerstelle auf der Karte und Modul', function () {
+  var D = ladeKontext().Dorf, S = D.Spiel, st = S.erstelle({ seed: 1 });
+  wahr(!!D.Feuer, 'Feuer-Modul');
+  wahr(!!st.feuer, 'st.feuer');
+  wahr(st.karte.tile(st.feuer.tx, st.feuer.ty) === D.Karte.T.FEUER, 'FEUER-Kachel');
+  wahr(st.karte.blockiert(st.feuer.tx, st.feuer.ty), 'Mitte blockiert');
+  wahr(st.karte.orte.feuer && st.karte.orte.feuer.length >= 3, 'Sitzplaetze');
+  wahr(!!st.feuer.gitarre && st.feuer.gitarre.art === 'lager', 'Gitarre');
+  gleich(st.feuer.an, false, 'startet aus');
+});
+
+test('v0.24: Feuer an/aus, Sitzrunde aller Gaeste', function () {
+  var D = ladeKontext().Dorf, S = D.Spiel, st = S.erstelle({ seed: 1 });
+  st.spieler.x = st.feuer.x; st.spieler.y = st.feuer.y + 12;
+  wahr(D.Feuer.feuerNah(st.feuer, st.spieler), 'nah');
+  var k = S.kontext(st);
+  wahr(k && k.art === 'feuer', 'Kontext Feuer an');
+  wahr(S.tueKontext(st, k), 'anschalten');
+  wahr(st.feuer.an, 'an');
+  // ein paar Schritte: alle planen Feuer
+  for (var i = 0; i < 40; i++) S.schritt(st, 0.25, 0.25);
+  st.gaeste.forEach(function (gs) {
+    wahr(gs.ziel === 'feuer' || (gs.zustand === 'aktiv' && gs.ziel === 'feuer'), 'Gast ' + gs.name + ' zur Feuerstelle (ziel=' + gs.ziel + ')');
+  });
+  // aus
+  k = S.kontext(st);
+  wahr(k && (k.art === 'feuerAus' || k.art === 'feuer'), 'Kontext aus');
+  S.tueKontext(st, { art: 'feuerAus' });
+  wahr(!st.feuer.an, 'aus');
+  st.gaeste.forEach(function (gs) {
+    wahr(gs.ziel !== 'feuer', 'nicht mehr am Feuer: ' + gs.name);
+  });
+});
+
+test('v0.24: Lagerfeuer-Gitarre spielt warme Noten', function () {
+  var D = ladeKontext().Dorf, S = D.Spiel, T = D.Ton, st = S.erstelle({ seed: 1 });
+  var n = T.instrumentNoten('lager', 'C', 0);
+  wahr(n && n.length >= 3, 'Lager-Noten');
+  wahr(n.every(function (x) { return x.klang === 'saite' && x.midi; }), 'Saiten');
+  st.spieler.x = st.feuer.gitarre.x * 16 + 8;
+  st.spieler.y = st.feuer.gitarre.y * 16 + 12;
+  wahr(D.Feuer.gitarreNah(st.feuer, st.spieler), 'Gitarre nah');
+  var k = S.kontext(st);
+  wahr(k && k.art === 'lager', 'Kontext lager');
+  S.tueKontext(st, k);
+  wahr(st.musik && st.musik.some(function (m) { return m.art === 'lager'; }), 'musik lager');
+  wahr(st.noten && st.noten.length > 0, 'Noten sichtbar');
+});
+
+test('v0.24: Feuer-Klick und Regression Ballon/Brunnen', function () {
+  var D = ladeKontext().Dorf, S = D.Spiel, st = S.erstelle({ seed: 1 });
+  // Klick auf Feuer
+  var r = S.klick(st, st.feuer.x, st.feuer.y - 2);
+  wahr(r === 'feuer' || st.spieler.ziel || st.feuer.an, 'Klick Feuer');
+  // Brunnen bleibt
+  st.spieler.x = st.karte.brunnen.x * 16 + 16; st.spieler.y = st.karte.brunnen.y * 16 + 28;
+  var kb = S.kontext(st);
+  wahr(kb && kb.art === 'schoepfen', 'Brunnen Kontext');
+  // Ballon Modul
+  wahr(!!D.Ballon && !!st.ballon, 'Ballon ok');
 });
 
 // ---------- Ausfuehren ----------

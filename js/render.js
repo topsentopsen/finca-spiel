@@ -630,7 +630,7 @@
       case T.ZAUN:
         zeichneZaun(c, karte, x, y, sx, sy, hs);
         break;
-      case T.GRAS: case T.OLIVE: case T.ORANGE: case T.STALL: case T.INSTRUMENT:
+      case T.GRAS: case T.OLIVE: case T.ORANGE: case T.STALL: case T.INSTRUMENT: case T.FEUER:
         r(c, sx, sy, K, K, P.gras);
         if (hs % 3 === 0) { r(c, sx + (hs % 11) + 2, sy + ((hs >> 4) % 10) + 3, 1, 2, P.gras2); r(c, sx + (hs % 11) + 4, sy + ((hs >> 4) % 10) + 2, 1, 3, P.gras2); }
         if (hs % 5 === 1) r(c, sx + ((hs >> 7) % 12) + 2, sy + ((hs >> 9) % 12) + 2, 2, 1, P.gras3);
@@ -976,6 +976,56 @@
     jonas: { hw: 13, hh: 12, bw: 12, bh: 8, rock: 0, bein: 5, atem: 1.6, phase: 0.9, eckig: true },
     padrina: { hw: 13, hh: 12, bw: 10, bh: 4, rock: 4, bein: 2, atem: 2.2, phase: 1.3 }
   };
+  // ab v0.24: Feuerstelle (Steinkreis, Holz, Flammen wenn an) + Lagerfeuer-Gitarre
+  function zeichneFeuerstelle(c, f, sx, sy, zeit) {
+    if (!f) return;
+    var x = Math.round(sx), y = Math.round(sy), an = !!f.an, kp = P.kontur;
+    ellipse(c, x, y + 2, 9, 3, 'rgba(75,58,90,0.22)');
+    // Steinkreis
+    [[-6, 1], [-3, 3], [1, 4], [5, 2], [6, -1], [3, -3], [-2, -3], [-6, -1]].forEach(function (p, i) {
+      var col = i % 2 ? '#9a9088' : '#b8aea4';
+      rr(c, x + p[0], y + p[1], 4, 3, kp); rr(c, x + p[0] + 1, y + p[1] + 1, 2, 1, col);
+    });
+    // Holzscheite
+    r(c, x - 4, y, 9, 2, '#6a4030'); r(c, x - 3, y - 1, 7, 1, '#8a5840');
+    r(c, x - 2, y + 1, 6, 2, '#5a3428');
+    if (an) {
+      var flack = RUHIG ? 0 : Math.sin(zeit * 10) * 1.2;
+      var h1 = 7 + Math.round(flack), h2 = 5 + Math.round(Math.sin(zeit * 13 + 1) * 1);
+      // Flammen
+      r(c, x - 2, y - h1, 5, h1, '#ff6b3a');
+      r(c, x - 1, y - h1 - 2, 3, h1 + 1, '#ffb037');
+      r(c, x, y - h1 - 3, 1, 3, '#fff4c2');
+      r(c, x + 2, y - h2, 3, h2, '#ff8a4d');
+      r(c, x + 2, y - h2 - 1, 2, 2, '#ffe08a');
+      (f.funken || []).forEach(function (u) {
+        var a = 1 - u.t / u.dauer;
+        c.globalAlpha = Math.max(0, a);
+        r(c, Math.round(u.x - (f.x - sx)), Math.round(u.y - (f.y - sy)), 1, 1, u.farbe || '#ffb037');
+        c.globalAlpha = 1;
+      });
+    } else {
+      // kalte Asche / kleine Glut-Andeutung
+      r(c, x - 1, y - 1, 3, 1, '#5a5048');
+      r(c, x, y - 2, 1, 1, '#7a6a58');
+    }
+    // Gitarre daneben
+    var g = f.gitarre;
+    if (g) {
+      var gx = (g.x * K + 8) - (f.x - sx) + wackelX(g);
+      var gy = (g.y * K + 8) - (f.y - sy);
+      ellipse(c, Math.round(gx), Math.round(gy) + 6, 5, 2, 'rgba(75,58,90,0.16)');
+      kreis(c, Math.round(gx), Math.round(gy) + 3, 4, kp);
+      kreis(c, Math.round(gx), Math.round(gy) + 3, 3, '#d4925a');
+      kreis(c, Math.round(gx), Math.round(gy) - 2, 3, kp);
+      kreis(c, Math.round(gx), Math.round(gy) - 2, 2, '#d4925a');
+      r(c, Math.round(gx) - 1, Math.round(gy) - 10, 2, 9, kp);
+      r(c, Math.round(gx), Math.round(gy) - 9, 1, 8, '#a56c48');
+      r(c, Math.round(gx) - 2, Math.round(gy) - 12, 4, 3, kp);
+      if (g.wackel > 0) for (var k = 0; k < 2; k++) r(c, Math.round(gx) - 1 + k, Math.round(gy) - 8, 1, 12, 'rgba(255,248,238,0.55)');
+    }
+  }
+
   function formVon(a) { return FORM[a.form] || (a.kind ? FORM.mia : FORM.biel); }
   function masse(a) { var F = formVon(a); return { hoehe: F.hh + F.bh + F.rock + F.bein, kopf: F.hh }; }
 
@@ -1333,9 +1383,23 @@
     }
     var an = st.abend ? Dorf.Spiel.LAMPEN : (st.lampenAn || 0), q = lichtQuellen(R, st.karte), glut = st.abend ? 1 : L.glut;
     R.letzteLampen = an;
-    if (glut <= 0.02 || an <= 0) { st.bielLaterne = false; return; }
+    var lagerAn = !!(st.feuer && st.feuer.an);
+    if ((glut <= 0.02 || an <= 0) && !lagerAn) { st.bielLaterne = false; return; }
     function sicht(x, y, rad) { return x > -rad && x < W + rad && y > -rad && y < H + rad; }
     var feuer = [];
+    if (glut <= 0.02 || an <= 0) {
+      // tagsueber nur Lagerfeuer-Schein
+      if (lagerAn) {
+        var fx0 = st.feuer.x - cx, fy0 = st.feuer.y - 8 - cy;
+        if (sicht(fx0, fy0, 36)) {
+          var vorherL = c.globalCompositeOperation;
+          c.globalCompositeOperation = 'lighter';
+          glanz(c, fx0, fy0, 26, '#ff8a4d', 0.55);
+          c.globalCompositeOperation = vorherL || 'source-over';
+        }
+      }
+      st.bielLaterne = false; return;
+    }
     // erst die Fenster, dann die Laternen
     q.fenster.forEach(function (f) {
       var sx = f.x - cx, sy = f.y - cy;
@@ -1352,6 +1416,11 @@
     });
     var hx = 5 * K + 8 - cx, hy = 2 * K + 8 - cy;
     if (sicht(hx, hy, 24)) feuer.push([hx, hy, 24, P.herdGlut]);
+    // ab v0.24: Lagerfeuer leuchtet (auch tagsueber etwas, abends stark)
+    if (st.feuer && st.feuer.an) {
+      var fx = st.feuer.x - cx, fy = st.feuer.y - 8 - cy;
+      if (sicht(fx, fy, 36)) feuer.push([fx, fy, st.abend ? 40 : 28, '#ff8a4d']);
+    }
     // Biel nimmt ab dem spaeten Abend eine kleine Laterne mit
     st.bielLaterne = glut > 0.6;
     if (st.bielLaterne && st.spieler) {
@@ -2082,6 +2151,15 @@
       if (sx > -20 && sx < W + 20 && sy > -24 && sy < H + 24) liste.push({ y: ins.y * K + 12, f: function () { zeichneInstrument(c, ins, sx, sy); } });
     });
     R.letztesLeben = lebenListe(liste, c, st, cx, cy);
+    // ab v0.24: Feuerstelle + Lagerfeuer-Gitarre
+    if (st.feuer) {
+      (function (ff) {
+        var sx = ff.x - cx, sy = ff.y - cy;
+        if (sx > -28 && sx < W + 28 && sy > -32 && sy < H + 28) {
+          liste.push({ y: ff.y + 0.05, f: function () { zeichneFeuerstelle(c, ff, sx, sy, zeit); } });
+        }
+      })(st.feuer);
+    }
     liste.push({ y: (karte.brunnen.y + 1) * K + 12, f: function () { zeichneBrunnen(c, karte.brunnen.x * K - cx, karte.brunnen.y * K - cy, zeit, st.schoepfen); } });
     var redner = st.blase && !st.abend && !st.menue ? st.blase.sprecher : null;
     R.letzteWolken = [];

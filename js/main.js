@@ -3,7 +3,7 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.23';
+  var VERSION = 'v0.24';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
   var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
@@ -14,7 +14,7 @@
   var SPEICHER_TAKT = 5;      // alle 5 Sekunden wird der Spielstand gesichert
   var FLUG_KORB = 0.6;        // ab v0.8: so lange fliegt eine Frucht oder ein Ei in den Korb unten links
   var AKTION_PULS = 3;        // der grosse Knopf pulsiert nur bei den ersten drei Malen
-  var AKTION_NAME = { reden: 'Reden', streicheln: 'Streicheln', fuettern: 'Füttern', ernten: 'Ernten', sammeln: 'Ei aufheben', kochen: 'Kochen', weiter: 'Neuer Tag', musik: 'Musik machen', boot: 'Einsteigen', aussteigen: 'Aussteigen', flamingo: 'Draufsetzen', absteigen: 'Aufstehen', schoepfen: 'Wasser schöpfen', ballon: 'Einsteigen', landen: 'Landen' };
+  var AKTION_NAME = { reden: 'Reden', streicheln: 'Streicheln', fuettern: 'Füttern', ernten: 'Ernten', sammeln: 'Ei aufheben', kochen: 'Kochen', weiter: 'Neuer Tag', musik: 'Musik machen', boot: 'Einsteigen', aussteigen: 'Aussteigen', flamingo: 'Draufsetzen', absteigen: 'Aufstehen', schoepfen: 'Wasser schöpfen', ballon: 'Einsteigen', landen: 'Landen', feuer: 'Feuer an', feuerAus: 'Feuer aus', lager: 'Gitarre spielen' };
   var WACKEL = 0.5, MENUE_ZU = 0.9;   // ab v0.9: Karte mit fehlenden Zutaten wackelt, danach geht das Menue zu
   // ab v0.10: Elternbereich (3 Sekunden auf das Zahnrad drücken), Instrumente, Zoom am Handy
   var ELTERN_HALT = 3;
@@ -67,6 +67,7 @@
     st.tiere = Dorf.Tiere.erstelle(karte, seed);
     st.wasser = Dorf.Wasser ? Dorf.Wasser.erstelle(karte) : null;
     st.ballon = Dorf.Ballon ? Dorf.Ballon.erstelle(karte) : null;
+    st.feuer = Dorf.Feuer ? Dorf.Feuer.erstelle(karte) : null;
     st.schoepfen = null;
     Dorf.Kamera.sofort(st.kamera, st.spieler.x, st.spieler.y - 12);
     sage(st, 'Biel', 'Bon dia! (Guten Morgen!) Willkommen auf der Finca.', 5, ['sonne', 'lachen']);
@@ -145,6 +146,13 @@
     }
     var kb = st.karte.brunnen;
     if (kb) pruef(Math.hypot(wx - (kb.x * 16 + 16), wy - (kb.y * 16 + 18)) - 14, { brunnen: true });
+    if (st.feuer && Dorf.Feuer) {
+      pruef(Math.hypot(wx - st.feuer.x, wy - (st.feuer.y - 4)) - 10, { feuer: true });
+      if (st.feuer.gitarre) {
+        var gx = st.feuer.gitarre.x * 16 + 8, gy = st.feuer.gitarre.y * 16 + 6;
+        pruef(Math.hypot(wx - gx, wy - gy) - 6, { lager: true });
+      }
+    }
     return best;
   }
 
@@ -201,12 +209,14 @@
     var flamingoZiel = (!gast && !ei && !tier && !fisch && !bootZiel && st.wasser && Dorf.Wasser) ? Dorf.Wasser.flamingoAn(st.wasser, wx, wy, st.eingabe.touch ? 20 : 16) : null;
     var ballonZiel = (!gast && !ei && !tier && !fisch && !bootZiel && !flamingoZiel && st.ballon && Dorf.Ballon) ? Dorf.Ballon.ballonAn(st.ballon, wx, wy, st.eingabe.touch ? 24 : 18) : null;
     var brunnenZiel = (!gast && !ei && !tier && !fisch && !bootZiel && !flamingoZiel && !ballonZiel && karte.tile(tx, ty) === T.BRUNNEN);
-    var pf = (gast || tier || ei || fisch || bootZiel || flamingoZiel || ballonZiel || brunnenZiel) ? null : Dorf.Garten.an(st.garten, tx, ty);
-    var herd = !gast && !tier && !pf && !ei && !fisch && !bootZiel && !flamingoZiel && !ballonZiel && !brunnenZiel && karte.tile(tx, ty) === T.HERD;
-    var ins = (!gast && !tier && !pf && !ei && !herd && !fisch && !bootZiel && !flamingoZiel && !ballonZiel && !brunnenZiel) ? instrumentAn(st, tx, ty) : null;
-    if (!gast && !tier && !pf && !herd && !ei && !ins && !fisch && !bootZiel && !flamingoZiel && !ballonZiel && !brunnenZiel) {
+    var feuerZiel = (!gast && !ei && !tier && !fisch && !bootZiel && !flamingoZiel && !ballonZiel && !brunnenZiel && st.feuer && Dorf.Feuer) ? Dorf.Feuer.feuerAn(st.feuer, wx, wy, st.eingabe.touch ? 22 : 16) : false;
+    var lagerZiel = (!gast && !ei && !tier && !fisch && !bootZiel && !flamingoZiel && !ballonZiel && !brunnenZiel && !feuerZiel && st.feuer && Dorf.Feuer) ? Dorf.Feuer.gitarreAn(st.feuer, wx, wy, st.eingabe.touch ? 18 : 14) : false;
+    var pf = (gast || tier || ei || fisch || bootZiel || flamingoZiel || ballonZiel || brunnenZiel || feuerZiel || lagerZiel) ? null : Dorf.Garten.an(st.garten, tx, ty);
+    var herd = !gast && !tier && !pf && !ei && !fisch && !bootZiel && !flamingoZiel && !ballonZiel && !brunnenZiel && !feuerZiel && !lagerZiel && karte.tile(tx, ty) === T.HERD;
+    var ins = (!gast && !tier && !pf && !ei && !herd && !fisch && !bootZiel && !flamingoZiel && !ballonZiel && !brunnenZiel && !feuerZiel && !lagerZiel) ? instrumentAn(st, tx, ty) : null;
+    if (!gast && !tier && !pf && !herd && !ei && !ins && !fisch && !bootZiel && !flamingoZiel && !ballonZiel && !brunnenZiel && !feuerZiel && !lagerZiel) {
       var f = naechstesZiel(st, wx, wy, st.eingabe.touch ? 14 : 8);
-      if (f) { gast = f.gast || null; tier = f.tier || null; pf = f.pflanze || null; herd = !!f.herd; ei = f.ei || null; ins = f.instrument || null; fisch = f.fisch || null; bootZiel = f.boot ? st.wasser.boot : null; flamingoZiel = f.flamingo ? st.wasser.flamingo : null; ballonZiel = f.ballon || null; brunnenZiel = !!f.brunnen; }
+      if (f) { gast = f.gast || null; tier = f.tier || null; pf = f.pflanze || null; herd = !!f.herd; ei = f.ei || null; ins = f.instrument || null; fisch = f.fisch || null; bootZiel = f.boot ? st.wasser.boot : null; flamingoZiel = f.flamingo ? st.wasser.flamingo : null; ballonZiel = f.ballon || null; brunnenZiel = !!f.brunnen; feuerZiel = !!f.feuer; lagerZiel = !!f.lager; }
     }
     if (fisch) { tippFisch(st, fisch); return 'fisch'; }
     if (bootZiel) {
@@ -236,6 +246,20 @@
       aktion = { art: 'schoepfen' };
       if (!ziel || !Dorf.Spieler.geheZu(sp, karte, ziel.x, ziel.y, aktion)) { st.marker = { x: karte.brunnen.x, y: karte.brunnen.y, t: 0, nein: true }; return 'nein'; }
       st.marker = { x: ziel.x, y: ziel.y, t: 0 }; return 'schoepfen';
+    }
+    if (lagerZiel) {
+      if (Dorf.Feuer.gitarreNah(st.feuer, sp)) { tippLager(st); return 'lager'; }
+      ziel = besterNachbar(st, st.feuer.gitarre.x, st.feuer.gitarre.y);
+      aktion = { art: 'lager' };
+      if (!ziel || !Dorf.Spieler.geheZu(sp, karte, ziel.x, ziel.y, aktion)) { st.marker = { x: st.feuer.gitarre.x, y: st.feuer.gitarre.y, t: 0, nein: true }; return 'nein'; }
+      st.marker = { x: ziel.x, y: ziel.y, t: 0 }; return 'lager';
+    }
+    if (feuerZiel) {
+      if (Dorf.Feuer.feuerNah(st.feuer, sp)) { tippFeuer(st); return 'feuer'; }
+      ziel = besterNachbar(st, st.feuer.tx, st.feuer.ty);
+      aktion = { art: 'feuer' };
+      if (!ziel || !Dorf.Spieler.geheZu(sp, karte, ziel.x, ziel.y, aktion)) { st.marker = { x: st.feuer.tx, y: st.feuer.ty, t: 0, nein: true }; return 'nein'; }
+      st.marker = { x: ziel.x, y: ziel.y, t: 0 }; return 'feuer';
     }
     if (ins) {
       if (instrumentNah(st, ins)) { musiziere(st, ins); return 'musik'; }
@@ -444,6 +468,40 @@
     lerne(st, 'schoepfen'); merke(st, 'schoepfen');
     return true;
   }
+
+  // ab v0.24: Feuerstelle an/aus
+  function tippFeuer(st) {
+    if (!st.feuer || !Dorf.Feuer || !Dorf.Feuer.feuerNah(st.feuer, st.spieler)) return false;
+    var warAn = !!st.feuer.an;
+    Dorf.Feuer.umschalten(st.feuer, st);
+    klang(st, st.feuer.an ? 'feuerAn' : 'feuerAus');
+    if (st.feuer.an) {
+      if (!(st.heute && st.heute.feuer)) sage(st, 'Biel', 'Feuer an! Alle kommen zur Sitzrunde.', 3.5, ['sonne', 'herz']);
+      lerne(st, 'feuer'); merke(st, 'feuer');
+    } else {
+      sage(st, 'Biel', 'Feuer aus. Bis später!', 2.5, ['mond', 'lachen']);
+      merke(st, 'feuerAus');
+    }
+    return true;
+  }
+  function tippLager(st) {
+    if (!st.feuer || !Dorf.Feuer || !Dorf.Feuer.gitarreNah(st.feuer, st.spieler)) return false;
+    var ins = st.feuer.gitarre;
+    var sp = st.spieler, dx = ins.x * 16 + 8 - sp.x, dy = ins.y * 16 + 8 - sp.y;
+    if (Math.abs(dx) > Math.abs(dy)) sp.dir = dx < 0 ? 'links' : 'rechts'; else sp.dir = dy < 0 ? 'oben' : 'unten';
+    ins.wackel = 0.5; ins.schlag = (ins.schlag || 0) + 1;
+    st.musik = (st.musik || []).slice(-3); st.musik.push({ art: 'lager', n: ins.schlag });
+    st.noten = st.noten || [];
+    st.noten.push({ x: ins.x * 16 + 8, y: ins.y * 16 - 4, t: 0, dauer: 1.4, phase: ins.schlag, farbe: '#ffb037' });
+    if (st.noten.length > NOTEN_MAX) st.noten.splice(0, st.noten.length - NOTEN_MAX);
+    if (Dorf.Glueck) st.gaeste.forEach(function (gs) {
+      if (Math.hypot(gs.x - sp.x, gs.y - sp.y) < 90) { Dorf.Glueck.gib(st, gs, 'musik'); if (!st.ruhig && !(gs.hop > 0)) gs.hop = 0.25; }
+    });
+    if (!(st.heute && st.heute.lager)) sage(st, 'Biel', 'Lagerfeuer-Gitarre! Klingeling.', 3, ['note', 'herz']);
+    lerne(st, 'lager'); merke(st, 'lager'); merke(st, 'musik');
+    return true;
+  }
+
 
   function streichle(st, tier) {
     var sp = st.spieler, dx = tier.x - sp.x, dy = tier.y - sp.y;
@@ -922,6 +980,8 @@
     else if (a.art === 'flamingo') { tippFlamingo(st); }
     else if (a.art === 'ballon') { tippBallon(st, a.ballon); }
     else if (a.art === 'schoepfen') { if (brunnenNah(st)) tippSchoepfen(st); }
+    else if (a.art === 'feuer') { if (st.feuer && Dorf.Feuer && Dorf.Feuer.feuerNah(st.feuer, st.spieler)) tippFeuer(st); }
+    else if (a.art === 'lager') { if (st.feuer && Dorf.Feuer && Dorf.Feuer.gitarreNah(st.feuer, st.spieler)) tippLager(st); }
     else if (a.art === 'streicheln') {
       var t = a.tier;
       if (Dorf.Tiere.nah(t, st.spieler)) { if (t.ziel && t.lockt) { st.wartetAuf = { tier: t, rest: 3 }; return; } streichle(st, t); }
@@ -975,6 +1035,10 @@
       var blN = Dorf.Ballon.ballonAn(st.ballon, sp.x, sp.y - 10, Dorf.Ballon.NAH || 36);
       if (blN) return { art: 'ballon', ziel: blN };
     }
+    if (st.feuer && Dorf.Feuer) {
+      if (Dorf.Feuer.gitarreNah(st.feuer, sp)) return { art: 'lager' };
+      if (Dorf.Feuer.feuerNah(st.feuer, sp)) return { art: st.feuer.an ? 'feuerAus' : 'feuer' };
+    }
     if (brunnenNah(st)) return { art: 'schoepfen' };
     return null;
   }
@@ -990,6 +1054,8 @@
     else if (k.art === 'flamingo' || k.art === 'absteigen') tippFlamingo(st);
     else if (k.art === 'ballon' || k.art === 'landen') tippBallon(st, k.ziel || null);
     else if (k.art === 'schoepfen') tippSchoepfen(st);
+    else if (k.art === 'feuer' || k.art === 'feuerAus') tippFeuer(st);
+    else if (k.art === 'lager') tippLager(st);
     else return false;
     return true;
   }
@@ -1058,6 +1124,7 @@
         if (Dorf.Glueck) Dorf.Glueck.neuerTag(st);
         Dorf.Garten.neuerTag(st.garten);
         Dorf.Tiere.neuerTag(st.tiere, st.karte);
+        if (st.feuer && st.feuer.an && Dorf.Feuer) { st.feuer.an = false; Dorf.Feuer.entlasse(st.feuer, st); }
         st.herzchen.length = 0; st.flieger.length = 0; st.herzFlug.length = 0; st.denk = null; st.wunsch = null; st.teller.length = Math.min(st.teller.length, TAFEL_MAX);
         lerne(st, 'weiter'); st.speichernJetzt = true;
         if (Dorf.Sticker) Dorf.Sticker.neuerTag(st);
@@ -1108,6 +1175,10 @@
     if (menueOffen) { st.spieler.laeuft = false; st.spieler.frame = 0; }
     if (!menueOffen && st.wasser && Dorf.Wasser) Dorf.Wasser.update(st.wasser, st.karte, st.spieler, e, dt);
     if (!menueOffen && st.ballon && Dorf.Ballon) Dorf.Ballon.update(st.ballon, st.karte, st.spieler, e, dt);
+    if (!menueOffen && st.feuer && Dorf.Feuer) {
+      Dorf.Feuer.update(st.feuer, st, dt);
+      if (Dorf.Feuer.knisternFaellig(st.feuer)) klang(st, 'knistern');
+    }
     if (st.schoepfen) {
       st.schoepfen.rest -= dt;
       (st.schoepfen.tropfen || []).forEach(function (tr) {

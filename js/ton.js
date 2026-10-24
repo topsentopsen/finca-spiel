@@ -115,6 +115,11 @@
       var toene = [a[1] + 12, a[2] + 12, a[3] + 12];
       if (k % 2 === 1) toene.reverse();
       toene.forEach(function (m, i) { l.push({ midi: m, versatz: i * 0.035, staerke: 0.2 - i * 0.025, klang: 'saite' }); });
+    } else if (art === 'lager') {
+      // ab v0.24: warme, tiefere Lagerfeuer-Gitarre (langsam, gemuetlich)
+      var lt = [a[0] + 12, a[1] + 12, a[2] + 12, a[1] + 24];
+      if (k % 2 === 1) lt = [a[1] + 12, a[2] + 12, a[3] + 12, a[0] + 24];
+      lt.forEach(function (m, i) { l.push({ midi: m, versatz: i * 0.08, staerke: 0.16 - i * 0.02, klang: 'saite' }); });
     } else if (art === 'kastagnetten') {
       // zwei helle Klicks, beim dritten Schlag ein kleines Trippeln
       l.push({ freq: 2600, versatz: 0, staerke: 0.05, klang: 'klick' });
@@ -561,6 +566,17 @@
       else if (name === 'blubber') { ton(520, j, 0.08, 0.02, 'sine', 380); ton(700, j + 0.07, 0.1, 0.018, 'sine', 480); ton(880, j + 0.16, 0.14, 0.014, 'sine', 620); }
       else if (name === 'schoepfen') { ton(480, j, 0.1, 0.03, 'sine', 320); ton(640, j + 0.08, 0.12, 0.025, 'sine', 420); ton(900, j + 0.18, 0.16, 0.02, 'triangle', 600); ton(720, j + 0.28, 0.1, 0.018, 'sine', 500); }
       else if (name === 'ballon') { ton(220, j, 0.18, 0.04, 'sine', 160); ton(330, j + 0.12, 0.22, 0.035, 'triangle', 240); ton(440, j + 0.28, 0.28, 0.03, 'sine', 300); }
+      // ab v0.24: Feuer an/aus, leises Knistern
+      else if (name === 'feuerAn') { ton(180, j, 0.2, 0.05, 'sawtooth', 120); ton(240, j + 0.1, 0.22, 0.04, 'triangle', 160); ton(360, j + 0.22, 0.28, 0.03, 'sine', 280); }
+      else if (name === 'feuerAus') { ton(280, j, 0.18, 0.03, 'sine', 160); ton(200, j + 0.12, 0.22, 0.025, 'triangle', 120); }
+      else if (name === 'knistern') {
+        if (!rauschen) return false;
+        var qk = c.createBufferSource(), bpk = c.createBiquadFilter(), gnk = c.createGain();
+        qk.buffer = rauschen; qk.playbackRate.value = 0.7 + Math.random() * 0.4;
+        bpk.type = 'bandpass'; bpk.frequency.value = 900 + Math.random() * 800; bpk.Q.value = 1.2;
+        gnk.gain.setValueAtTime(0.0001, j); gnk.gain.linearRampToValueAtTime(0.035, j + 0.01); gnk.gain.exponentialRampToValueAtTime(0.0001, j + 0.18);
+        qk.connect(bpk); bpk.connect(gnk); gnk.connect(knoten.effekte); qk.start(j, Math.random() * 1.2, 0.2);
+      }
       // ab v0.20: Boot (weiches Plitsch), Flamingo (hohes Plopp)
       else if (name === 'boot') { ton(220, j, 0.12, 0.03, 'sine', 160); ton(330, j + 0.08, 0.16, 0.025, 'triangle', 240); }
       else if (name === 'flamingo') { ton(660, j, 0.1, 0.02, 'sine', 880); ton(990, j + 0.09, 0.14, 0.016, 'triangle', 1200); }
