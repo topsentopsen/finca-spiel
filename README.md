@@ -1,4 +1,4 @@
-# Finca v0.24
+# Finca v0.25
 
 A small browser game with a handheld look, written in pure JavaScript. There is no build and no npm. Music and sounds are generated in code with WebAudio; from v0.13 the evening lullaby is one small MP3 in `assets/` (no other media files).
 
@@ -48,18 +48,18 @@ The game remembers where you were: day, clock time, hearts, basket, garden and t
 ## Pictures (profiles) and the daily time rule (from v0.10)
 At the first start the game asks "Wer spielt?" with three big pictures (donkey, hen, gecko). Each picture has its own saved game, hearts and sticker album (keys `finca.spielstand.<picture>` and `finca.album.<picture>`; an old v0.9 save moves to the donkey).
 
-Time rule (chosen and tested): **15 minutes per picture per calendar day**. Real play seconds are booked in `finca.zeitkonto` together with the date. Reloading, "Neu anfangen", switching pictures or `?neu=1` never give time back. Whoever played today comes straight back into their own picture after a reload. When a picture's day is over, the chooser shows "Schlafenszeit" — **only that picture sleeps**. Siblings who still have minutes stay tippable (from v0.18; earlier versions locked every picture). If every picture is done, a clear tip points to the parent gear (hold 3 seconds) or waiting until midnight. Gear, mute and read-aloud stay usable; the screen must not freeze. At midnight every picture gets a new 15 minutes; an open chooser notices this within 2 seconds.
+Time rule (from v0.25): a **game day** lasts about **15 minutes of play** (`TAG_LIMIT`). When the evening scene ends, a short **night (~5 seconds)** plays with a **moon walking across the screen**, then a **new game day** starts and **everyone wakes up**. There is **no calendar lock** and no "Minuten sind alle · morgen wieder" / Schlafenszeit chooser — every picture stays tippable. Real play seconds are still booked in `finca.zeitkonto` for the weekly bar chart; a new game day resets today's seconds for the active picture (high-water mark kept for the week). Reloading still restores the last picture.
 
-From v0.11 parents can set the minutes per picture between 5 and 15 (stored in `finca.grenzen`). 15 is the hard upper limit and can never be exceeded. A lower limit counts immediately: if a picture has already played longer today, its evening starts right away. Raising the limit wakes a sleeping picture again if at least 30 seconds are left. The game clock goes a bit faster on a shorter day, so the evening still arrives in time.
+Earlier (v0.11–v0.24): parents could set minutes per picture (5–15) and a finished picture showed Schlafenszeit until calendar midnight. That blocking UI is removed in v0.25; the parent gear no longer has ± minute buttons. The weekly overview remains.
 
-Two minutes before the time is up Biel says once "Bald ist Abend. Noch ein bisschen spielen!" with a soft two note sound, and a small moon slowly fades in at the top right of the day arc (no blinking).
+Two minutes before the game-day limit Biel says once "Bald ist Abend. Noch ein bisschen spielen!" with a soft two note sound, and a small moon slowly fades in at the top right of the day arc (no blinking).
 
-When a picture is chosen, its name is read aloud ("Esel!", "Huhn!", "Gecko!"), also when moving with the arrow keys; a sleeping picture says "Der Esel schläft. Morgen geht es weiter."
+When a picture is chosen, its name is read aloud ("Esel!", "Huhn!", "Gecko!"), also when moving with the arrow keys.
 
 ## Parent area (from v0.10)
 Hold the gear button for 3 seconds. Shows the minutes played today per picture, the switch "Weniger Bewegung" (no hopping, glittering or pulsing, birds stay put; taken from the system setting the first time and saved in `finca.ruhig`), "Anderes Bild" and "Neu anfangen". Esc, the X or a tap outside closes it.
 
-From v0.11 it also shows, per picture, minus and plus buttons for the daily minutes (5 to 15) and a small bar chart of the last 7 days (today darker, a dot for days without play; stored in `finca.woche`, at most 14 days kept). The button "Sichern" opens a window with a backup code (starts with `FINCA1-`, has a checksum). "Code kopieren" copies it; on another device paste it and press "Übernehmen", then the game restarts with the saved games, albums and settings of all pictures. The code never contains the play time of today (`finca.zeitkonto`), so it cannot be used to get extra minutes. A wrong or incomplete code is rejected with a short message and nothing changes.
+From v0.11–v0.24 it also showed, per picture, minus and plus buttons for the daily minutes (5 to 15). From v0.25 those ± buttons are gone (no daily lock). It still shows a small bar chart of the last 7 days (today darker, a dot for days without play; stored in `finca.woche`, at most 14 days kept). The button "Sichern" opens a window with a backup code (starts with `FINCA1-`, has a checksum). "Code kopieren" copies it; on another device paste it and press "Übernehmen", then the game restarts with the saved games, albums and settings of all pictures. The code never contains the play time of today (`finca.zeitkonto`), so it cannot be used to get extra minutes. A wrong or incomplete code is rejected with a short message and nothing changes.
 
 ## Phone zoom (from v0.10)
 On small touch screens (shorter side under 500 px) the world is drawn 1.25 times bigger so Biel and the guests are easier to see; hearts, menus and the book keep their full size on their own layer. `?zoom=1` or `?zoom=1.25` forces it.
@@ -172,6 +172,9 @@ South of the gate the map grows a pastel beach and open sea (tiles `STRAND` / `M
 A pastel rowboat rests on the beach left of the gate. Tap it (or walk close and press the action button) to board; then tap open sea tiles — or use arrows/WASD — to sail on `MEER` only (the sand blocks beach cruising). Near the sand, tap the boat, the beach tip zone or the Aussteigen button to hop off (larger hit area); farther out Biel says to sail a bit closer — no getting stuck mid-sea without feedback. An inflatable flamingo floats in the pool: empty it drifts gently; sit (tap or action button) and steer with pool-water taps or arrows/WASD; tap the flamingo again to stand on the pool rim. Paths and buildings stay untouched.
 
 ## Version history
+- **v0.25** (24.10.2026): no Schlafenszeit / calendar minutes lock; after evening a ~5 s night with a moon walking across the screen, then a new game day with everyone awake; parent ± minute buttons removed; weekly chart kept.
+- **v0.24** (24.10.2026): stone campfire in the yard (on/off day or evening), sitting circle of guests when lit, campfire guitar (lager instrument).
+- **v0.23** (24.10.2026): well scooping, hot-air balloons, brighter major day music.
 - **v0.22** (24.10.2026): flamingo drifts in the pool and is steerable while seated; boat disembark more reliable for kids (larger tip zone, Aussteigen context, near-shore dock, clear feedback when still too far out).
 - **v0.21** (24.10.2026): boat sails only on open sea (no beach cruising); larger boat sprite; prettier inflatable flamingo; daytime guitar loop brighter (C major, slightly quicker). Lullaby MP3s A/B/C unchanged.
 - **v0.20** (24.10.2026): boat on the beach (board, sail on the sea, disembark); inflatable flamingo in the pool (sit/stand); pastel GBA style; desktop landscape + mobile portrait unchanged.

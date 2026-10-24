@@ -1906,36 +1906,54 @@
     return n;
   }
 
+
+  // ab v0.25: kurze Nacht (~5 s) — dunkler Himmel, Mond wandert von links nach rechts ueber den Screen
+  function zeichneNacht(R, st) {
+    var c = R.ctx, n = st.nacht || { t: 0, dauer: 5 };
+    var dauer = n.dauer > 0 ? n.dauer : 5;
+    var p = Math.max(0, Math.min(1, (n.t || 0) / dauer));
+    var info = { p: p, mondX: 0, mondY: 0 };
+    var band = ['#1a1438', '#241c48', '#2e2458', '#3a2e68'];
+    for (var i = 0; i < 4; i++) r(c, 0, i * Math.ceil(H / 4), W, Math.ceil(H / 4) + 2, band[i]);
+    // Sterne
+    for (var s = 0; s < 28; s++) {
+      var hs = hash(s, 11), stx = hs % W, sty = 4 + (hs >> 8) % Math.max(8, H - 40);
+      var hell = Math.sin((n.t || 0) * 2.2 + s) > 0.2;
+      r(c, stx, sty, 1, 1, '#fff6c8');
+      if (hell) { r(c, stx - 1, sty, 3, 1, 'rgba(255,246,200,0.55)'); r(c, stx, sty - 1, 1, 3, 'rgba(255,246,200,0.55)'); }
+    }
+    // Bodenstreifen
+    r(c, 0, H - 28, W, 28, '#2a2040'); r(c, 0, H - 28, W, 2, '#463874');
+    // Mond wandert ueber die Breite (Randpolster ~20 px)
+    var mx = Math.round(20 + p * (W - 40));
+    var my = Math.round(28 + Math.sin(p * Math.PI) * 18);
+    info.mondX = mx; info.mondY = my;
+    // sanfter Schein
+    c.globalAlpha = 0.22; kreis(c, mx, my, 22, '#fff3c4'); c.globalAlpha = 0.12; kreis(c, mx, my, 34, '#fff3c4'); c.globalAlpha = 1;
+    kreis(c, mx, my, 14, P.kontur); kreis(c, mx, my, 13, '#fff3c4');
+    kreis(c, mx - 4, my - 3, 2.5, '#f1e2a8'); kreis(c, mx + 5, my + 3, 2, '#f1e2a8'); r(c, mx + 2, my - 5, 2, 2, '#f1e2a8');
+    // zzz und Titel
+    text(R, 'Nacht', W / 2, 6, { align: 'center', fett: true, groesse: 10, farbe: '#fff6c8', rand: 'rgba(26,20,56,0.85)', randBreite: 2 });
+    var zb = Math.round(Math.sin((n.t || 0) * Math.PI) * 2);
+    muster(c, W / 2 - 8, H - 22 + zb, BILD.zzz[0].map(function (z) { return z.replace(/k/g, 'z'); }), { z: '#cfc4ff' });
+    R.letzteNacht = info;
+    return info;
+  }
+
   // Bildauswahl beim Start: drei grosse Bilder. Schlafenszeit: alle Bilder schlafen, nichts zu tippen.
   function zeichneWahl(R, st) {
-    var c = R.ctx, w = st.wahl, S = Dorf.Spiel, karten = S.wahlKarten(), info = { karten: [], gesperrt: !!w.gesperrt };
-    var info0 = w.info || [];
-    var wache = 0; info0.forEach(function (u) { if (u && !u.fertig) wache++; });
-    // ab v0.18: Nacht-Optik nur wenn wirklich alle schlafen (sonst Geschwister mit Minuten tippbar)
-    var nacht = !!w.gesperrt && wache === 0;
-    var streifen = nacht ? 44 : Math.max(44, Math.round(H / 4));
-    if (nacht) { var band = ['#2b2150', '#33285c', '#3c3068', '#463874']; for (var i = 0; i < 4; i++) r(c, 0, i * streifen, W, streifen + 2, band[i]); }
-    else { r(c, 0, 0, W, H, '#fff1e6'); var rasenY = hochkant ? Math.round(H * 0.72) : 132; r(c, 0, rasenY, W, H - rasenY, '#c4e6a4'); r(c, 0, rasenY, W, 2, '#a8d68f'); }
-    if (nacht) {
-      for (var s = 0; s < 18; s++) { var hs = hash(s, 13); r(c, hs % W, 3 + (hs >> 9) % 34, 1, 1, '#fff6c8'); }
-      grossesBild(c, 'mond', W - 26, 18, 2);
-      text(R, 'Schlafenszeit', W / 2, 12, { align: 'center', fett: true, groesse: 10, farbe: '#fff6c8' });
-      text(R, 'Minuten sind alle · morgen wieder', W / 2, 25, { align: 'center', groesse: 6, farbe: '#d8cce6' });
-    } else if (w.gesperrt && wache > 0) {
-      r(c, 0, 0, W, 36, '#3c3068');
-      text(R, 'Schlafenszeit', W / 2, 8, { align: 'center', fett: true, groesse: 9, farbe: '#fff6c8' });
-      text(R, 'Andere Bilder dürfen noch', W / 2, 22, { align: 'center', groesse: 6, farbe: '#d8cce6' });
-    } else {
-      zeichneSymbol(c, 'sonne', W / 2 - 52, 18);
-      text(R, 'Wer spielt?', W / 2 + 6, 13, { align: 'center', fett: true, groesse: 10 });
-    }
+    var c = R.ctx, w = st.wahl, S = Dorf.Spiel, karten = S.wahlKarten(), info = { karten: [], gesperrt: false };
+    // ab v0.25: keine Schlafenszeit-Optik mehr — immer wache Bildwahl
+    r(c, 0, 0, W, H, '#fff1e6'); var rasenY = hochkant ? Math.round(H * 0.72) : 132; r(c, 0, rasenY, W, H - rasenY, '#c4e6a4'); r(c, 0, rasenY, W, 2, '#a8d68f');
+    zeichneSymbol(c, 'sonne', W / 2 - 52, 18);
+    text(R, 'Wer spielt?', W / 2 + 6, 13, { align: 'center', fett: true, groesse: 10 });
     var info2 = w.info || [];
     var gesicht = hochkant ? 28 : 36, skala = hochkant ? 3 : 4, kr = hochkant ? 22 : 27;
     karten.forEach(function (k, i) {
       var pr = Dorf.Profile.hole(k.id), u = null;
       info2.forEach(function (q) { if (q.id === k.id) u = q; });
-      // ab v0.18: schlaeft pro Bild, nicht global — Geschwister mit Minuten bleiben tippbar
-      var schlaeft = !!(u && u.fertig), aktiv = !schlaeft && w.wahl === i;
+      // ab v0.25: Bilder schlafen nicht wegen Minuten
+      var schlaeft = false, nacht = false, aktiv = w.wahl === i;
       var dx = w.stups && w.stups.id === k.id && w.stups.t > 0 && !RUHIG ? Math.round(Math.sin(w.stups.t * 40) * 3) : 0;
       var hop = aktiv && !RUHIG ? Math.round(Math.abs(Math.sin((w.t || 0) * 3)) * 2) : 0;
       var x = k.x + dx, y = k.y - hop;
@@ -1952,13 +1970,7 @@
       if (aktiv) r(c, x + 8, y + k.h - 6, k.w - 16, 2, pr.rand || P.kontur);
       info.karten.push({ id: k.id, x: x, y: y, w: k.w, h: k.h, schlaeft: schlaeft, aktiv: aktiv, tag: tag, sticker: stk });
     });
-    if (nacht) {
-      text(R, 'Zahnrad 3 Sek. · mehr Minuten oder warten', W / 2, H - 14, { align: 'center', groesse: 6, farbe: '#d8cce6' });
-    } else if (w.gesperrt && wache > 0) {
-      text(R, 'Tippe ein waches Bild · Zahnrad für Eltern', W / 2, H - 14, { align: 'center', groesse: 6, farbe: '#d8cce6' });
-    } else {
-      text(R, 'Tippe auf dein Bild', W / 2, H - 14, { align: 'center', groesse: 7, farbe: '#5c7a4a' });
-    }
+    text(R, 'Tippe auf dein Bild', W / 2, H - 14, { align: 'center', groesse: 7, farbe: '#5c7a4a' });
     R.letzteWahl = info;
     return info;
   }
@@ -1984,23 +1996,17 @@
     pille(c, E.x - 1, E.y - 1, E.w + 2, E.h + 2, P.kontur); pille(c, E.x, E.y, E.w, E.h, P.box);
     text(R, 'Für Eltern', E.x + 12, E.y + 6, { fett: true, groesse: 8 });
     knopfFlaeche(c, E.zu, '#e6dcef', e.wahl === 'zu'); kreuz(c, E.zu.x + E.zu.w / 2, E.zu.y + E.zu.h / 2, P.kontur);
-    text(R, 'Minuten · Grenze (' + minG + '–' + maxG + ') · Woche', E.x + 12, E.y + 17, { groesse: 5, farbe: '#7a5a9a' });
+    text(R, 'Heute gespielt · Woche (Info)', E.x + 12, E.y + 17, { groesse: 5, farbe: '#7a5a9a' });
     (e.info || []).forEach(function (u, i) {
       var B = E.bilder[i]; if (!B) return;
-      var x = B.x, y = B.y, g = u.grenze || maxG, min = Math.min(g, Math.floor((u.sek || 0) / 60));
+      var x = B.x, y = B.y, g = u.grenze || maxG, min = Math.min(15, Math.floor((u.sek || 0) / 60));
       pille(c, x, y, B.w, B.h, u.farbe || '#fff4dc');
       grossesBild(c, u.id, x + 10, y + 10, 1);
       ziffern(c, min, x + 21, y + 4, { skala: 2, farbe: P.kontur });
       text(R, 'Min.', x + 23 + ziffernBreite(min, 2), y + 8, { groesse: 6 });
-      var status = u.fertig ? 'schläft' : (u.id === st.profil && st.profilGeladen ? 'spielt' : '');
+      var status = (u.id === st.profil && st.profilGeladen ? 'spielt' : '');
       if (status) text(R, status, x + B.w - 4, y + 16, { groesse: 5, farbe: '#7a5a9a', align: 'right' });
-      // Grenze einstellen: minus, Zahl, plus
-      var stups = e.stups && e.stups.id === u.id;
-      zeichenMinus(c, B.minus, e.wahl === 'minus_' + u.id, g <= minG);
-      zeichenPlus(c, B.plus, e.wahl === 'plus_' + u.id, g >= maxG);
-      var gb = ziffernBreite(g, 2);
-      ziffern(c, g, x + B.w / 2 - gb / 2 - 4 + (stups ? 1 : 0), B.minus.y + 3, { skala: 2, farbe: P.kontur });
-      text(R, 'max', x + B.w / 2 + gb / 2 - 2, B.minus.y + 8, { groesse: 5, farbe: '#7a5a9a' });
+      // ab v0.25: keine Minuten-Grenze +/- mehr
       // Woche: 7 Balken, 10 Pixel hoch sind 15 Minuten, heute ist rechts und dunkler
       // ab v0.12: endete ein Tag vor der Grenze, ist sein Balken sanft gruen (nur ein Hinweis fuer die Eltern, keine Belohnung)
       var woche = u.woche || [], gruen = u.gruen || [], bx0 = x + 6, boden = y + B.h - 3, farben = [];
@@ -2259,19 +2265,24 @@
 
     // ab v0.8: Sprechblase mit Bildern ueber dem Kopf (kein Name, kein Text fuer die Kinder)
     R.letzteBlase = null;
-    if (st.blase && !st.abend && !st.menue && !st.frage && !st.buch && !st.eltern) inWelt(function () { R.letzteBlase = zeichneSprechblase(cw, st, cx, cy); });
+    if (st.blase && !st.abend && !st.nacht && !st.menue && !st.frage && !st.buch && !st.eltern) inWelt(function () { R.letzteBlase = zeichneSprechblase(cw, st, cx, cy); });
 
-    if (!st.abend && !st.menue && !st.frage && !st.buch && !st.eltern && !st.debug && Dorf.Glueck) zeichneHud(R, st);
-    if (!st.abend && !st.frage) inWelt(function () { zeichneFlieger(cw, st, cx, cy); zeichneHerzFlug(cw, st, cx, cy); });
-    if (!st.abend && !st.menue && !st.frage && !st.buch && !st.eltern) inWelt(function () { zeichneDenken(cw, st, cx, cy); });
-    if (st.menue && !st.abend) zeichneMenue(R, st);
+    if (!st.abend && !st.nacht && !st.menue && !st.frage && !st.buch && !st.eltern && !st.debug && Dorf.Glueck) zeichneHud(R, st);
+    if (!st.abend && !st.nacht && !st.frage) inWelt(function () { zeichneFlieger(cw, st, cx, cy); zeichneHerzFlug(cw, st, cx, cy); });
+    if (!st.abend && !st.nacht && !st.menue && !st.frage && !st.buch && !st.eltern) inWelt(function () { zeichneDenken(cw, st, cx, cy); });
+    if (st.menue && !st.abend && !st.nacht) zeichneMenue(R, st);
     if (st.debug) zeichneDebug(R, st);
 
     // Abendszene (ab v0.7 schliesst sich vorher ein Kreis um Biel, ab v0.9 ein Bild statt Text)
     var irisDauer = (Dorf.Spiel && Dorf.Spiel.ABEND && Dorf.Spiel.ABEND.iris) || 1.2, irisSeit = st.abendZeit === undefined ? 99 : st.zeit - st.abendZeit;
     R.letzteAbend = null;
-    if (st.abend && irisSeit < irisDauer) inWelt(function () { zeichneIris(cw, st, cx, cy, irisSeit / irisDauer); });
-    if (st.abend && irisSeit >= irisDauer) R.letzteAbend = zeichneAbendSzene(R, st, st.abendZeit === undefined ? 99 : irisSeit);
+    R.letzteNacht = null;
+    if (st.nacht) {
+      zeichneNacht(R, st);
+    } else {
+      if (st.abend && irisSeit < irisDauer) inWelt(function () { zeichneIris(cw, st, cx, cy, irisSeit / irisDauer); });
+      if (st.abend && irisSeit >= irisDauer) R.letzteAbend = zeichneAbendSzene(R, st, st.abendZeit === undefined ? 99 : irisSeit);
+    }
     R.letztesBuch = null;
     if (st.buch) R.letztesBuch = zeichneBuch(R, st);
     if (st.frage) zeichneFrage(R, st);

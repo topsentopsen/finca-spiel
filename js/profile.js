@@ -1,10 +1,8 @@
 /* Profile (ab v0.10): jedes Kind waehlt am Anfang sein Bild (Esel, Huhn oder Gecko) und hat einen eigenen
    Spielstand, eigene Herzen und ein eigenes Stickeralbum.
-   Zeitregel: pro Profil und Kalendertag hoechstens ein Spieltag (15 Minuten aktives Spielen). Die Zeit steht
-   in einem eigenen Tageskonto (finca.zeitkonto), das weder Neu anfangen noch Neuladen noch ein Profilwechsel
-   zuruecksetzt. Damit niemand einfach das Bild wechselt, um weiterzuspielen: sobald heute mit einem Profil
-   gespielt wurde, geht es beim naechsten Start direkt mit diesem Profil weiter, und ein anderes Bild waehlen
-   geht nur ueber den Elternbereich. Um Mitternacht beginnt ein neues Konto. */
+   ab v0.25: Kein Kalender-Minuten-Lock mehr. Das Zeitkonto (finca.zeitkonto) dient nur noch der Wochenstatistik
+   im Elternbereich. Ein Spieltag endet nach ~15 Minuten Spielzeit mit einer kurzen Nacht, danach beginnt
+   im Spiel ein neuer Tag — Bilder schlafen nicht bis Mitternacht. */
 (function (g) {
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
@@ -119,8 +117,8 @@
     return schreib(sp, GRENZEN, JSON.stringify(aus));
   }
   function grenze(gr, id) { return gr && typeof gr[id] === 'number' ? klemmeGrenze(gr[id]) : maxGrenze(); }
-  // Schlaeft das Bild heute? Entweder schon ins Bett gegangen oder die eingestellten Minuten sind voll
-  function schlaeft(konto, gr, id) { return fertig(konto, id) || sekunden(konto, id) >= grenze(gr, id) * 60; }
+  // ab v0.25: Bilder schlafen nie wegen Minuten/Kalender — Tagende geht in die Nachtphase im Spiel
+  function schlaeft(konto, gr, id) { return false; }
   // Eltern geben mehr Minuten: wer noch mindestens eine halbe Minute uebrig hat, wacht wieder auf
   function entsperre(konto, gr) {
     var auf = [];
@@ -162,7 +160,11 @@
     if (!w.grenzen || typeof w.grenzen !== 'object') w.grenzen = {};
     if (!konto || !konto.datum) return w;
     var e = {}, ge = {};
-    LISTE.forEach(function (p) { var s = sekunden(konto, p.id); if (s > 0) { e[p.id] = Math.round(s); ge[p.id] = grenze(gr, p.id); } });
+    var alt = w.tage[konto.datum] || {};
+    LISTE.forEach(function (p) {
+      var s = sekunden(konto, p.id), a = alt[p.id] || 0, m = Math.max(s, a);
+      if (m > 0) { e[p.id] = Math.round(Math.min(MAX_SEK, m)); ge[p.id] = grenze(gr, p.id); }
+    });
     w.tage[konto.datum] = e;
     if (gr !== undefined) w.grenzen[konto.datum] = ge;
     var grenzTag = verschiebe(konto.datum, -(WOCHE_TAGE - 1));
