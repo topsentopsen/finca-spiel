@@ -1,6 +1,6 @@
-# Finca v0.12
+# Finca v0.13
 
-A small browser game with a handheld look, written in pure JavaScript. There is no build, no npm and there are no external assets. Music and sounds are generated in code with WebAudio.
+A small browser game with a handheld look, written in pure JavaScript. There is no build and no npm. Music and sounds are generated in code with WebAudio; from v0.13 the evening lullaby is one small MP3 in `assets/` (no other media files).
 
 ## Start
 Double-click `index.html`. The game runs directly over `file://`.
@@ -131,7 +131,8 @@ Developer helpers: `?start=x,y` places Biel on a tile, `?debug=1` opens the debu
 - `js/sticker.js` – the twelve stickers, which one is earned today (one per day, things done today first), album saving
 - `js/hinweise.js` – picture hints for children who cannot read yet (what to do next, when to show it)
 - `js/render.js` – drawing (cached background, tiles, sprites, HUD, hints, dialog, debug)
-- `js/ton.js` – WebAudio music (plucked guitar-like loop in A minor, 66 BPM, Karplus-Strong) and soft sound effects, evening variant with crossfade, crickets at night, mute toggle
+- `js/ton.js` – WebAudio music (plucked guitar-like loop in A minor, 66 BPM, Karplus-Strong) and soft sound effects, evening variant with crossfade, crickets at night, mute toggle, iPhone playback session, lullaby file for "Bona nit"
+- `assets/schlaflied-c.mp3` – Variante C lullaby (soft flute, pad, guitar), about 34 s, played once in the evening scene
 - `js/vorlesen.js` – optional read aloud with the browser's built in speechSynthesis (German voice only, slow and calm, only after the first tap, silent when muted)
 - `js/profile.js` – the three pictures (profiles), their save keys, the daily time account per picture and calendar day, "Weniger Bewegung" setting
 - `js/leben.js` – background life: a few birds and butterflies (own random generator, at most six, gone in the evening)
@@ -139,16 +140,20 @@ Developer helpers: `?start=x,y` places Biel on a tile, `?debug=1` opens the debu
 
 From v0.12 the parent area also has three switches for reading aloud: "Namen" (short announcements like picture names), "Sätze" (speech bubbles and the evening book) and "Langsam" (about 20 percent slower). They are stored in `finca.vorleseart` and are part of the backup code. A week bar turns soft green when that day ended at least 30 seconds before the limit of that day; today only once it is over. There is no reward or message for it, it is only a quiet hint for parents. While the parent area is open the buttons at the top right are hidden.
 
-## Evening book and lullaby (from v0.12)
-During "Bona nit" the picture book opens once by itself on a new page "Heute" (moon tab, only in the evening): today's sticker large on the left, up to six pictures of what happened today on the right (hearts goal, dishes, Bruna, harvest, egg, hen, gecko, song or music, birds). One calm sentence about it is read aloud if reading aloud is on. Closing it works as usual. At the same time a short lullaby in A minor (about 30 seconds) replaces the evening loop, gets slower and quieter at the end and stops by itself; afterwards only the crickets remain. It plays once per evening and there is no button to repeat it.
+## Evening book and lullaby (from v0.12, lullaby file from v0.13)
+During "Bona nit" the picture book opens once by itself on a new page "Heute" (moon tab, only in the evening): today's sticker large on the left, up to six pictures of what happened today on the right (hearts goal, dishes, Bruna, harvest, egg, hen, gecko, song or music, birds). One calm sentence about it is read aloud if reading aloud is on. Closing it works as usual. At the same time a short lullaby (about 30 seconds of music) replaces the evening loop and stops by itself; afterwards only the crickets remain. From v0.13 this is Variante C as a rendered file (`assets/schlaflied-c.mp3`): soft flute over a warm pad and quiet guitar in waltz time, A minor with a bright A major ending. It plays once per evening and there is no button to repeat it.
+
+## Sound on iPhone (from v0.13)
+On iPhone the silent switch used to mute the game's WebAudio. The game now asks for a playback audio session (and on older iOS plays a tiny silent `<audio>` element once) so music and sounds keep playing when the switch is on. After the lock screen or a call the next tap wakes an interrupted audio context. On phones the overall level is a little louder so small speakers stay clear. The in-game mute button still works as before.
 
 ## Tests
 ```
 node tests/run.js
 ```
-Uses only Node's built-in `vm` module. Nothing has to be installed. 134 tests, including a ten day soak test with random taps, keys, start over questions and a save and load every day.
+Uses only Node's built-in `vm` module. Nothing has to be installed. 135 tests, including a ten day soak test with random taps, keys, start over questions and a save and load every day.
 
 ## Version history
+- **v0.13** (24.10.2026): lullaby Variante C (flute / pad / guitar) as `assets/schlaflied-c.mp3` during "Bona nit"; iPhone silent-switch fix (playback session, wake interrupted context, slightly louder on phones).
 - **v0.12** (23.10.2026): evening book page "Heute" with today's sticker large and a calm sentence read aloud; short lullaby in "Bona nit" that ends by itself (no repeat button); week bars turn soft green when a day ended before the limit (no reward); read aloud switches for names, sentences and slower speech in the parent area; the top right buttons are hidden while the parent area is open.
 - **v0.11** (23.10.2026): parents set minutes per picture (5 to 15, never above 15) with minus and plus, weekly review as pixel bars in the parent area, backup and transfer as a code ("Sichern"). Gentle sign two minutes before the end (Biel says it once, a moon fades in). Three taps on an instrument play a little tune and give a music sticker. Picture names are read aloud in the chooser. Album with 16 stickers (new: song, guitar, bird, moon, star, butterfly).
 - **v0.10** (23.10.2026): pictures (profiles) for each child with their own save, hearts and album, chosen by tapping a picture; 15 minutes per picture per calendar day that cannot be bypassed by switching, reloading or starting over. Hidden parent area (hold the gear 3 seconds) with "Neu anfangen", "Weniger Bewegung" and picture switching; the start over button is gone from the children's view. Guitar, castanets and drum to tap, playing soft notes in the chord of the music. Birds and butterflies in the background (birds hop away when Biel comes close, all leave in the evening). Pixel digits for numbers. Phone zoom. New soft sounds (picture chosen, sleeping, parent area, birds). The edge badge sits further away from the hearts.

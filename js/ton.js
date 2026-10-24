@@ -8,7 +8,7 @@
   var SCHLUESSEL = 'finca.stumm';
   var BPM = 66;                        // langsam und entspannt
   var ACHTEL = 60 / BPM / 2;           // Sekunden pro Achtel
-  var LAUT = { gesamt: 0.6, musik: 0.55, effekte: 0.9, umgebung: 0.05, grillen: 0.06 };
+  var LAUT = { gesamt: 0.6, musik: 0.55, effekte: 0.9, umgebung: 0.05, grillen: 0.06, handy: 1.6 };   // handy: etwa 4 dB mehr fuer kleine Lautsprecher
   var UEBERBLENDEN = 2.5;              // Zeitkonstante in Sekunden fuer Tag zu Abend (ganz weich)
 
   // Akkorde in MIDI: Bass und drei Toene. Spanische Kadenz in a-Moll, sanft gezupft.
@@ -27,42 +27,25 @@
   var MELODIE_ABEND = [[0, 0, 72], [0, 4, 69], [1, 0, 71], [1, 4, 67], [2, 0, 69], [2, 4, 65], [3, 0, 68], [3, 6, 64],
     [4, 0, 65], [4, 4, 69], [5, 0, 64], [5, 4, 67], [6, 0, 69], [6, 4, 72], [7, 0, 71], [7, 4, 68]];
 
-  // ab v0.12: Schlaflied fuer "Bona nit". Spielt einmal pro Abend, wird am Ende langsamer und leiser und hoert von selbst auf.
-  // Danach zirpen nur noch die Grillen. Es gibt absichtlich keinen Knopf zum Wiederholen.
-  var SCHLAFLIED = { vorlauf: 2.0, achtel: 0.5, bremse: 0.35, leiseBis: 0.5, max: 0.4 };
-  var WIEGEN_FOLGE = ['Am', 'F', 'G', 'Am', 'Dm', 'Am', 'E', 'Am'];
-  var WIEGEN_MELODIE = [[0, 0, 76], [0, 4, 72], [1, 0, 72], [1, 4, 69], [2, 0, 71], [2, 4, 67], [3, 0, 69], [3, 4, 72],
-    [4, 0, 74], [4, 4, 69], [5, 0, 72], [5, 4, 76], [6, 0, 71], [6, 4, 68], [7, 0, 69]];
-  var WIEGEN_MUSTER = [[0, 0], [2, 1], [4, 2], [6, 3]];
-  // Reine Funktion: alle Noten mit Zeit in Sekunden ab Liedbeginn. Die letzten zwei Takte werden langsamer und leiser.
-  function schlafliedNoten() {
-    var roh = [];
-    WIEGEN_FOLGE.forEach(function (name, takt) {
-      var a = AKKORDE[name];
-      if (takt === WIEGEN_FOLGE.length - 1) {
-        // Schlussakkord: Bass und drei Toene ganz sanft nacheinander, dann klingt alles aus
-        [0, 1, 2, 3].forEach(function (k) { roh.push({ schritt: takt * 8 + k, midi: a[k], staerke: k ? 0.22 : 0.36, art: k ? 'akkord' : 'bass' }); });
-        return;
-      }
-      WIEGEN_MUSTER.forEach(function (m) { roh.push({ schritt: takt * 8 + m[0], midi: a[m[1]], staerke: m[1] === 0 ? 0.36 : 0.22, art: m[1] === 0 ? 'bass' : 'akkord' }); });
-    });
-    WIEGEN_MELODIE.forEach(function (m) { roh.push({ schritt: m[0] * 8 + m[1], midi: m[2], staerke: 0.26, art: 'melodie' }); });
-    var n = WIEGEN_FOLGE.length * 8, ab = n - 16;
-    function zeit(k) {
-      // ab Takt 7 jede Achtel etwas laenger (sanftes Ritardando)
-      if (k <= ab) return k * SCHLAFLIED.achtel;
-      var x = k - ab;
-      return ab * SCHLAFLIED.achtel + x * SCHLAFLIED.achtel + SCHLAFLIED.bremse * SCHLAFLIED.achtel * x * x / 16;
-    }
-    roh.forEach(function (r) {
-      var leiser = r.schritt <= ab ? 1 : 1 - (1 - SCHLAFLIED.leiseBis) * (r.schritt - ab) / 16;
-      r.sek = Math.round(zeit(r.schritt) * 1000) / 1000;
-      r.staerke = Math.round(Math.min(SCHLAFLIED.max, r.staerke * leiser) * 1000) / 1000;
-    });
-    roh.sort(function (a, b) { return a.sek - b.sek || a.midi - b.midi; });
-    return roh;
-  }
-  function schlafliedDauer() { var l = schlafliedNoten(); return l[l.length - 1].sek + 2.6; }   // plus Ausklingen der letzten Saite
+  // ab v0.12 / v0.13: Schlaflied fuer "Bona nit". Spielt einmal pro Abend und hoert von selbst auf.
+  // ab v0.13: Variante C als gerenderte Datei (weiche Floete, warme Flaeche, leiser Gitarren-Dreiertakt in a-Moll,
+  // mallorquinischer Hauch, heller A-Dur-Schluss, etwa 30 s Musik + Ausklang, Lautheit etwa minus 16 LUFS).
+  // Die Datei wird per decodeAudioData abgespielt. Es gibt absichtlich keinen Knopf zum Wiederholen.
+  var SCHLAFLIED = {
+    vorlauf: 2.0, datei: 'assets/schlaflied-c.mp3', laut: 0.72, dauer: 34.4, variante: 'C', max: 0.72
+  };
+  // Kurze Stichprobe der Noten von Variante C (vollstaendige Liste liegt neben der Datei beim Erzeugen).
+  // Dient Tests und Dokumentation; die Wiedergabe nutzt die Datei, nicht diese Noten.
+  var SCHLAFLIED_STICH = [
+    { sek: 0.0, midi: 45, staerke: 0.32, art: 'bass' },
+    { sek: 0.0, midi: 69, staerke: 0.34, art: 'floete' },
+    { sek: 10.435, midi: 81, staerke: 0.34, art: 'floete' },
+    { sek: 26.087, midi: 57, staerke: 0.18, art: 'gitarre' },
+    { sek: 26.087, midi: 61, staerke: 0.18, art: 'gitarre' }
+  ];
+  var WIEGEN_FOLGE = ['Am', 'G', 'F', 'E', 'Am', 'Dm', 'E', 'Am', 'F', 'E', 'A'];   // Akkorde der Variante C
+  function schlafliedNoten() { return SCHLAFLIED_STICH.slice(); }
+  function schlafliedDauer() { return SCHLAFLIED.dauer; }
 
   function mtof(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 
@@ -177,6 +160,9 @@
       mix: { tag: 1, abend: 0, grillen: 0 }, grillenGespielt: 0, naechsteGrille: 0
     };
     var leiseSeit = { tag: -1, abend: -1 }, grillenZufall = 12345;
+    var handy = false;
+    try { handy = !!(win && win.matchMedia && win.matchMedia('(pointer: coarse)').matches); } catch (e) { handy = false; }
+    t.handy = handy;
     var knoten = {}, takt = null, rauschen = null, umgebungZiel = 0, schrittL = false;
 
     function baue() {
@@ -270,7 +256,7 @@
       knoten.gesamt.gain.cancelScheduledValues(jetzt);
       knoten.gesamt.gain.setValueAtTime(knoten.gesamt.gain.value, jetzt);
       // Einblenden langsam, Ausblenden schnell, nie ploetzlich laut
-      knoten.gesamt.gain.setTargetAtTime(t.stumm ? 0 : LAUT.gesamt, jetzt, t.stumm ? 0.08 : 1.2);
+      knoten.gesamt.gain.setTargetAtTime(t.stumm ? 0 : LAUT.gesamt * (handy ? LAUT.handy : 1), jetzt, t.stumm ? 0.08 : 1.2);
     }
 
     function grille(z) {
@@ -282,27 +268,53 @@
       o.connect(gn); gn.connect(knoten.grillen); o.start(z.zeit); o.stop(z.zeit + z.dauer + 0.02);
       t.grillenGespielt++;
     }
-    // ab v0.12: Schlaflied einmal pro Abendszene. t.schlaflied: { start, ende, quellen } solange es geplant ist
+    // ab v0.12 / v0.13: Schlaflied einmal pro Abendszene. t.schlaflied: { start, ende, quellen } solange es geplant ist.
+    // ab v0.13: Wiedergabe aus der Datei (AudioBuffer), nicht mehr Note fuer Note aus der Zupfsaite.
     t.schlaflied = null; t.schlafliedGespielt = false; t.schlafliedNoten = 0;
+    t.schlafliedPuffer = null; t.schlafliedLaden = false; t.schlafliedWartet = false;
+    function ladeSchlaflied() {
+      if (t.schlafliedPuffer || t.schlafliedLaden || !t.ctx) return;
+      // Tests und Offline: Puffer kann schon gesetzt sein. Sonst Datei laden.
+      if (typeof t.schlafliedPufferSetzen === 'function') return;
+      var fetchFn = win.fetch;
+      if (!fetchFn || !t.ctx.decodeAudioData) return;
+      t.schlafliedLaden = true;
+      fetchFn.call(win, SCHLAFLIED.datei).then(function (r) {
+        if (!r || !r.ok) throw new Error('schlaflied fehlte');
+        return r.arrayBuffer();
+      }).then(function (roh) {
+        return new Promise(function (ok, fehl) {
+          var ret = t.ctx.decodeAudioData(roh, ok, fehl);
+          if (ret && typeof ret.then === 'function') ret.then(ok, fehl);
+        });
+      }).then(function (buf) {
+        t.schlafliedPuffer = buf; t.schlafliedLaden = false;
+        if (t.schlafliedWartet && !t.schlafliedGespielt && !t.stumm) { t.schlafliedWartet = false; schlafliedStart(); }
+      }).catch(function () { t.schlafliedLaden = false; });
+    }
     function schlafliedStart() {
-      var c = t.ctx, start = c.currentTime + SCHLAFLIED.vorlauf, q = [];
-      knoten.wiegen.gain.cancelScheduledValues(c.currentTime); knoten.wiegen.gain.setValueAtTime(1, c.currentTime);
-      schlafliedNoten().forEach(function (n) {
-        var quelle = c.createBufferSource(), gn = c.createGain();
-        quelle.buffer = saite(n.midi); gn.gain.value = n.staerke;
-        quelle.connect(gn); gn.connect(knoten.wiegen); quelle.start(start + n.sek); q.push(quelle);
-        t.schlafliedNoten++;
-      });
-      t.schlaflied = { start: start, ende: start + schlafliedDauer(), quellen: q };
+      if (!t.ctx || !knoten.wiegen || t.stumm) return;
+      if (!t.schlafliedPuffer) { t.schlafliedWartet = true; ladeSchlaflied(); return; }
+      var c = t.ctx, start = c.currentTime + SCHLAFLIED.vorlauf;
+      knoten.wiegen.gain.cancelScheduledValues(c.currentTime);
+      knoten.wiegen.gain.setValueAtTime(SCHLAFLIED.laut, c.currentTime);
+      var quelle = c.createBufferSource();
+      quelle.buffer = t.schlafliedPuffer;
+      quelle.connect(knoten.wiegen);
+      quelle.start(start);
+      var dauer = (t.schlafliedPuffer.duration > 0 ? t.schlafliedPuffer.duration : SCHLAFLIED.dauer);
+      t.schlaflied = { start: start, ende: start + dauer, quellen: [quelle] };
       t.schlafliedGespielt = true;
+      t.schlafliedNoten = 1;
+      t.schlafliedWartet = false;
     }
     function schlafliedStopp() {
-      if (!t.schlaflied) return;
+      if (!t.schlaflied) { t.schlafliedWartet = false; return; }
       var c = t.ctx, j = c.currentTime;
-      // weich ausblenden, dann die noch geplanten Toene absagen
+      // weich ausblenden, dann die Quelle absagen
       knoten.wiegen.gain.cancelScheduledValues(j); knoten.wiegen.gain.setTargetAtTime(0, j, 0.4);
       t.schlaflied.quellen.forEach(function (q) { try { q.stop(j + 1.6); } catch (e) { /* schon vorbei */ } });
-      t.schlaflied = null;
+      t.schlaflied = null; t.schlafliedWartet = false;
     }
     function schlafliedPruefen(abendSzene) {
       if (!t.ctx || !knoten.wiegen) return;
@@ -310,6 +322,7 @@
       if (t.schlaflied && t.ctx.currentTime > t.schlaflied.ende) t.schlaflied = null;   // von selbst zu Ende
       if (!t.schlafliedGespielt && !t.stumm && t.bereit && t.ctx.state === 'running') schlafliedStart();
     }
+
     // Uhrzeit vom Spiel: blendet weich zwischen Tag, Abend und Grillen
     t.tageszeit = function (stunde, abendSzene) {
       schlafliedPruefen(!!abendSzene);
@@ -325,12 +338,55 @@
       return true;
     };
 
+    // Fix Handy-Ton: iPhone soll den Ton wie Musik behandeln, nicht wie einen Klingelton.
+    // Sonst macht der Lautlos-Schalter WebAudio stumm. Ab iOS 16.4 gibt es dafuer navigator.audioSession,
+    // aeltere Geraete bekommen einmal ein stilles, im Code erzeugtes <audio>-Element (keine Datei).
+    var sitzungGesetzt = false, stillesAudio = null, entsperrPuffer = false;
+    function stilleWav() {
+      // 0,1 s Stille als WAV, 8 kHz, 8 Bit mono, als data-URL. 128 ist bei 8 Bit die Nulllinie.
+      var n = 800, kopf = [82, 73, 70, 70], i, b = [];
+      function u32(v) { return [v & 255, (v >> 8) & 255, (v >> 16) & 255, (v >> 24) & 255]; }
+      function u16(v) { return [v & 255, (v >> 8) & 255]; }
+      b = b.concat(kopf, u32(36 + n), [87, 65, 86, 69, 102, 109, 116, 32], u32(16), u16(1), u16(1), u32(8000), u32(8000), u16(1), u16(8), [100, 97, 116, 97], u32(n));
+      for (i = 0; i < n; i++) b.push(128);
+      var str = ''; for (i = 0; i < b.length; i++) str += String.fromCharCode(b[i]);
+      return 'data:audio/wav;base64,' + (win.btoa ? win.btoa(str) : '');
+    }
+    function audioSitzung() {
+      if (sitzungGesetzt) return; sitzungGesetzt = true;
+      try {
+        var nav = win.navigator;
+        if (nav && nav.audioSession && 'type' in nav.audioSession) { nav.audioSession.type = 'playback'; return; }
+        // aeltere iPhones: ein stilles <audio> in der Nutzergeste schaltet die Sitzung auf Wiedergabe um
+        var istIOS = nav && (/iP(hone|ad|od)/.test(nav.userAgent || '') || (nav.platform === 'MacIntel' && nav.maxTouchPoints > 1));
+        if (istIOS && win.document && win.document.createElement && win.btoa) {
+          stillesAudio = win.document.createElement('audio');
+          stillesAudio.setAttribute('x-webkit-airplay', 'deny'); stillesAudio.preload = 'auto'; stillesAudio.loop = true;
+          stillesAudio.src = stilleWav();
+          var pr = stillesAudio.play(); if (pr && pr.catch) pr.catch(function () { sitzungGesetzt = false; });
+        }
+      } catch (e) { /* egal, dann eben wie bisher */ }
+    }
+    function weckeKontext() {
+      // nicht nur 'suspended': iPhone meldet nach Sperrbildschirm oder Anruf 'interrupted'
+      var s = t.ctx.state;
+      if (s !== 'running' && s !== 'closed' && t.ctx.resume) {
+        try { var pr = t.ctx.resume(); if (pr && pr.catch) pr.catch(function () { /* naechste Geste versucht es wieder */ }); } catch (e) { /* egal */ }
+      }
+      // aeltere iPhones schalten WebAudio erst frei, wenn in der Geste wirklich etwas abgespielt wird
+      if (!entsperrPuffer) {
+        entsperrPuffer = true;
+        try { var q = t.ctx.createBufferSource(); q.buffer = t.ctx.createBuffer(1, 1, t.ctx.sampleRate || 44100); q.connect(t.ctx.destination); q.start(0); } catch (e) { entsperrPuffer = false; }
+      }
+    }
     t.entsperre = function () {
       if (!AC) return false;
       try {
+        audioSitzung();
         if (!t.ctx) { t.ctx = new AC(); baue(); t.naechste = t.ctx.currentTime + 0.3; }
-        if (t.ctx.state === 'suspended' && t.ctx.resume) t.ctx.resume();
+        weckeKontext();
         if (!t.bereit) { t.bereit = true; lautstaerke(); takt = win.setInterval(planer, 50); }
+        ladeSchlaflied();
       } catch (e) { t.verfuegbar = false; return false; }
       return true;
     };
@@ -341,7 +397,14 @@
       return t.stumm;
     };
     t.umschalten = function () { return t.setzeStumm(!t.stumm); };
-    t.pausiere = function (an) { if (t.ctx) { try { if (an) t.ctx.suspend(); else t.ctx.resume(); } catch (e) { /* egal */ } } };
+    // Beim Zurueckkommen nur versuchen. Klappt es ohne Geste nicht (iPhone), weckt der naechste Tipp den Ton.
+    t.pausiere = function (an) {
+      if (!t.ctx) return;
+      try {
+        if (an) { var p1 = t.ctx.suspend(); if (p1 && p1.catch) p1.catch(function () {}); if (stillesAudio && stillesAudio.pause) stillesAudio.pause(); }
+        else { weckeKontext(); if (stillesAudio && stillesAudio.play) { var p2 = stillesAudio.play(); if (p2 && p2.catch) p2.catch(function () {}); } }
+      } catch (e) { /* egal */ }
+    };
     // Brunnen und Pool: nah = 0..1
     t.umgebung = function (nah) {
       umgebungZiel = Math.max(0, Math.min(1, nah)) * LAUT.umgebung;
@@ -445,7 +508,10 @@
     // Erste Beruehrung oder Taste schaltet den Ton frei
     if (win && win.addEventListener) {
       var frei = function () { t.entsperre(); };
-      ['pointerdown', 'keydown', 'touchend', 'click'].forEach(function (n) { win.addEventListener(n, frei, true); });
+      // touchend, pointerup und click zaehlen auf dem iPhone als Geste, pointerdown oft nicht. Bleibt dauerhaft angemeldet,
+      // damit jeder Tipp einen unterbrochenen Ton wieder weckt.
+      ['pointerdown', 'pointerup', 'keydown', 'touchend', 'click'].forEach(function (n) { win.addEventListener(n, frei, true); });
+      win.addEventListener('pageshow', function () { if (t.ctx) weckeKontext(); });
     }
     return t;
   }

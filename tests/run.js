@@ -140,7 +140,7 @@ test('Uhr: 40 s pro Stunde, Abendszene bei 23:00 und naechster Tag', function ()
   nah(st.uhr.minute, 7 * 60, 1e-6, 'nach 40 s eine Stunde');
   for (i = 0; i < 17 * 40 * 10; i++) D.Spiel.schritt(st, 0.1);
   wahr(st.abend, 'Abendszene aktiv');
-  wahr(st.buch && st.buch.seite === D.Spiel.HEUTE_SEITE, 'ab v0.12: Abendbuch ist von selbst auf der Seite Heute');
+  wahr(st.buch && st.buch.seite === D.Spiel.HEUTE_SEITE, 'ab v0.13: Abendbuch ist von selbst auf der Seite Heute');
   st.eingabe.druecke('Enter'); D.Spiel.schritt(st, 0.1); st.eingabe.ende();
   wahr(!st.buch && st.abend, 'erstes Enter schliesst nur das Buch');
   st.eingabe.loese('Enter'); D.Spiel.schritt(st, 0.1);
@@ -204,11 +204,11 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.12', function () {
+test('Version: sichtbares Label ist v0.13', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.12');
+  gleich(D.VERSION, 'v0.13');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.12 (Prototyp)') >= 0, 'Titel enthaelt v0.12');
+  wahr(html.indexOf('Finca v0.13 (Prototyp)') >= 0, 'Titel enthaelt v0.13');
   DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.12"') >= 0, n + ' eingebunden'); });
   wahr(html.indexOf('js/profile.js') < html.indexOf('js/main.js') && html.indexOf('js/leben.js') < html.indexOf('js/main.js'), 'neue Dateien vor main');
 });
@@ -407,7 +407,16 @@ function fakeAudio() {
   AC.prototype.createStereoPanner = function () { return knoten({ pan: param(0) }); };
   AC.prototype.createOscillator = function () { log.oszi++; return knoten({ frequency: param(440), type: 'sine' }); };
   AC.prototype.createBufferSource = function () { return knoten({ buffer: null, loop: false, playbackRate: param(1) }); };
-  AC.prototype.createBuffer = function (ch, len) { var d = new Float32Array(len); return { getChannelData: function () { return d; } }; };
+  AC.prototype.createBuffer = function (ch, len) { var d = new Float32Array(len); return { getChannelData: function () { return d; }, duration: len / (this.sampleRate || 8000), sampleRate: this.sampleRate || 8000, numberOfChannels: ch }; };
+  AC.prototype.decodeAudioData = function (roh, ok, fehl) {
+    log.decode = (log.decode || 0) + 1;
+    var buf = this.createBuffer(1, this.sampleRate * 2, this.sampleRate); // 2 s Platzhalter
+    // duration der echten Datei fuer Schlaflied-Tests: wenn ArrayBuffer markiert ist
+    if (roh && roh.__dauer) { var n = Math.max(1, Math.floor(roh.__dauer * this.sampleRate)); buf = this.createBuffer(1, n); buf.duration = roh.__dauer; }
+    else buf.duration = 2;
+    if (ok) ok(buf);
+    return Promise.resolve(buf);
+  };
   AC.prototype.resume = function () { this.state = 'running'; };
   AC.prototype.suspend = function () { this.state = 'suspended'; };
   return { AC: AC, log: log };
@@ -416,7 +425,16 @@ function fakeTonFenster(speicher, audio) {
   var l = {}, takte = [];
   return { l: l, takte: takte, localStorage: speicher, AudioContext: audio ? audio.AC : undefined,
     addEventListener: function (n, f) { (l[n] = l[n] || []).push(f); },
-    setInterval: function (f) { takte.push(f); return takte.length; } };
+    setInterval: function (f) { takte.push(f); return takte.length; },
+    // ab v0.13: Schlaflied-Datei laden (Tests liefern einen markierten Puffer mit echter Dauer)
+    fetch: function (url) {
+      return Promise.resolve({ ok: true, url: url, arrayBuffer: function () {
+        var b = new ArrayBuffer(8); b.__dauer = 34.4; b.__url = url; return Promise.resolve(b);
+      } });
+    },
+    btoa: function (s) { return Buffer.from(s, 'binary').toString('base64'); },
+    document: { createElement: function () { return { setAttribute: function () {}, play: function () { return Promise.resolve(); }, pause: function () {}, preload: '', loop: false, src: '' }; } }
+  };
 }
 
 test('Musik: ruhige Schleife in a-Moll, langsames Tempo, Melodie nur jede zweite Runde', function () {
@@ -773,7 +791,7 @@ test('Abendmusik: weiche Mischung nach Uhrzeit, Abendvariante in a-Moll und leis
   m = T.mischung(19.25, false); nah(m.abend, 0.5, 1e-9); nah(m.tag + m.abend, 1, 1e-9); gleich(m.grillen, 0);
   m = T.mischung(21, false); gleich(m.abend, 1); nah(m.grillen, 0.5, 1e-9);
   m = T.mischung(22.5, false); gleich(m.grillen, 1);
-  m = T.mischung(8, true); gleich(m.abend, 0, 'ab v0.12: in der Abendszene spielt das Schlaflied statt der Schleife'); gleich(m.grillen, 1, 'Abendszene immer mit Grillen');
+  m = T.mischung(8, true); gleich(m.abend, 0, 'ab v0.13: in der Abendszene spielt das Schlaflied statt der Schleife'); gleich(m.grillen, 1, 'Abendszene immer mit Grillen');
   var tonleiter = [9, 11, 0, 2, 4, 5, 7, 8];
   [0, 1].forEach(function (rd) {
     var n = T.noten(rd, 'abend');
@@ -1065,7 +1083,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand.esel']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.12'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.13'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -2324,8 +2342,8 @@ test('Sicherung im Spiel: Knopf im Elternbereich zeigt das Fenster, Uebernehmen 
   wl.keydown({ code: 'ArrowLeft', target: { tagName: 'TEXTAREA' }, preventDefault: function () { gedrueckt++; } });
   gleich(gedrueckt, 0, 'im Textfeld kein preventDefault'); wahr(!e.neu('links'));
 });
-// ---------- v0.12: Elternbereich ohne Knoepfe oben, Schlaflied, Abendbuch Heute, gruene Wochenbalken, Vorlese-Einstellungen ----------
-test('Elternbereich v0.12: solange er offen ist, sind die Knoepfe oben rechts weg', function () {
+// ---------- v0.13: Elternbereich ohne Knoepfe oben, Schlaflied, Abendbuch Heute, gruene Wochenbalken, Vorlese-Einstellungen ----------
+test('Elternbereich v0.13: solange er offen ist, sind die Knoepfe oben rechts weg', function () {
   var a = starteFake(), st = a.h.st, S = a.D.Spiel;
   a.frames(2); wahr(!a.els.rahmen.classList.an.eltern, 'zu: Knoepfe da');
   S.oeffneEltern(st); a.frames(2); wahr(a.els.rahmen.classList.an.eltern, 'offen: Knoepfe versteckt');
@@ -2333,32 +2351,32 @@ test('Elternbereich v0.12: solange er offen ist, sind die Knoepfe oben rechts we
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
   wahr(/#rahmen\.eltern #oben\s*\{\s*visibility:\s*hidden/.test(html), 'CSS versteckt die obere Leiste');
 });
-test('Schlaflied: ruhig in a-Moll, wird langsamer und leiser, rund eine halbe Minute, endet von selbst', function () {
-  var T = ladeKontext().Dorf.Ton, n = T.schlafliedNoten();
-  wahr(n.length > 30 && n.length < 70, 'sparsam: ' + n.length);
-  var tonleiter = [9, 11, 0, 2, 4, 5, 7, 8];
-  wahr(n.every(function (x) { return isFinite(x.sek) && x.sek >= 0 && isFinite(x.midi) && tonleiter.indexOf(x.midi % 12) >= 0; }), 'nur a-Moll, alles endlich');
-  wahr(n.every(function (x) { return x.staerke > 0 && x.staerke <= T.SCHLAFLIED.max; }), 'nie laut');
-  for (var i = 1; i < n.length; i++) wahr(n[i].sek >= n[i - 1].sek, 'zeitlich sortiert');
-  var d = T.schlafliedDauer(); wahr(d > 25 && d < 45, 'Dauer ' + d);
-  function abstand(a, b) { return n.filter(function (x) { return x.art === 'bass'; })[b].sek - n.filter(function (x) { return x.art === 'bass'; })[a].sek; }
-  var bass = n.filter(function (x) { return x.art === 'bass'; });
-  wahr(abstand(bass.length - 2, bass.length - 1) > abstand(0, 1), 'am Ende langsamer');
-  var mel = n.filter(function (x) { return x.art === 'melodie'; });
-  wahr(mel[mel.length - 1].staerke < mel[0].staerke, 'am Ende leiser');
-  gleich(T.WIEGEN_FOLGE[T.WIEGEN_FOLGE.length - 1], 'Am', 'endet auf dem Grundakkord');
+test('Schlaflied v0.13: Variante C als Datei, a-Moll mit A-Dur-Schluss, etwa eine halbe Minute', function () {
+  var T = ladeKontext().Dorf.Ton, S = T.SCHLAFLIED, n = T.schlafliedNoten();
+  gleich(S.variante, 'C');
+  wahr(S.datei.indexOf('schlaflied-c.mp3') >= 0, 'Datei: ' + S.datei);
+  wahr(fs.existsSync(path.join(__dirname, '..', S.datei)), 'Datei liegt im Repo');
+  var d = T.schlafliedDauer(); wahr(d > 30 && d < 40, 'Dauer ' + d);
+  wahr(n.length >= 3, 'Stichprobe der Noten');
+  wahr(n.every(function (x) { return isFinite(x.sek) && x.staerke > 0 && x.staerke <= S.max; }), 'Stichprobe gueltig');
+  gleich(T.WIEGEN_FOLGE[T.WIEGEN_FOLGE.length - 1], 'A', 'endet hell auf A-Dur');
+  wahr(T.WIEGEN_FOLGE.indexOf('Am') === 0, 'beginnt in a-Moll');
 });
-test('Schlaflied im Ton: einmal pro Abend, Schleife macht Platz, nicht wenn stumm, am Morgen vorbei', function () {
+test('Schlaflied im Ton: Datei einmal pro Abend, Schleife macht Platz, nicht wenn stumm, am Morgen vorbei', function () {
   var T = ladeKontext().Dorf.Ton, au = fakeAudio(), win = fakeTonFenster(fakeSpeicher(), au);
   var t = T.erstelle(win);
   t.tageszeit(23, true); gleich(t.schlafliedGespielt, false, 'vor dem ersten Tippen nichts');
   win.l.pointerdown[0]({});
+  // fetch/decode sind asynchron: Puffer direkt setzen wie nach erfolgreichem Laden
+  t.schlafliedPuffer = t.ctx.createBuffer(1, Math.floor(t.ctx.sampleRate * 34.4));
+  t.schlafliedPuffer.duration = 34.4;
   var q0 = au.log.quellen;
   t.tageszeit(23, true);
   wahr(t.schlafliedGespielt && t.schlaflied, 'Lied geplant');
-  gleich(t.schlafliedNoten, T.schlafliedNoten().length);
-  wahr(au.log.quellen - q0 >= T.schlafliedNoten().length, 'Toene geplant');
+  gleich(t.schlafliedNoten, 1, 'eine Datei-Quelle');
+  wahr(au.log.quellen - q0 >= 1, 'BufferSource gestartet');
   wahr(t.schlaflied.start >= t.ctx.currentTime + 1.5, 'kurze Pause vor dem Lied');
+  wahr(t.schlaflied.ende - t.schlaflied.start > 30, 'Dauer der Datei');
   gleich(t.mix.abend, 0, 'Abendschleife blendet aus'); gleich(t.mix.grillen, 1, 'Grillen bleiben');
   var n1 = t.schlafliedNoten;
   for (var i = 0; i < 5; i++) t.tageszeit(23, true);
@@ -2367,7 +2385,6 @@ test('Schlaflied im Ton: einmal pro Abend, Schleife macht Platz, nicht wenn stum
   gleich(t.schlaflied, null, 'von selbst zu Ende'); gleich(t.schlafliedNoten, n1, 'und nicht wiederholt');
   t.tageszeit(6, false); gleich(t.schlafliedGespielt, false, 'neuer Tag');
   t.setzeStumm(true); t.tageszeit(23, true); gleich(t.schlafliedNoten, n1, 'stumm: kein Lied');
-  // naechster Morgen mitten im Lied: weich aus
   t.setzeStumm(false); t.tageszeit(23, true); wahr(t.schlaflied, 'nach dem Einschalten');
   t.tageszeit(6, false); gleich(t.schlaflied, null, 'Lied abgesagt');
 });
@@ -2429,7 +2446,7 @@ test('Wochenbalken im Elternbereich: gruen gezeichnet, Erklaerzeile, sonst lila'
   var z = R.letzteEltern.zeilen[0];
   gleich(z.farben[5], 'gruen'); gleich(z.farben[4], 'lila', 'Grenze erreicht: lila wie bisher'); gleich(z.farben[3], 'leer');
 });
-test('Vorlesen v0.12: Namen und Saetze einzeln aus, langsamer, gespeichert und in der Sicherung', function () {
+test('Vorlesen v0.13: Namen und Saetze einzeln aus, langsamer, gespeichert und in der Sicherung', function () {
   var V = ladeKontext().Dorf.Vorlesen, P = ladeKontext().Dorf.Profile, sp = fakeSpeicher();
   gleich(JSON.stringify(V.ladeArt(sp)), JSON.stringify({ namen: true, saetze: true, langsam: false }));
   sp.d['finca.vorleseart'] = '{kaputt'; gleich(V.ladeArt(sp).namen, true, 'kaputt: Standard');
@@ -2459,6 +2476,23 @@ test('Vorlesen v0.12: Namen und Saetze einzeln aus, langsamer, gespeichert und i
   gleich(gesagt.length, vorher + 1, 'Satz schon'); wahr(gesagt[gesagt.length - 1].rate < 0.85, 'langsamer: ' + gesagt[gesagt.length - 1].rate);
   var b = starteFake({ speicher: sp2 }); gleich(b.h.st.vorleseArt.namen, false, 'nach Neuladen noch aus');
 });
+
+test('Handy-Ton: unterbrochener Kontext wird beim naechsten Tipp geweckt, iPhone-Sitzung auf Wiedergabe, lauter auf Handys', function () {
+  var T = ladeKontext().Dorf.Ton, au = fakeAudio(), w = fakeTonFenster(fakeSpeicher(), au);
+  w.navigator = { audioSession: { type: 'auto' }, userAgent: 'iPhone', maxTouchPoints: 5 };
+  w.matchMedia = function () { return { matches: true }; };
+  var t = T.erstelle(w);
+  wahr(w.l.touchend && w.l.click && w.l.pointerup && w.l.pageshow, 'Gesten und pageshow angemeldet');
+  w.l.touchend[0]();
+  gleich(w.navigator.audioSession.type, 'playback', 'Lautlos-Schalter macht nicht mehr stumm');
+  gleich(t.ctx.state, 'running');
+  t.ctx.state = 'interrupted'; w.l.click[0]();
+  gleich(t.ctx.state, 'running', 'interrupted wird wieder geweckt');
+  t.pausiere(true); gleich(t.ctx.state, 'suspended'); t.pausiere(false); gleich(t.ctx.state, 'running');
+  wahr(t.handy, 'Handy erkannt');
+  wahr(au.log.ziele.indexOf(T.LAUT.gesamt * T.LAUT.handy) >= 0, 'Handy etwas lauter');
+});
+
 
 // ---------- Ausfuehren ----------
 tests.forEach(function (t) {
