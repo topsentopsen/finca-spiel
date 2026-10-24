@@ -204,12 +204,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.21', function () {
+test('Version: sichtbares Label ist v0.22', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.21');
+  gleich(D.VERSION, 'v0.22');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.21 (Prototyp)') >= 0, 'Titel enthaelt v0.21');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.21"') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.22 (Prototyp)') >= 0, 'Titel enthaelt v0.22');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.22"') >= 0, n + ' eingebunden'); });
   wahr(html.indexOf('js/profile.js') < html.indexOf('js/main.js') && html.indexOf('js/leben.js') < html.indexOf('js/main.js'), 'neue Dateien vor main');
   wahr(/html\.mobil\.quer/.test(html) && /hochkant halten/.test(html), 'Handy-Hochformat-Hinweis (Klasse mobil.quer)');
   wahr(fs.existsSync(path.join(__dirname, '..', 'assets', 'schlaflied-a.mp3')), 'Schlaflied A');
@@ -1101,7 +1101,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand.esel']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.21'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.22'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -1343,7 +1343,7 @@ test('Dauerlauf: zehn Tage mit Zufallstipps, Tasten, Neu-Frage, Speichern und La
       if (i % 50 === 0) D.Render.zeichne(R, st);
       var sp2 = st.spieler;
       wahr(isFinite(sp2.x) && isFinite(sp2.y) && sp2.x >= 0 && sp2.y >= 0 && sp2.x <= st.karte.w * 16 && sp2.y <= st.karte.h * 16, 'Biel in der Karte');
-      wahr(!D.Spieler.kollidiert(st.karte, sp2.x, sp2.y), 'Biel steckt nirgends fest');
+      wahr(!D.Spieler.kollidiert(st.karte, sp2.x, sp2.y) || (D.Wasser && D.Wasser.besetzt(st.wasser)), 'Biel steckt nirgends fest');
       st.gaeste.forEach(function (g) { wahr(isFinite(g.x) && isFinite(g.y) && g.glueck >= 0 && g.glueck <= D.Glueck.MAX, 'Gast ok'); });
       D.Garten.REIHE.forEach(function (a) { wahr(st.vorrat[a] >= 0 && st.vorrat[a] <= D.Garten.VORRAT_MAX, 'Korb im Rahmen'); });
       wahr(st.teller.length <= 6 && st.herzchen.length <= 40, 'Tafel und Herzchen begrenzt');
@@ -2815,6 +2815,71 @@ test('v0.21: Tagesschleife beginnt auf C-Dur, BPM frischer', function () {
   gleich(T.FOLGE[0], 'C');
   wahr(T.AKKORDE.C && T.AKKORDE.C[0] === 48, 'C-Bass');
   wahr(T.BPM >= 70, 'nicht zu langsam');
+});
+
+
+// ---------- v0.22: Flamingo bewegt sich; Boot-Ausstieg kindgerecht ----------
+test('v0.22: Flamingo treibt leer und steuert besetzt im Poolwasser', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle(42), W = D.Wasser, T = D.Karte.T;
+  var f = st.wasser.flamingo, x0 = f.x, y0 = f.y;
+  var leer = { halt: function () { return false; } };
+  for (var i = 0; i < 150; i++) W.update(st.wasser, st.karte, st.spieler, leer, 1 / 30);
+  wahr(Math.hypot(f.x - x0, f.y - y0) > 2, 'leerer Flamingo treibt');
+  wahr(st.karte.tile(Math.floor(f.x / 16), Math.floor(f.y / 16)) === T.WASSER, 'bleibt im Pool');
+  st.spieler.x = f.x; st.spieler.y = f.y;
+  wahr(W.aufFlamingo(st.wasser, st.spieler), 'draufsetzen');
+  var zx = Math.floor(f.x / 16), zy = Math.floor(f.y / 16);
+  // Ziel ein Tile weiter im Wasser suchen
+  var gesetzt = false, dx, dy, tx, ty;
+  for (dy = -2; dy <= 2 && !gesetzt; dy++) for (dx = -2; dx <= 2 && !gesetzt; dx++) {
+    if (!dx && !dy) continue;
+    tx = zx + dx; ty = zy + dy;
+    if (W.setzeFlamingoZiel(st.wasser, st.karte, tx, ty)) gesetzt = true;
+  }
+  wahr(gesetzt, 'Pool-Ziel gesetzt');
+  var x1 = f.x;
+  for (var j = 0; j < 120; j++) W.update(st.wasser, st.karte, st.spieler, leer, 1 / 30);
+  wahr(Math.hypot(f.x - x1, f.y - y0) > 1 || Math.abs(f.x - x1) > 1, 'schwimmt zum Ziel');
+  wahr(!W.flamingoKollidiert(st.karte, f.x, f.y), 'nicht aus dem Pool');
+  // Tippen auf Poolwasser steuert
+  // Tippen auf ein Pool-Tile klar ausserhalb der Flamingo-Trefferzone
+  var tipX = null, tipY = null, ax, ay, dTip;
+  for (ay = 3; ay <= 8 && tipX == null; ay++) for (ax = 25; ax <= 34 && tipX == null; ax++) {
+    if (st.karte.tile(ax, ay) !== T.WASSER) continue;
+    dTip = Math.hypot(ax * 16 + 8 - f.x, ay * 16 + 8 - (f.y - 6));
+    if (dTip > 28) { tipX = ax * 16 + 8; tipY = ay * 16 + 8; }
+  }
+  wahr(tipX != null, 'fernes Pool-Tile');
+  gleich(D.Spiel.klick(st, tipX, tipY), 'schwimmen');
+  wahr(!!f.ziel, 'Flamingo hat Schwimmziel');
+});
+
+test('v0.22: Boot-Ausstieg nahe Strand dockt an, weit draussen nicht', function () {
+  var D = ladeKontext().Dorf, st = D.Spiel.erstelle(42), W = D.Wasser, T = D.Karte.T;
+  var b = st.wasser.boot, strandY = st.karte.meer.strandY;
+  // Einsteigen am Strand
+  st.spieler.x = b.x; st.spieler.y = b.y;
+  wahr(W.einsteigen(st.wasser, st.spieler), 'einsteigen');
+  // Nah am Strand (eine Reihe im Meer)
+  b.x = 20 * 16 + 8; b.y = (strandY + 1) * 16 + 8; st.spieler.x = b.x; st.spieler.y = b.y;
+  wahr(W.strandNah(st.karte, b.x, b.y), 'strandNah nah');
+  wahr(W.aussteigen(st.wasser, st.spieler, st.karte), 'Ausstieg nah am Sand');
+  wahr(W.aufStrand(st.karte, b.x, b.y), 'Boot dockt am Strand');
+  wahr(!b.besetzt, 'nicht mehr besetzt');
+  // Weit draussen
+  st.spieler.x = b.x; st.spieler.y = b.y;
+  wahr(W.einsteigen(st.wasser, st.spieler), 'wieder ein');
+  b.x = 20 * 16 + 8; b.y = (strandY + 5) * 16 + 8; st.spieler.x = b.x; st.spieler.y = b.y;
+  wahr(!W.strandNah(st.karte, b.x, b.y), 'weit draussen');
+  wahr(!W.aussteigen(st.wasser, st.spieler, st.karte), 'kein Ausstieg mitten im Meer');
+  wahr(b.besetzt, 'bleibt im Boot');
+  // Klick Boot weit draussen → Feedback (bleibt besetzt)
+  gleich(D.Spiel.klick(st, b.x, b.y - 4), 'boot');
+  wahr(b.besetzt, 'nach Tipp immer noch draussen');
+  // Nah: Strand tippen steigt aus
+  b.x = 22 * 16 + 8; b.y = (strandY + 1) * 16 + 8; st.spieler.x = b.x; st.spieler.y = b.y;
+  gleich(D.Spiel.klick(st, 22 * 16 + 8, strandY * 16 + 8), 'boot');
+  wahr(!b.besetzt, 'Strand-Tipp steigt aus');
 });
 
 // ---------- Ausfuehren ----------

@@ -1,4 +1,4 @@
-# Finca v0.21
+# Finca v0.22
 
 A small browser game with a handheld look, written in pure JavaScript. There is no build and no npm. Music and sounds are generated in code with WebAudio; from v0.13 the evening lullaby is one small MP3 in `assets/` (no other media files).
 
@@ -27,8 +27,8 @@ Optional: `index.html?seed=12345` uses a different seed for flowers and guest de
 | Action button | One big round button on phones and tablets (bottom right). Its picture shows what it will do right now (egg, talk, pet, harvest, cook) and it does exactly that, same as E |
 | Click / tap a hen or an egg | Walk there and collect the egg into the basket |
 | Click / tap a fish in the sea | Bubbles and a little heart (from v0.19); fish swim on their own |
-| Click / tap the boat on the beach | Board, sail on open sea only (tap water or arrows; sand blocks beach cruising), disembark on the sand (from v0.20 / v0.21) |
-| Click / tap the flamingo in the pool | Sit and float; tap again to stand on the pool rim (from v0.20) |
+| Click / tap the boat on the beach | Board, sail on open sea only (tap water or arrows; sand blocks beach cruising); near shore tap the boat, the sand or Aussteigen to hop off — farther out you get a clear tip (from v0.20–v0.22) |
+| Click / tap the flamingo in the pool | Sit; it drifts alone, and while seated tap pool water or use arrows/WASD to swim; tap the flamingo again to stand on the rim (from v0.20 / v0.22) |
 | Read aloud button (top right) | Only shown if the browser has a German voice. Short calm lines are read aloud; off when the sound is off, pressing it while muted turns the sound back on (saved in the browser) |
 | B or book button (top right) | Open or close the picture book: recipe pages and the sticker album. Tap the right half or press the right arrow to turn forward, the left half or left arrow to turn back; the pot tab jumps to the recipes, the star tab to the album; the X, Esc, B or a tap next to the book closes it. The book button in the cooking menu opens the recipe of the selected dish |
 | Enter / Space / tap | Close the dialog; after "Bona nit!" start the next day |
@@ -164,10 +164,11 @@ On mobile the logical canvas is **320×400** (taller than wide) — a real portr
 ## Sea and fish (from v0.19)
 South of the gate the map grows a pastel beach and open sea (tiles `STRAND` / `MEER`). Paths, pool and buildings stay as they were; the gate is walkable onto the sand. Several small pixel fish swim calmly left and right; tapping one shows bubbles, a heart and a soft blub sound.
 
-## Boat and flamingo (from v0.20 / v0.21)
-A pastel rowboat rests on the beach left of the gate. Tap it (or walk close and press the action button) to board; then tap open sea tiles — or use arrows/WASD — to sail on `MEER` only (the sand blocks beach cruising). Tap a shore tile from the water to land, then tap the boat again to hop off. An inflatable flamingo floats in the pool: tap or use the action button nearby to sit and bob; tap again to stand on the pool rim. Paths and buildings stay untouched.
+## Boat and flamingo (from v0.20 / v0.22)
+A pastel rowboat rests on the beach left of the gate. Tap it (or walk close and press the action button) to board; then tap open sea tiles — or use arrows/WASD — to sail on `MEER` only (the sand blocks beach cruising). Near the sand, tap the boat, the beach tip zone or the Aussteigen button to hop off (larger hit area); farther out Biel says to sail a bit closer — no getting stuck mid-sea without feedback. An inflatable flamingo floats in the pool: empty it drifts gently; sit (tap or action button) and steer with pool-water taps or arrows/WASD; tap the flamingo again to stand on the pool rim. Paths and buildings stay untouched.
 
 ## Version history
+- **v0.22** (24.10.2026): flamingo drifts in the pool and is steerable while seated; boat disembark more reliable for kids (larger tip zone, Aussteigen context, near-shore dock, clear feedback when still too far out).
 - **v0.21** (24.10.2026): boat sails only on open sea (no beach cruising); larger boat sprite; prettier inflatable flamingo; daytime guitar loop brighter (C major, slightly quicker). Lullaby MP3s A/B/C unchanged.
 - **v0.20** (24.10.2026): boat on the beach (board, sail on the sea, disembark); inflatable flamingo in the pool (sit/stand); pastel GBA style; desktop landscape + mobile portrait unchanged.
 - **v0.19** (24.10.2026): sea and beach south of the gate; swimming pastel fish; optional tap → bubble/heart/blubber; mobile portrait and desktop landscape unchanged.

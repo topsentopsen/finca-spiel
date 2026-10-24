@@ -1,6 +1,6 @@
-/* Boot und aufblasbarer Flamingo (ab v0.20, Fahrt nur Meer ab v0.21).
-   Boot liegt am Strand suedlich vom Tor; eingestiegen fahren nur auf MEER.
-   Ein-/Aussteigen am Strand-Uebergang. Flamingo im Pool: sitzen und aufstehen. */
+/* Boot und aufblasbarer Flamingo (ab v0.20).
+   v0.21: Boot nur auf MEER (kein Strand-Cruise).
+   v0.22: Flamingo treibt/steuerbar im Pool; Boot-Ausstieg am Ufer zuverlaessiger. */
 (function (g) {
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
@@ -8,10 +8,12 @@
   var BOOT_TEMPO = 52;
   var BOOT_NAH = 28;
   var FLAMINGO_NAH = 52;
+  var FLAMINGO_TEMPO = 38;
+  var FLAMINGO_TREIB = 12;
+  var AUSSTIEG_NAH = 44;   // ab v0.22: Ausstieg wenn Boot so nah am Sand
 
   function erstelle(karte) {
     var meer = karte.meer;
-    // Boot am Strand, etwas links vom Tor (Tor 19/20), damit der Durchgang frei bleibt
     var boot = {
       x: 15 * K + 8, y: (meer ? meer.strandY : 30) * K + 10,
       dir: 'rechts', besetzt: false, ziel: null, pfad: [], pfadIndex: 0, phase: 0
@@ -19,7 +21,8 @@
     // Flamingo mittig im Pool (Wasser 25..34 / 3..8)
     var flamingo = {
       x: 29 * K + 8, y: 7 * K + 8,
-      besetzt: false, phase: 0
+      besetzt: false, phase: 0, dir: 'rechts',
+      vx: FLAMINGO_TREIB * 0.6, vy: 0, ziel: null, dreh: 0
     };
     return { boot: boot, flamingo: flamingo };
   }
@@ -37,7 +40,6 @@
     return t === T.STRAND || t === T.TOR;
   }
 
-  // Ecken der Boot-Hitbox → Tiles
   function bootTiles(karte, x, y) {
     var pts = [
       [x - 6, y - 4], [x + 5, y - 4],
@@ -48,9 +50,6 @@
     return out;
   }
 
-  // Erlaubte Boot-Position: Ecken nur Meer/Strand/Tor.
-  // Fahrt nach Mitte-Tile: auf MEER frei; auf STRAND/TOR nur als Landung
-  // (vorherige Mitte war Meer) — Strand→Strand (entlangfahren) ist blockiert.
   function bootKollidiert(karte, x, y, altX, altY) {
     var ts = bootTiles(karte, x, y), i;
     for (i = 0; i < ts.length; i++) {
@@ -61,13 +60,12 @@
     if (istLande(mitte)) {
       if (altX == null || altY == null) return false;
       var altMitte = tileAn(karte, altX, altY);
-      if (istLande(altMitte)) return true; // kein Cruise am Sand
-      return false; // Landung vom Meer
+      if (istLande(altMitte)) return true;
+      return false;
     }
     return true;
   }
 
-  // Raster fuer Bootfahrt: nur MEER frei; STRAND/TOR nur als Landungs-Ziel
   function meerGrid(karte, landeZiel) {
     var T = Dorf.Karte.T;
     return {
@@ -108,6 +106,28 @@
     return t === T.STRAND || t === T.TOR;
   }
 
+  // Naechstes Strand-/Tor-Tile (Pixelmitte) relativ zur Bootposition
+  function naechsterStrand(karte, x, y) {
+    var T = Dorf.Karte.T;
+    var strandY = (karte.meer && karte.meer.strandY != null) ? karte.meer.strandY : 30;
+    var bx = Math.floor(x / K), best = null, bd = Infinity, dx, tx, d, px, py;
+    for (dx = -12; dx <= 12; dx++) {
+      tx = bx + dx;
+      if (tx < 0 || tx >= karte.w) continue;
+      if (karte.tile(tx, strandY) !== T.STRAND && karte.tile(tx, strandY) !== T.TOR) continue;
+      px = tx * K + 8; py = strandY * K + 10;
+      d = Math.hypot(px - x, py - y);
+      if (d < bd) { bd = d; best = { x: px, y: py, tx: tx, ty: strandY, d: d }; }
+    }
+    return best;
+  }
+
+  function strandNah(karte, x, y, maxD) {
+    if (aufStrand(karte, x, y)) return true;
+    var s = naechsterStrand(karte, x, y);
+    return !!(s && s.d <= (maxD != null ? maxD : AUSSTIEG_NAH));
+  }
+
   function einsteigen(w, sp) {
     if (!w || !w.boot || w.boot.besetzt || (w.flamingo && w.flamingo.besetzt)) return false;
     if (!bootNah(w, sp)) return false;
@@ -117,14 +137,22 @@
     return true;
   }
 
+  // ab v0.22: Ausstieg am Strand oder wenn nah genug am Sand (Boot dockt an)
   function aussteigen(w, sp, karte) {
     if (!w || !w.boot || !w.boot.besetzt) return false;
-    if (!aufStrand(karte, w.boot.x, w.boot.y)) return false;
-    w.boot.besetzt = false; w.boot.ziel = null; w.boot.pfad = []; w.boot.pfadIndex = 0;
-    // Biel etwas neben/hinter dem Boot auf den Sand
-    var nx = w.boot.x, ny = w.boot.y - 10;
-    if (Dorf.Spieler.kollidiert(karte, nx, ny)) { nx = w.boot.x; ny = w.boot.y + 4; }
-    if (Dorf.Spieler.kollidiert(karte, nx, ny)) { nx = 19 * K + 8; ny = (karte.meer ? karte.meer.strandY : 30) * K + 12; }
+    var b = w.boot;
+    if (!aufStrand(karte, b.x, b.y)) {
+      var s = naechsterStrand(karte, b.x, b.y);
+      if (!s || s.d > AUSSTIEG_NAH) return false;
+      b.x = s.x; b.y = s.y; b.ziel = null; b.pfad = []; b.pfadIndex = 0;
+    }
+    b.besetzt = false; b.ziel = null; b.pfad = []; b.pfadIndex = 0;
+    var nx = b.x, ny = b.y - 10;
+    if (Dorf.Spieler.kollidiert(karte, nx, ny)) { nx = b.x; ny = b.y + 4; }
+    if (Dorf.Spieler.kollidiert(karte, nx, ny)) {
+      nx = 19 * K + 8;
+      ny = (karte.meer ? karte.meer.strandY : 30) * K + 12;
+    }
     sp.x = nx; sp.y = ny; Dorf.Spieler.stoppe(sp);
     return true;
   }
@@ -134,13 +162,11 @@
     var T = Dorf.Karte.T, t = karte.tile(tx, ty), b = w.boot;
     var lande = (t === T.STRAND || t === T.TOR);
     if (t !== T.MEER && !lande) return false;
-    // Strand-Ziel nur zum Landen vom Meer aus — nicht am Strand entlang tippen
     if (lande && aufStrand(karte, b.x, b.y)) return false;
     var von = { x: Math.floor(b.x / K), y: Math.floor(b.y / K) };
     var landeZiel = lande ? { x: tx, y: ty } : null;
     var p = Dorf.Pfad.suche(meerGrid(karte, landeZiel), von.x, von.y, tx, ty);
     if (!p) return false;
-    // Kein Zwischen-Schritt auf Sand (nur Ziel darf Strand/Tor sein)
     var i;
     for (i = 0; i < p.length - (lande ? 1 : 0); i++) {
       if (karte.tile(p[i].x, p[i].y) !== T.MEER && !(i === 0 && aufStrand(karte, b.x, b.y))) return false;
@@ -159,10 +185,25 @@
     return { x: 25 * K + 8, y: 9 * K + 12 };
   }
 
+  function imPoolWasser(karte, x, y) {
+    return tileAn(karte, x, y) === Dorf.Karte.T.WASSER;
+  }
+
+  // Flamingo bleibt mit etwas Rand im Poolwasser
+  function flamingoKollidiert(karte, x, y) {
+    var offs = [[0, 0], [-9, 0], [9, 0], [0, -7], [0, 7], [-6, -5], [6, -5], [-6, 5], [6, 5]];
+    var i;
+    for (i = 0; i < offs.length; i++) {
+      if (!imPoolWasser(karte, x + offs[i][0], y + offs[i][1])) return true;
+    }
+    return false;
+  }
+
   function aufFlamingo(w, sp) {
     if (!w || !w.flamingo || w.flamingo.besetzt || (w.boot && w.boot.besetzt)) return false;
     if (!flamingoNah(w, sp)) return false;
-    w.flamingo.besetzt = true;
+    w.flamingo.besetzt = true; w.flamingo.ziel = null;
+    w.flamingo.vx = 0; w.flamingo.vy = 0;
     sp.x = w.flamingo.x; sp.y = w.flamingo.y - 2; sp.dir = 'unten';
     Dorf.Spieler.stoppe(sp);
     return true;
@@ -170,9 +211,18 @@
 
   function abFlamingo(w, sp, karte) {
     if (!w || !w.flamingo || !w.flamingo.besetzt) return false;
-    w.flamingo.besetzt = false;
+    w.flamingo.besetzt = false; w.flamingo.ziel = null;
+    w.flamingo.vx = FLAMINGO_TREIB * 0.5; w.flamingo.vy = 0;
     var p = poolRandPlatz(karte, sp);
     sp.x = p.x; sp.y = p.y; Dorf.Spieler.stoppe(sp);
+    return true;
+  }
+
+  function setzeFlamingoZiel(w, karte, tx, ty) {
+    if (!w || !w.flamingo || !w.flamingo.besetzt) return false;
+    if (karte.tile(tx, ty) !== Dorf.Karte.T.WASSER) return false;
+    // Ziel darf am Rand liegen; Bewegung stoppt spaeter an flamingoKollidiert
+    w.flamingo.ziel = { x: tx * K + 8, y: ty * K + 8 };
     return true;
   }
 
@@ -213,19 +263,70 @@
     else { sp.animT = 0; sp.frame = 0; }
   }
 
-  function updateFlamingo(w, sp, dt) {
+  function bewegeFlamingo(karte, f, dx, dy, tempo, dt) {
+    if (!dx && !dy) return false;
+    if (dx && dy) { dx *= Math.SQRT1_2; dy *= Math.SQRT1_2; }
+    if (Math.abs(dx) > Math.abs(dy)) f.dir = dx < 0 ? 'links' : 'rechts';
+    else if (dy) f.dir = dy < 0 ? 'oben' : 'unten';
+    var nx = f.x + dx * tempo * dt, ny = f.y + dy * tempo * dt, bewegt = false;
+    if (!flamingoKollidiert(karte, nx, f.y)) { f.x = nx; bewegt = true; }
+    else if (f.besetzt) { /* Steuer-Bounce: Stop */ }
+    else { f.vx = -f.vx; f.dreh = 0.4; }
+    if (!flamingoKollidiert(karte, f.x, ny)) { f.y = ny; bewegt = true; }
+    else if (!f.besetzt) { f.vy = -f.vy; f.dreh = 0.4; }
+    return bewegt;
+  }
+
+  function updateFlamingo(w, karte, sp, eingabe, dt) {
     var f = w.flamingo; if (!f) return;
     f.phase += dt;
-    if (f.besetzt && sp) {
-      var bob = Math.sin(f.phase * 2.2) * 1.5;
-      sp.x = f.x; sp.y = f.y - 2 + bob; sp.laeuft = false; sp.frame = 0; sp.dir = 'unten';
+    if (f.besetzt) {
+      var dx = 0, dy = 0;
+      if (eingabe) {
+        if (eingabe.halt('links')) dx -= 1;
+        if (eingabe.halt('rechts')) dx += 1;
+        if (eingabe.halt('hoch')) dy -= 1;
+        if (eingabe.halt('runter')) dy += 1;
+      }
+      if ((dx || dy) && f.ziel) f.ziel = null;
+      if (dx || dy) {
+        bewegeFlamingo(karte, f, dx, dy, FLAMINGO_TEMPO, dt);
+      } else if (f.ziel) {
+        var ex = f.ziel.x - f.x, ey = f.ziel.y - f.y, dist = Math.hypot(ex, ey);
+        if (dist < 2) { f.ziel = null; }
+        else {
+          bewegeFlamingo(karte, f, ex / dist, ey / dist, FLAMINGO_TEMPO, dt);
+          if (Math.hypot(f.ziel.x - f.x, f.ziel.y - f.y) >= dist - 0.01) f.ziel = null; // stecken
+        }
+      }
+      if (sp) {
+        var bob = Math.sin(f.phase * 2.2) * 1.5;
+        sp.x = f.x; sp.y = f.y - 2 + bob;
+        sp.laeuft = !!(dx || dy || f.ziel); sp.frame = 0;
+        if (dx || dy || f.ziel) sp.dir = f.dir;
+        else sp.dir = 'unten';
+      }
+      return;
+    }
+    // Leer: ruhig im Pool treiben
+    f.dreh = (f.dreh || 0) - dt;
+    if (f.dreh <= 0) {
+      f.dreh = 1.8 + (f.phase % 1.7);
+      var winkel = (f.phase * 0.35 + f.x * 0.01) % (Math.PI * 2);
+      f.vx = Math.cos(winkel) * FLAMINGO_TREIB;
+      f.vy = Math.sin(winkel * 0.8) * FLAMINGO_TREIB * 0.7;
+    }
+    bewegeFlamingo(karte, f, f.vx, f.vy, 1, dt); // vx/vy schon in px/s
+    // falls stecken: leichte Korrektur zur Poolmitte
+    if (flamingoKollidiert(karte, f.x, f.y)) {
+      f.x = 29 * K + 8; f.y = 6 * K + 8; f.vx = FLAMINGO_TREIB; f.vy = 0;
     }
   }
 
   function update(w, karte, sp, eingabe, dt) {
     if (!w) return;
     updateBoot(w, karte, sp, eingabe, dt);
-    updateFlamingo(w, sp, dt);
+    updateFlamingo(w, karte, sp, eingabe, dt);
   }
 
   function besetzt(w) {
@@ -234,10 +335,13 @@
 
   Dorf.Wasser = {
     BOOT_TEMPO: BOOT_TEMPO, BOOT_NAH: BOOT_NAH, FLAMINGO_NAH: FLAMINGO_NAH,
+    FLAMINGO_TEMPO: FLAMINGO_TEMPO, FLAMINGO_TREIB: FLAMINGO_TREIB, AUSSTIEG_NAH: AUSSTIEG_NAH,
     erstelle: erstelle, update: update, besetzt: besetzt,
     bootAn: bootAn, flamingoAn: flamingoAn, bootNah: bootNah, flamingoNah: flamingoNah,
     einsteigen: einsteigen, aussteigen: aussteigen, setzeBootZiel: setzeBootZiel,
-    aufFlamingo: aufFlamingo, abFlamingo: abFlamingo, meerGrid: meerGrid, aufStrand: aufStrand,
-    bootKollidiert: bootKollidiert
+    aufFlamingo: aufFlamingo, abFlamingo: abFlamingo, setzeFlamingoZiel: setzeFlamingoZiel,
+    meerGrid: meerGrid, aufStrand: aufStrand, strandNah: strandNah,
+    naechsterStrand: naechsterStrand, bootKollidiert: bootKollidiert,
+    flamingoKollidiert: flamingoKollidiert
   };
 })(globalThis);

@@ -3,7 +3,7 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.21';
+  var VERSION = 'v0.22';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
   var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
@@ -155,17 +155,26 @@
     if (st.menue) { schliesseMenue(st); return 'zurueck'; }
     var karte = st.karte, K = karte.kachel, T = Dorf.Karte.T;
     var tx = Math.floor(wx / K), ty = Math.floor(wy / K), sp = st.spieler, ziel = null, aktion = null;
-    // ab v0.20: im Boot → Meer tippen zum Segeln (Strand nur landen); Boot tippen zum Aussteigen
+    // ab v0.20/v0.22: Boot steuern; grosse Ausstiegszone am Strand; Flamingo im Pool steuern
     if (st.wasser && Dorf.Wasser && st.wasser.boot && st.wasser.boot.besetzt) {
-      var bootHit = Dorf.Wasser.bootAn(st.wasser, wx, wy, st.eingabe.touch ? 18 : 14);
-      if (bootHit) { tippBoot(st); return 'boot'; }
+      var bootHit = Dorf.Wasser.bootAn(st.wasser, wx, wy, st.eingabe.touch ? 30 : 24);
+      var tBoot = karte.tile(tx, ty);
+      // Boot tippen ODER klarer Strand-Tipp nahe Ufer → aussteigen versuchen
+      if (bootHit || ((tBoot === T.STRAND || tBoot === T.TOR) && Dorf.Wasser.strandNah(karte, st.wasser.boot.x, st.wasser.boot.y))) {
+        tippBoot(st); return 'boot';
+      }
       if (Dorf.Wasser.setzeBootZiel(st.wasser, karte, tx, ty)) {
         st.marker = { x: tx, y: ty, t: 0 }; return 'segeln';
       }
       st.marker = { x: tx, y: ty, t: 0, nein: true }; return 'nein';
     }
     if (st.wasser && Dorf.Wasser && st.wasser.flamingo && st.wasser.flamingo.besetzt) {
-      tippFlamingo(st); return 'flamingo';
+      var flamHit = Dorf.Wasser.flamingoAn(st.wasser, wx, wy, st.eingabe.touch ? 22 : 18);
+      if (flamHit) { tippFlamingo(st); return 'flamingo'; }
+      if (karte.tile(tx, ty) === T.WASSER && Dorf.Wasser.setzeFlamingoZiel(st.wasser, karte, tx, ty)) {
+        st.marker = { x: tx, y: ty, t: 0 }; return 'schwimmen';
+      }
+      st.marker = { x: tx, y: ty, t: 0, nein: true }; return 'nein';
     }
     var gast = gastAn(st, wx, wy), ei = gast ? null : Dorf.Tiere.eiAn(st.tiere, wx, wy, 6);
     var tier = (gast || ei) ? null : Dorf.Tiere.an(st.tiere, wx, wy);
@@ -311,7 +320,7 @@
         klang(st, 'boot'); sage(st, 'Biel', 'Wieder an Land!', 2.5, ['sonne', 'lachen']);
         lerne(st, 'boot'); merke(st, 'boot'); return true;
       }
-      sage(st, 'Biel', 'Zum Strand fahren, dann aussteigen!', 2.5, ['sonne', 'frage']); return true;
+      sage(st, 'Biel', 'Noch ein Stück zum Sand – dann Aussteigen tippen!', 3, ['sonne', 'frage']); return true;
     }
     if (Dorf.Wasser.einsteigen(w, st.spieler)) {
       klang(st, 'boot'); sage(st, 'Biel', 'Los geht die Bootfahrt! Tippe aufs Meer.', 3, ['sonne', 'lachen']);
@@ -329,7 +338,7 @@
       return false;
     }
     if (Dorf.Wasser.aufFlamingo(w, st.spieler)) {
-      klang(st, 'flamingo'); sage(st, 'Biel', 'Schwimm, Flamingo!', 2.5, ['herz', 'lachen']);
+      klang(st, 'flamingo'); sage(st, 'Biel', 'Tipp ins Wasser oder Pfeile – und schwimm!', 3, ['herz', 'lachen']);
       lerne(st, 'flamingo'); merke(st, 'flamingo'); return true;
     }
     return false;
