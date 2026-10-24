@@ -1007,8 +1007,9 @@
     if (opts.zoom) Z = opts.zoom;
     // ab v0.18: auf dem Handy logisches Hochformat 320×400 (echtes Portrait), Desktop bleibt 320×176
     try {
-      var _mobil0 = false;
-      if (win.matchMedia) {
+      var _mobil0 = false, _suchM = (win.location && win.location.search) || '';
+      if (/[?&]touch=1/.test(_suchM) || /[?&]mobil=1/.test(_suchM)) _mobil0 = true;
+      if (!_mobil0 && win.matchMedia) {
         if (win.matchMedia('(pointer: coarse)').matches) _mobil0 = true;
         else if (win.matchMedia('(hover: none) and (max-width: 900px)').matches) _mobil0 = true;
       }
@@ -1294,12 +1295,19 @@
       if (rahmen && rahmen.classList) rahmen.classList.toggle('ruhig', !!st.ruhig);
     }
     // ab v0.12: solange der Elternbereich offen ist, sind die Knoepfe oben rechts weg (sie lagen am Handy ueber dem X)
-    var elternOffenZuletzt = null;
+    var elternOffenZuletzt = null, wahlOffenZuletzt = null;
     function zeigeElternOffen() {
       var offen = !!st.eltern;
-      if (offen === elternOffenZuletzt) return;
-      elternOffenZuletzt = offen;
-      if (rahmen && rahmen.classList) rahmen.classList.toggle('eltern', offen);
+      if (offen !== elternOffenZuletzt) {
+        elternOffenZuletzt = offen;
+        if (rahmen && rahmen.classList) rahmen.classList.toggle('eltern', offen);
+      }
+      // ab v0.18: Bildauswahl — Aktionsknopf/Joystick weg (sonst schluckt er Tips auf untere Karten)
+      var wahlAn = !!st.wahl && !st.eltern;
+      if (wahlAn !== wahlOffenZuletzt) {
+        wahlOffenZuletzt = wahlAn;
+        if (rahmen && rahmen.classList) rahmen.classList.toggle('wahl', wahlAn);
+      }
     }
     // ab v0.9: Bilderbuch-Knopf (Rezepte und Sticker). Ein Punkt am Knopf zeigt einen neuen Sticker an.
     var buchKnopf = doc.getElementById('buch-knopf'), buchPunkt = null;
@@ -1321,6 +1329,8 @@
     // Klasse .mobil am <html> steuert Overlay zuverlaessiger als reine Media-Query (iOS).
   function istMobilGeraet() {
     try {
+      var suchM = (win.location && win.location.search) || '';
+      if (/[?&]touch=1/.test(suchM) || /[?&]mobil=1/.test(suchM)) return true;
       if (win.matchMedia) {
         if (win.matchMedia('(pointer: coarse)').matches) return true;
         if (win.matchMedia('(hover: none) and (max-width: 900px)').matches) return true;
@@ -1398,7 +1408,9 @@
       // ab v0.16: auf Touch mind. ~44 CSS-px (Kinderfinger), Desktop wie bisher
       var bw = R.touch ? Math.max(44 / s, 11) : Math.max(26 / s, 9), anzahl = ((vollKnopf && vollGeht) ? 3 : 2) + (elternKnopf ? 1 : 0) + (buchKnopf ? 1 : 0) + (vorlesenKnopf && vorlesen && vorlesen.verfuegbar ? 1 : 0);
       R.knopfBreite = bw;
-      R.obenBreite = Math.ceil(anzahl * bw + (anzahl - 1) * 2 + 2 + 3);
+      // ab v0.18: im Hochformat stehen die Knoepfe untereinander — Hilfetext braucht nur eine Knopfbreite
+      var spalten = (Dorf.Render && Dorf.Render.hochkant) ? 1 : anzahl;
+      R.obenBreite = Math.ceil(spalten * bw + (spalten - 1) * 2 + 2 + 3);
       R.knopfAnzahl = anzahl;
     }
     win.addEventListener('resize', function () { groesse(); mobilKlasse(); });

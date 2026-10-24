@@ -40,6 +40,8 @@
   #rahmen.ruhig *, #rahmen.ruhig *::after { animation: none !important; }
   /* ab v0.12: solange der Elternbereich offen ist, sind die Knoepfe oben rechts weg (am Handy lagen sie ueber dem X) */
   #rahmen.eltern #oben { visibility: hidden; }
+  /* ab v0.18: Aktionsknopf / Joystick nicht ueber Bildkarten (schluckte Tips auf Schlafenszeit) */
+  #rahmen.wahl #touch, #rahmen.wahl #knopf-aktion { visibility: hidden !important; pointer-events: none !important; opacity: 0 !important; }
   /* ab v0.9: Bilderbuch, ein roter Punkt zeigt einen neuen Sticker */
   #buch-knopf { background: #e6f7f3; }
   #buch-knopf.neu::after { content: ""; position: absolute; right: -2px; top: -2px; width: 34%; height: 34%; border-radius: 50%;
@@ -106,8 +108,9 @@
   html.mobil #rahmen { max-width: 100vw; max-height: 100vh; }
   html.mobil #oben {
     top: calc(var(--s, 3) * 2px + env(safe-area-inset-top, 0px));
-    right: calc(var(--s, 3) * 2px + env(safe-area-inset-right, 0px));
-    flex-wrap: wrap; justify-content: flex-end; max-width: 48%;
+    right: calc(var(--s, 3) * 3px + env(safe-area-inset-right, 0px));
+    flex-direction: column; align-items: flex-end; gap: calc(var(--s, 3) * 2px);
+    max-width: none;
   }
   /* ab v0.16: unsichtbare Trefferzone um die oberen Knoepfe (~44px fuer Kinderfinger) */
   html.mobil #oben .knopf { position: relative; }
