@@ -204,11 +204,11 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.17', function () {
+test('Version: sichtbares Label ist v0.18', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.17');
+  gleich(D.VERSION, 'v0.18');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.17 (Prototyp)') >= 0, 'Titel enthaelt v0.15');
+  wahr(html.indexOf('Finca v0.18 (Prototyp)') >= 0, 'Titel enthaelt v0.18');
   DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.17"') >= 0, n + ' eingebunden'); });
   wahr(html.indexOf('js/profile.js') < html.indexOf('js/main.js') && html.indexOf('js/leben.js') < html.indexOf('js/main.js'), 'neue Dateien vor main');
   wahr(/html\.mobil\.quer/.test(html) && /hochkant halten/.test(html), 'Handy-Hochformat-Hinweis (Klasse mobil.quer)');
@@ -626,12 +626,13 @@ test('Smoke: Taste M, Lautsprecher-Knopf, Touch-Knoepfe und Vollbild im Browser'
     return { id: id, l: l, attr: attr, style: { setProperty: function (k, v) { this[k] = v; } }, className: 'knopf', classList: { an: {}, toggle: function (k, v) { this.an[k] = !!v; } },
       addEventListener: function (n, f) { (l[n] = l[n] || []).push(f); }, setAttribute: function (k, v) { attr[k] = v; },
       klick: function () { (l.click || []).forEach(function (f) { f({ preventDefault: function () {} }); }); },
-      width: 320, height: 176, getContext: function () { return fakeCtx(); }, getBoundingClientRect: function () { return { left: 0, top: 0, width: 640, height: 352 }; } };
+      width: 320, height: 400, getContext: function () { return fakeCtx(); }, getBoundingClientRect: function () { return { left: 0, top: 0, width: 640, height: 800 }; } };
   }
   var els = {}; ['spiel', 'ui', 'rahmen', 'ton-knopf', 'vollbild-knopf', 'knopf-aktion', 'vorlesen-knopf'].forEach(function (id) { els[id] = el(id); });
   var voll = 0, queue = [], listener = {}, sp = fakeSpeicher();
+  // ab v0.18: Mobil-Hochformat 320×400 — Fenster hoch genug fuer --s = 2
   var win = {
-    innerWidth: 640, innerHeight: 400, devicePixelRatio: 1, localStorage: sp, navigator: { maxTouchPoints: 5 },
+    innerWidth: 640, innerHeight: 844, devicePixelRatio: 1, localStorage: sp, navigator: { maxTouchPoints: 5 },
     matchMedia: function () { return { matches: true }; },
     addEventListener: function (n, f) { (listener[n] = listener[n] || []).push(f); },
     requestAnimationFrame: function (f) { queue.push(f); }, setInterval: function () { return 1; }
@@ -1100,7 +1101,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand.esel']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.17'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.18'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -1963,23 +1964,27 @@ test('Zeitkonto: 15 Minuten pro Bild und Tag, Bildwechsel, Neuladen und Neu anfa
   wahr(P.sekunden(s2.konto, 'esel') <= U.TAG_LIMIT + 2, 'hoechstens 15 Minuten gebucht');
   b.frames(60 * 15); if (s2.buch) S.schliesseBuch(s2); s2.naechsterTag = true; b.frames(2);
   wahr(s2.wahl && s2.wahl.gesperrt, 'statt neuem Tag: Schlafenszeit'); wahr(s2.abend || s2.wahl, 'kein neuer Tag');
-  gleich(S.waehleProfil(s2, 'huhn'), 'gesperrt', 'Kind kann nicht einfach ein anderes Bild nehmen');
-  gleich(S.waehleProfil(s2, 'esel'), 'gesperrt');
-  var minute = s2.uhr.minute; b.frames(120); gleich(s2.uhr.minute, minute, 'nichts laeuft weiter');
+  // ab v0.18: nur das fertige Bild schlaeft — Geschwister mit Minuten bleiben tippbar (kein Global-Lock)
+  gleich(S.waehleProfil(s2, 'esel'), 'schlaeft');
+  gleich(S.waehleProfil(s2, 'huhn'), 'gewaehlt', 'Geschwister mit Minuten tippbar');
+  wahr(s2.spielzeit < 1, 'Huhn hat noch seine Zeit');
+  var minute = s2.uhr.minute; b.frames(120); wahr(s2.uhr.minute > minute, 'Huhn darf spielen');
   b.h.sichere();
-  // Neuladen und Neu anfangen: bleibt Schlafenszeit
-  var c = starteFake({ speicher: sp, fenster: F, wahl: true }), s3 = c.h.st;
-  wahr(s3.wahl && s3.wahl.gesperrt, 'nach dem Neuladen weiter Schlafenszeit');
+  // Esel bleibt fertig — zurück auf Auswahl
+  S.oeffneWahl(s2, { gesperrt: true });
+  gleich(S.waehleProfil(s2, 'esel'), 'schlaeft');
+  b.h.sichere();
+  // Neuladen mit fertigem Esel: Schlafenszeit-Flag, Geschwister nicht global tot
+  var c = starteFake({ speicher: sp, fenster: F, wahl: true, suche: '?profil=esel' }), s3 = c.h.st;
+  wahr(s3.wahl && s3.wahl.gesperrt, 'nach dem Neuladen weiter Schlafenszeit-Flag');
   S.neuAnfangen(s3); wahr(s3.wahl && s3.wahl.gesperrt, 'Neu anfangen schenkt keine Zeit');
-  var d = starteFake({ speicher: sp, fenster: F, wahl: true, suche: '?neu=1' });
+  var d = starteFake({ speicher: sp, fenster: F, wahl: true, suche: '?neu=1&profil=esel' });
   wahr(d.h.st.wahl && d.h.st.wahl.gesperrt, '?neu=1 schenkt keine Zeit');
-  // Eltern lassen ein anderes Kind spielen: das Huhn hat eigene 15 Minuten, der Esel schlaeft
-  S.oeffneEltern(s3); S.elternTat(s3, 'wechseln');
-  wahr(s3.wahl && !s3.wahl.gesperrt && !s3.wahl.zurueck, 'Auswahl ohne Zurueck');
+  // Huhn hat durch vorheriges Spielen schon Sekunden — darf weiter, Esel schlaeft
   gleich(S.waehleProfil(s3, 'esel'), 'schlaeft');
-  gleich(S.waehleProfil(s3, 'huhn'), 'gewaehlt'); wahr(s3.spielzeit < 1, 'Huhn hat noch seine Zeit');
+  gleich(S.waehleProfil(s3, 'huhn'), 'gewaehlt'); wahr(s3.spielzeit >= 0, 'Huhn darf');
   c.frames(300); wahr(P.sekunden(s3.konto, 'huhn') > 4 && P.fertig(s3.konto, 'esel'), 'getrennt gebucht');
-  // zurueck zum Esel geht nicht, auch nicht ueber die Eltern
+  // zurueck zum Esel geht nicht
   S.oeffneEltern(s3); S.elternTat(s3, 'wechseln'); gleich(S.waehleProfil(s3, 'esel'), 'schlaeft');
 });
 test('Zeitkonto: um Mitternacht wachen alle auf, neuer Kalendertag hat wieder 15 Minuten', function () {
@@ -2621,6 +2626,58 @@ test('Handy-Ton: unterbrochener Kontext wird beim naechsten Tipp geweckt, iPhone
   wahr(au.log.ziele.indexOf(T.LAUT.gesamt * T.LAUT.handy) >= 0, 'Handy etwas lauter');
 });
 
+
+// ---------- v0.18: echtes Mobil-Hochformat, Schlafenszeit ohne Freeze ----------
+test('v0.18: Mobil bekommt logisches Hochformat 320×400, Desktop bleibt 320×176', function () {
+  var desk = starteFake(), D = desk.D;
+  gleich(D.Render.W, 320); gleich(D.Render.H, 176); wahr(!D.Render.hochkant, 'Desktop Quer-Canvas');
+  var mobil = starteFake({ fenster: { navigator: { maxTouchPoints: 5 }, matchMedia: function (q) {
+    return { matches: /pointer:\s*coarse/.test(q) || /hover:\s*none/.test(q) };
+  }, innerWidth: 390, innerHeight: 844 } });
+  gleich(mobil.D.Render.W, 320); gleich(mobil.D.Render.H, mobil.D.Render.PORT_H); wahr(mobil.D.Render.hochkant, 'Mobil Hochformat');
+  gleich(mobil.D.Render.PORT_H, 400);
+  // Karten untereinander, grosse TipZiele
+  mobil.D.Spiel.oeffneWahl(mobil.h.st, {});
+  var karten = mobil.D.Spiel.wahlKarten();
+  gleich(karten.length, 3);
+  wahr(karten[0].y < karten[1].y && karten[1].y < karten[2].y, 'Karten gestapelt');
+  karten.forEach(function (k) {
+    wahr(k.w >= 160 && k.h >= 80, 'grosse TipZiele');
+    wahr(k.x >= 0 && k.x + k.w <= 320 && k.y >= 0 && k.y + k.h <= 400, 'Karte im Hochformat-Bild');
+  });
+  // Desktop-Karten bleiben nebeneinander
+  desk.D.Spiel.oeffneWahl(desk.h.st, {});
+  var kd = desk.D.Spiel.wahlKarten();
+  wahr(kd[0].y === kd[1].y && kd[1].y === kd[2].y, 'Desktop nebeneinander');
+});
+test('v0.18: Schlafenszeit sperrt nur fertige Bilder, Geschwister mit Minuten tippbar, Reload nicht tot', function () {
+  var sp = fakeSpeicher(), tag = { d: '2026-10-23' }, F = { Date: fakeDatum(tag) };
+  var a = starteFake({ speicher: sp, fenster: F }), st = a.h.st, S = a.D.Spiel, P = a.D.Profile, R = a.h.R;
+  for (var i = 0; i < 1200 && !st.abend; i++) a.frames(1, 1000);
+  a.frames(60 * 15); if (st.buch) S.schliesseBuch(st); st.naechsterTag = true; a.frames(2);
+  wahr(st.wahl && st.wahl.gesperrt, 'Schlafenszeit-Flag');
+  a.frames(3);
+  wahr(R.letzteWahl && R.letzteWahl.karten.length === 3, 'drei Karten');
+  var schlaf = R.letzteWahl.karten.filter(function (k) { return k.schlaeft; });
+  var wach = R.letzteWahl.karten.filter(function (k) { return !k.schlaeft; });
+  wahr(schlaf.some(function (k) { return k.id === 'esel'; }), 'Esel schlaeft gezeichnet');
+  wahr(wach.length >= 2, 'Geschwister nicht fälschlich alle schlafend (' + wach.length + ')');
+  gleich(S.waehleProfil(st, 'gecko'), 'gewaehlt', 'waches Bild tippbar');
+  // Zurueck zur Schlafenszeit-Auswahl und Reload: reagiert, nicht tot
+  S.oeffneWahl(st, { gesperrt: true }); a.h.sichere();
+  var b = starteFake({ speicher: sp, fenster: F, wahl: true, suche: '?profil=esel' }), s2 = b.h.st;
+  wahr(s2.wahl && s2.wahl.gesperrt, 'Wahl nach Reload (Esel fertig)');
+  gleich(S.waehleProfil(s2, 'esel'), 'schlaeft');
+  gleich(S.waehleProfil(s2, 'huhn'), 'gewaehlt');
+  // Wenn wirklich alle fertig: Hinweis-Pfad + Eltern erreichbar
+  s2.konto.profile.huhn = { sek: 900, fertig: true };
+  s2.konto.profile.gecko = { sek: 900, fertig: true };
+  s2.konto.profile.esel = { sek: 900, fertig: true };
+  S.oeffneWahl(s2, { gesperrt: true }); b.frames(3);
+  wahr(b.h.R.letzteWahl.gesperrt, 'alle fertig: Nacht-Optik');
+  wahr(b.h.R.letzteWahl.karten.every(function (k) { return k.schlaeft; }), 'alle schlafen');
+  S.oeffneEltern(s2); wahr(s2.eltern, 'Elternbereich als Ausweg');
+});
 
 // ---------- Ausfuehren ----------
 tests.forEach(function (t) {

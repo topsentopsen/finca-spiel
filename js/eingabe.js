@@ -28,12 +28,13 @@
 
   function erstelle(win, canvas, W, H) {
     var halt = {}, frisch = {}, klicks = [], letzter = null, ersatzMs = 0;
+    W = W || 320; H = H || 176;
     var e = {
       druecke: function (code) { if (!halt[code]) frisch[code] = true; halt[code] = true; },
       loese: function (code) { halt[code] = false; },
       halt: function (a) { return AKTIONEN[a].some(function (c) { return !!halt[c]; }); },
       neu: function (a) { return AKTIONEN[a].some(function (c) { return !!frisch[c]; }); },
-      // Klick in internen Canvas-Pixeln (0..320, 0..176)
+      // Klick in internen Canvas-Pixeln (ab v0.18: W×H, Mobil 320×400)
       klicke: function (x, y, quelle) { if (isFinite(x) && isFinite(y)) klicks.push({ x: x, y: y, zeiger: !!quelle }); },
       // Pointer mit Zeitstempel: Doppeltipper herausfiltern. Rueckgabe true, wenn der Tipp zaehlt
       zeiger: function (x, y, ms) {
@@ -47,6 +48,8 @@
       // Knopf auf dem Bildschirm: wirkt wie ein kurzer Tastendruck
       tippe: function (a) { if (AKTIONEN[a]) frisch[AKTIONEN[a][0]] = true; },
       touch: false,
+      // ab v0.18: Masse nachziehen, wenn Mobil-Hochformat greift
+      setzeMass: function (nw, nh) { if (nw > 0) W = nw; if (nh > 0) H = nh; },
       klicks: function () { return klicks; },
       ende: function () { frisch = {}; klicks = []; }
     };

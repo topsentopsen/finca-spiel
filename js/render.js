@@ -2,9 +2,19 @@
 (function (g) {
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
-  var W = 320, H = 176, K = 16;
+  var BASE_W = 320, BASE_H = 176, PORT_H = 400;   // ab v0.18: Mobil-Hochformat 320×400, Desktop 320×176
+  var W = BASE_W, H = BASE_H, K = 16;
+  var screenW = BASE_W, screenH = BASE_H, hochkant = false;
   // ab v0.10: Zoom am Handy (ZM > 1 heisst: die Welt ist groesser, HUD bleibt gleich) und ruhige Bewegung
   var ZM = 1, RUHIG = false;
+  function setzeBildschirm(mobilHoch) {
+    hochkant = !!mobilHoch;
+    screenW = BASE_W;
+    screenH = hochkant ? PORT_H : BASE_H;
+    W = screenW; H = screenH;
+    Dorf.Render.W = screenW; Dorf.Render.H = screenH; Dorf.Render.hochkant = hochkant;
+    return { w: screenW, h: screenH, hochkant: hochkant };
+  }
   // ab v0.7: runde Systemschrift, wenn das Geraet eine hat (keine fremden Schriften)
   var SCHRIFT = 'ui-rounded, "SF Pro Rounded", "Arial Rounded MT Bold", "Trebuchet MS", system-ui, sans-serif';
 
@@ -1668,41 +1678,56 @@
   // Bildauswahl beim Start: drei grosse Bilder. Schlafenszeit: alle Bilder schlafen, nichts zu tippen.
   function zeichneWahl(R, st) {
     var c = R.ctx, w = st.wahl, S = Dorf.Spiel, karten = S.wahlKarten(), info = { karten: [], gesperrt: !!w.gesperrt };
-    var nacht = !!w.gesperrt;
-    if (nacht) { var band = ['#2b2150', '#33285c', '#3c3068', '#463874']; for (var i = 0; i < 4; i++) r(c, 0, i * 44, W, 44, band[i]); }
-    else { r(c, 0, 0, W, H, '#fff1e6'); r(c, 0, 132, W, H - 132, '#c4e6a4'); r(c, 0, 132, W, 2, '#a8d68f'); }
+    var info0 = w.info || [];
+    var wache = 0; info0.forEach(function (u) { if (u && !u.fertig) wache++; });
+    // ab v0.18: Nacht-Optik nur wenn wirklich alle schlafen (sonst Geschwister mit Minuten tippbar)
+    var nacht = !!w.gesperrt && wache === 0;
+    var streifen = nacht ? 44 : Math.max(44, Math.round(H / 4));
+    if (nacht) { var band = ['#2b2150', '#33285c', '#3c3068', '#463874']; for (var i = 0; i < 4; i++) r(c, 0, i * streifen, W, streifen + 2, band[i]); }
+    else { r(c, 0, 0, W, H, '#fff1e6'); var rasenY = hochkant ? Math.round(H * 0.72) : 132; r(c, 0, rasenY, W, H - rasenY, '#c4e6a4'); r(c, 0, rasenY, W, 2, '#a8d68f'); }
     if (nacht) {
       for (var s = 0; s < 18; s++) { var hs = hash(s, 13); r(c, hs % W, 3 + (hs >> 9) % 34, 1, 1, '#fff6c8'); }
       grossesBild(c, 'mond', W - 26, 18, 2);
       text(R, 'Schlafenszeit', W / 2, 12, { align: 'center', fett: true, groesse: 10, farbe: '#fff6c8' });
-      text(R, 'Morgen geht es weiter.', W / 2, 25, { align: 'center', groesse: 7, farbe: '#d8cce6' });
+      text(R, 'Minuten sind alle · morgen wieder', W / 2, 25, { align: 'center', groesse: 6, farbe: '#d8cce6' });
+    } else if (w.gesperrt && wache > 0) {
+      r(c, 0, 0, W, 36, '#3c3068');
+      text(R, 'Schlafenszeit', W / 2, 8, { align: 'center', fett: true, groesse: 9, farbe: '#fff6c8' });
+      text(R, 'Andere Bilder dürfen noch', W / 2, 22, { align: 'center', groesse: 6, farbe: '#d8cce6' });
     } else {
       zeichneSymbol(c, 'sonne', W / 2 - 52, 18);
       text(R, 'Wer spielt?', W / 2 + 6, 13, { align: 'center', fett: true, groesse: 10 });
     }
     var info2 = w.info || [];
+    var gesicht = hochkant ? 28 : 36, skala = hochkant ? 3 : 4, kr = hochkant ? 22 : 27;
     karten.forEach(function (k, i) {
       var pr = Dorf.Profile.hole(k.id), u = null;
       info2.forEach(function (q) { if (q.id === k.id) u = q; });
-      var schlaeft = nacht || !!(u && u.fertig), aktiv = !nacht && w.wahl === i && !schlaeft;
+      // ab v0.18: schlaeft pro Bild, nicht global — Geschwister mit Minuten bleiben tippbar
+      var schlaeft = !!(u && u.fertig), aktiv = !schlaeft && w.wahl === i;
       var dx = w.stups && w.stups.id === k.id && w.stups.t > 0 && !RUHIG ? Math.round(Math.sin(w.stups.t * 40) * 3) : 0;
       var hop = aktiv && !RUHIG ? Math.round(Math.abs(Math.sin((w.t || 0) * 3)) * 2) : 0;
       var x = k.x + dx, y = k.y - hop;
-      pille(c, x - 1, y - 1, k.w + 2, k.h + 2, aktiv ? P.kontur : (nacht ? '#5a4a7e' : '#d8cce6'));
+      pille(c, x - 1, y - 1, k.w + 2, k.h + 2, aktiv ? P.kontur : (schlaeft ? '#5a4a7e' : '#d8cce6'));
       pille(c, x, y, k.w, k.h, schlaeft ? (nacht ? '#4b3d72' : '#e6dcef') : pr.farbe);
-      kreis(c, x + k.w / 2, y + 36, 27, schlaeft ? (nacht ? '#3c3068' : '#d8cce6') : '#fffdf8');
+      kreis(c, x + k.w / 2, y + gesicht, kr, schlaeft ? (nacht ? '#3c3068' : '#d8cce6') : '#fffdf8');
       if (schlaeft) c.globalAlpha = nacht ? 0.75 : 0.55;
-      grossesBild(c, k.id, x + k.w / 2, y + 36, 4);
+      grossesBild(c, k.id, x + k.w / 2, y + gesicht, skala);
       c.globalAlpha = 1;
-      if (schlaeft) { muster(c, x + k.w - 14, y + 12, BILD.zzz[0], { }); grossesBild(c, 'mond', x + 13, y + 12, 1); }
-      // darunter: Tag (Sonne + Zahl) und Sticker (Stern + Zahl), in Pixelziffern
-      var tag = u ? u.tag : 0, stk = u ? u.sticker : 0, ty = y + k.h - 22, farbe = nacht ? '#fff6c8' : P.kontur;
+      if (schlaeft) { muster(c, x + k.w - 14, y + 10, BILD.zzz[0], { }); grossesBild(c, 'mond', x + 13, y + 10, 1); }
+      var tag = u ? u.tag : 0, stk = u ? u.sticker : 0, ty = y + k.h - (hochkant ? 18 : 22), farbe = (nacht || schlaeft) ? '#fff6c8' : P.kontur;
       zeichneSymbol(c, 'sonne', x + 16, ty + 2); ziffern(c, tag > 0 ? tag : '-', x + 26, ty, { farbe: farbe });
-      muster(c, x + 54, ty + 2, BILD.stern[0], BILD.stern[1]); ziffern(c, stk, x + 62, ty, { farbe: farbe });
+      muster(c, x + (hochkant ? k.w - 48 : 54), ty + 2, BILD.stern[0], BILD.stern[1]); ziffern(c, stk, x + (hochkant ? k.w - 40 : 62), ty, { farbe: farbe });
       if (aktiv) r(c, x + 8, y + k.h - 6, k.w - 16, 2, pr.rand || P.kontur);
-      info.karten.push({ id: k.id, x: x, y: y, schlaeft: schlaeft, aktiv: aktiv, tag: tag, sticker: stk });
+      info.karten.push({ id: k.id, x: x, y: y, w: k.w, h: k.h, schlaeft: schlaeft, aktiv: aktiv, tag: tag, sticker: stk });
     });
-    if (!nacht) text(R, 'Tippe auf dein Bild', W / 2, H - 14, { align: 'center', groesse: 7, farbe: '#5c7a4a' });
+    if (nacht) {
+      text(R, 'Zahnrad 3 Sek. · mehr Minuten oder warten', W / 2, H - 14, { align: 'center', groesse: 6, farbe: '#d8cce6' });
+    } else if (w.gesperrt && wache > 0) {
+      text(R, 'Tippe ein waches Bild · Zahnrad für Eltern', W / 2, H - 14, { align: 'center', groesse: 6, farbe: '#d8cce6' });
+    } else {
+      text(R, 'Tippe auf dein Bild', W / 2, H - 14, { align: 'center', groesse: 7, farbe: '#5c7a4a' });
+    }
     R.letzteWahl = info;
     return info;
   }
@@ -1835,21 +1860,21 @@
     // ab v0.10: mit Zoom malt die Welt auf ein kleineres Bild (wird groesser angezeigt), HUD und Fenster auf eine eigene Ebene
     var haupt = R.ctx, mitHud = !!(R.hud && st.zoom && st.zoom !== 1);
     ZM = mitHud ? st.zoom : 1; RUHIG = !!st.ruhig;
-    var WW = Math.round(320 / ZM), WH = Math.round(176 / ZM);
+    var WW = Math.round(screenW / ZM), WH = Math.round(screenH / ZM);
     W = WW; H = WH;
     try { zeichneAlles(R, st, mitHud, WW, WH); }
-    finally { W = 320; H = 176; R.ctx = haupt; }
+    finally { W = screenW; H = screenH; R.ctx = haupt; }
   }
   function zeichneAlles(R, st, mitHud, WW, WH) {
     var c = R.ctx, karte = st.karte, kam = st.kamera, zeit = st.zeit, T = Dorf.Karte.T;
     var cx = Math.round(kam.x), cy = Math.round(kam.y);
-    function inWelt(f) { W = WW; H = WH; try { f(); } finally { W = 320; H = 176; } }
+    function inWelt(f) { W = WW; H = WH; try { f(); } finally { W = screenW; H = screenH; } }
     if (R.ui) { R.ui.setTransform(1, 0, 0, 1, 0, 0); R.ui.clearRect(0, 0, R.uiCanvas.width, R.uiCanvas.height); R.ui.setTransform(R.uiSkala, 0, 0, R.uiSkala, 0, 0); }
-    if (R.hud) { R.hud.setTransform(1, 0, 0, 1, 0, 0); R.hud.clearRect(0, 0, 320, 176); }
+    if (R.hud) { R.hud.setTransform(1, 0, 0, 1, 0, 0); R.hud.clearRect(0, 0, screenW, screenH); }
     r(c, 0, 0, W, H, P.kontur);
     if (st.wahl && !st.eltern) {
       // Bildauswahl deckt alles ab: die Welt muss nicht gemalt werden
-      W = 320; H = 176; if (mitHud) R.ctx = R.hud;
+      W = screenW; H = screenH; if (mitHud) R.ctx = R.hud;
       zeichneWahl(R, st); zeichneTipps(R.ctx, st);
       R.letzteHud = null; R.letzteEltern = null;
       return;
@@ -1940,8 +1965,8 @@
     // Tageslicht (ab v0.7: multipliziert, dazu leuchtende Fenster, Laternen, Herd und Biels Laterne)
     zeichneLicht(R, st, cx, cy);
 
-    // ab hier Bildschirm: 320 x 176 (mit Zoom auf der HUD Ebene)
-    W = 320; H = 176;
+    // ab hier Bildschirm (Desktop 320×176, Mobil-Hochformat 320×400)
+    W = screenW; H = screenH;
     var cw = c;
     if (mitHud) { R.ctx = R.hud; c = R.hud; }
 
@@ -1987,5 +2012,5 @@
     });
   }
 
-  Dorf.Render = { W: W, H: H, P: P, BIEL: BIEL, erstelle: erstelle, zeichne: zeichne, zeichnePerson: zeichnePerson, zeichneTeller: zeichneTeller, umbruch: umbruch, hintergrund: hintergrund, zeichneSymbol: zeichneSymbol, kenntSymbol: kenntSymbol, masse: masse, BILD: BILD, KORB: KORB, chipPos: chipPos, RAND: RAND, ZIFFER: ZIFFER, ziffern: ziffern, zeichneWahl: zeichneWahl, zeichneEltern: zeichneEltern };
+  Dorf.Render = { W: W, H: H, BASE_W: BASE_W, BASE_H: BASE_H, PORT_H: PORT_H, hochkant: false, setzeBildschirm: setzeBildschirm, P: P, BIEL: BIEL, erstelle: erstelle, zeichne: zeichne, zeichnePerson: zeichnePerson, zeichneTeller: zeichneTeller, umbruch: umbruch, hintergrund: hintergrund, zeichneSymbol: zeichneSymbol, kenntSymbol: kenntSymbol, masse: masse, BILD: BILD, KORB: KORB, chipPos: chipPos, RAND: RAND, ZIFFER: ZIFFER, ziffern: ziffern, zeichneWahl: zeichneWahl, zeichneEltern: zeichneEltern };
 })(globalThis);

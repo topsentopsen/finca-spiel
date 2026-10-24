@@ -3,7 +3,7 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.17';
+  var VERSION = 'v0.18';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
   var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
@@ -390,7 +390,15 @@
   // Ist die Zeit eines Bildes um, schlaeft es bis Mitternacht und laesst sich nicht mehr antippen.
   function heute(st) { return st.datumJetzt ? st.datumJetzt() : (Dorf.Profile ? Dorf.Profile.datum(new Date()) : ''); }
   function wahlKarten() {
-    var L = Dorf.Profile ? Dorf.Profile.LISTE : [], x0 = Math.round((320 - L.length * WAHL.w - (L.length - 1) * WAHL.abstand) / 2);
+    var L = Dorf.Profile ? Dorf.Profile.LISTE : [];
+    var SW = (Dorf.Render && Dorf.Render.W) || 320, SH = (Dorf.Render && Dorf.Render.H) || 176;
+    // ab v0.18: im Hochformat Karten untereinander (grosse TipZiele), Desktop nebeneinander
+    if (Dorf.Render && Dorf.Render.hochkant) {
+      var w = Math.min(220, SW - 28), h = 92, ab = 10;
+      var x0 = Math.round((SW - w) / 2), y0 = 44;
+      return L.map(function (p, i) { return { id: p.id, x: x0, y: y0 + i * (h + ab), w: w, h: h }; });
+    }
+    var x0 = Math.round((SW - L.length * WAHL.w - (L.length - 1) * WAHL.abstand) / 2);
     return L.map(function (p, i) { return { id: p.id, x: x0 + i * (WAHL.w + WAHL.abstand), y: WAHL.y, w: WAHL.w, h: WAHL.h }; });
   }
   function kontoPruefen(st) { if (st.konto && Dorf.Profile && Dorf.Profile.pruefeDatum(st.konto, heute(st))) { st.kontoAendern = true; return true; } return false; }
@@ -463,7 +471,7 @@
     var P = Dorf.Profile, w = st.wahl;
     if (!P || !P.hole(id) || !w) return 'nein';   // nur aus der offenen Auswahl
     var pr = P.hole(id), schlaefer = (pr.wer || pr.name) + ' schläft. Morgen geht es weiter.';
-    if (w && w.gesperrt) { w.stups = { id: id, t: 0.4 }; klang(st, 'schlaf'); ansage(st, schlaefer); return 'gesperrt'; }
+    // ab v0.18: kein globaler Lock mehr — nur dieses Bild, wenn seine Minuten alle sind
     kontoPruefen(st);
     if (st.konto && P.schlaeft(st.konto, st.grenzen, id)) { if (w) w.stups = { id: id, t: 0.4 }; klang(st, 'schlaf'); ansage(st, schlaefer); return 'schlaeft'; }
     // ab v0.11: der Name des Bildes wird vorgelesen
@@ -488,8 +496,11 @@
     w.t += dt; if (w.stups) { w.stups.t -= dt; if (w.stups.t <= 0) w.stups = null; }
     // um Mitternacht wachen alle wieder auf
     w.takt += dt;
-    if (w.takt >= 2) { w.takt = 0; if (st.konto && Dorf.Profile.pruefeDatum(st.konto, heute(st))) { st.kontoAendern = true; w.gesperrt = false; w.info = uebersicht(st); } }
-    if (w.gesperrt) return;
+    if (w.takt >= 2) {
+      w.takt = 0;
+      if (st.konto && Dorf.Profile.pruefeDatum(st.konto, heute(st))) { st.kontoAendern = true; w.gesperrt = false; }
+      w.info = uebersicht(st);   // ab v0.18: Minuten/Eltern-Aenderungen auch ohne Mitternacht sichtbar
+    }
     var alt = w.wahl;
     if (e.neu('links') || e.neu('hoch')) w.wahl = (w.wahl + n - 1) % n;
     if (e.neu('rechts') || e.neu('runter')) w.wahl = (w.wahl + 1) % n;
@@ -994,6 +1005,16 @@
     var mz = /[?&]zoom=([\d.]+)/.exec(such0);
     if (mz) Z = Math.max(1, Math.min(2, parseFloat(mz[1]) || 1));
     if (opts.zoom) Z = opts.zoom;
+    // ab v0.18: auf dem Handy logisches Hochformat 320×400 (echtes Portrait), Desktop bleibt 320×176
+    try {
+      var _mobil0 = false;
+      if (win.matchMedia) {
+        if (win.matchMedia('(pointer: coarse)').matches) _mobil0 = true;
+        else if (win.matchMedia('(hover: none) and (max-width: 900px)').matches) _mobil0 = true;
+      }
+      if (!_mobil0 && win.navigator && (win.navigator.maxTouchPoints || 0) > 1) _mobil0 = true;
+      if (Dorf.Render && Dorf.Render.setzeBildschirm) Dorf.Render.setzeBildschirm(_mobil0);
+    } catch (e0) {}
     var st = erstelle({ seed: seed, zoom: Z, eingabe: Dorf.Eingabe.erstelle(win, canvas, Dorf.Render.W, Dorf.Render.H) });
     if (startPos && !st.karte.blockiert(startPos.x, startPos.y)) {
       st.spieler.x = startPos.x * 16 + 8; st.spieler.y = startPos.y * 16 + 12;
@@ -1011,17 +1032,31 @@
     if (win.location && /[?&]menue=1/.test(win.location.search || '')) oeffneMenue(st);
     var R = Dorf.Render.erstelle(canvas, ui, doc);
     // ab v0.10: mit Zoom zeigt das Spielbild weniger Welt (kleinere interne Groesse), die Anzeigen liegen scharf auf einer eigenen Ebene
+    // ab v0.18: Canvas immer an Render.W/H (Mobil 320×400) anpassen
     var hudCanvas = doc.getElementById('hud');
-    if (Z !== 1) {
-      canvas.width = Math.round(Dorf.Render.W / Z); canvas.height = Math.round(Dorf.Render.H / Z);
+    function passeCanvasAn() {
+      var RW = Dorf.Render.W, RH = Dorf.Render.H;
+      canvas.width = Z !== 1 ? Math.round(RW / Z) : RW;
+      canvas.height = Z !== 1 ? Math.round(RH / Z) : RH;
       if (R.ctx) R.ctx.imageSmoothingEnabled = false;
       if (hudCanvas && hudCanvas.getContext) {
-        hudCanvas.width = Dorf.Render.W; hudCanvas.height = Dorf.Render.H;
-        R.hud = hudCanvas.getContext('2d'); if (R.hud) R.hud.imageSmoothingEnabled = false;
-        R.hudCanvas = hudCanvas;
-        if (hudCanvas.style) hudCanvas.style.display = '';
+        if (Z !== 1) {
+          hudCanvas.width = RW; hudCanvas.height = RH;
+          R.hud = hudCanvas.getContext('2d'); if (R.hud) R.hud.imageSmoothingEnabled = false;
+          R.hudCanvas = hudCanvas;
+          if (hudCanvas.style) hudCanvas.style.display = '';
+        } else {
+          hudCanvas.width = RW; hudCanvas.height = RH;
+          if (hudCanvas.style) hudCanvas.style.display = 'none';
+        }
       }
-    } else if (hudCanvas && hudCanvas.style) hudCanvas.style.display = 'none';
+      if (st.kamera) {
+        st.kamera.viewW = Math.round(RW / (st.zoom > 1 ? st.zoom : 1));
+        st.kamera.viewH = Math.round(RH / (st.zoom > 1 ? st.zoom : 1));
+      }
+      if (st.eingabe && st.eingabe.setzeMass) st.eingabe.setzeMass(RW, RH);
+    }
+    passeCanvasAn();
     var rahmen = doc.getElementById('rahmen');
     var ton = st.ton = Dorf.Ton ? Dorf.Ton.erstelle(win) : null;
 
@@ -1308,6 +1343,13 @@
       root.classList.toggle('mobil', mobil);
       // Overlay nur wenn wirklich mobil + landscape (nicht permanent stoerend)
       root.classList.toggle('quer', mobil && istQuerformat());
+      // ab v0.18: logisches Hochformat nachziehen (Reload/Orientierung darf nicht „tot“ wirken)
+      if (Dorf.Render && Dorf.Render.setzeBildschirm) {
+        var vorher = Dorf.Render.hochkant;
+        Dorf.Render.setzeBildschirm(mobil);
+        if (vorher !== Dorf.Render.hochkant) passeCanvasAn();
+        else if (st.eingabe && st.eingabe.setzeMass) st.eingabe.setzeMass(Dorf.Render.W, Dorf.Render.H);
+      }
     } catch (e) {}
   }
   var hochkantZuletzt = 0, hochkantOk = false;

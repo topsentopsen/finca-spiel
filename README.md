@@ -1,4 +1,4 @@
-# Finca v0.17
+# Finca v0.18
 
 A small browser game with a handheld look, written in pure JavaScript. There is no build and no npm. Music and sounds are generated in code with WebAudio; from v0.13 the evening lullaby is one small MP3 in `assets/` (no other media files).
 
@@ -41,7 +41,7 @@ The game remembers where you were: day, clock time, hearts, basket, garden and t
 ## Pictures (profiles) and the daily time rule (from v0.10)
 At the first start the game asks "Wer spielt?" with three big pictures (donkey, hen, gecko). Each picture has its own saved game, hearts and sticker album (keys `finca.spielstand.<picture>` and `finca.album.<picture>`; an old v0.9 save moves to the donkey).
 
-Time rule (chosen and tested): **15 minutes per picture per calendar day**. Real play seconds are booked in `finca.zeitkonto` together with the date. Reloading, "Neu anfangen", switching pictures or `?neu=1` never give time back. Whoever played today comes straight back into their own picture after a reload. When a picture's day is over, the whole picture chooser shows "Schlafenszeit" and every picture just sleeps when tapped, so a child cannot simply pick another picture. Only the parent area ("Anderes Bild") opens a chooser where a different child whose time is not used up can play; pictures with used up time still sleep. At midnight every picture gets a new 15 minutes; an open "Schlafenszeit" chooser notices this within 2 seconds.
+Time rule (chosen and tested): **15 minutes per picture per calendar day**. Real play seconds are booked in `finca.zeitkonto` together with the date. Reloading, "Neu anfangen", switching pictures or `?neu=1` never give time back. Whoever played today comes straight back into their own picture after a reload. When a picture's day is over, the chooser shows "Schlafenszeit" — **only that picture sleeps**. Siblings who still have minutes stay tippable (from v0.18; earlier versions locked every picture). If every picture is done, a clear tip points to the parent gear (hold 3 seconds) or waiting until midnight. Gear, mute and read-aloud stay usable; the screen must not freeze. At midnight every picture gets a new 15 minutes; an open chooser notices this within 2 seconds.
 
 From v0.11 parents can set the minutes per picture between 5 and 15 (stored in `finca.grenzen`). 15 is the hard upper limit and can never be exceeded. A lower limit counts immediately: if a picture has already played longer today, its evening starts right away. Raising the limit wakes a sleeping picture again if at least 30 seconds are left. The game clock goes a bit faster on a shorter day, so the evening still arrives in time.
 
@@ -155,7 +155,11 @@ Uses only Node's built-in `vm` module. Nothing has to be installed. 135 tests, i
 ## Lemon trees and phone portrait (from v0.14)
 Next to the orange tree grow lemon trees. Lemons are their own ingredient (`zitrone`) in the basket; Ensaïmada can use a lemon instead of an orange. On a phone (coarse pointer) the game prefers portrait: it tries the Screen Orientation API and, if the phone is held in landscape, shows a friendly “hold upright” tip. On desktop nothing about orientation changes.
 
+## Real phone portrait and Schlafenszeit escape (from v0.18)
+On mobile the logical canvas is **320×400** (taller than wide) — a real portrait layout, not a landscape letterbox. Profile cards stack vertically with large tap targets. Desktop stays **320×176**. Landscape tip only when mobil + device landscape; overlays never swallow gear/mute/read-aloud.
+
 ## Version history
+- **v0.18** (24.10.2026): real mobile portrait canvas 320×400 (stacked chooser cards); desktop 320×176 unchanged; Schlafenszeit locks only finished pictures — siblings with minutes stay tippable; clear tip + parent gear when all are done; reload must not leave a dead screen.
 - **v0.14** (24.10.2026): lemon trees in the garden (own fruit `zitrone` / llimona, yellow-green GBA style); Ensaïmada accepts lemon instead of orange; on phones only, portrait is preferred (`screen.orientation.lock('portrait')` when available, landscape shows a rotate-to-portrait tip). Desktop layout unchanged.
 
 ## Schlaflied choice and portrait polish (from v0.15)
