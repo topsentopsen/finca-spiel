@@ -1,4 +1,4 @@
-# Finca v0.16
+# Finca v0.17
 
 A small browser game with a handheld look, written in pure JavaScript. There is no build and no npm. Music and sounds are generated in code with WebAudio; from v0.13 the evening lullaby is one small MP3 in `assets/` (no other media files).
 
@@ -162,6 +162,8 @@ Next to the orange tree grow lemon trees. Lemons are their own ingredient (`zitr
 
 - **v0.15** (24.10.2026): Elternbereich — choose lullaby A/B/C (Spieluhr/Gitarre, Sterne/Celesta, Flöte/Mallorca) with clear pastel icons; choice saved as `finca.schlaflied` (default C); all three MP3s in `assets/`. Mobile portrait: `.mobil`/`.quer` classes, orientation lock on gesture/fullscreen, landscape tip without hiding the game permanently. Desktop unchanged.
 - **v0.16** (24.10.2026): quieter under the hood — throttle orientation lock, cap ~60 fps, touch targets ≥44px, pointer-capture on parent gear, lullaby load retries capped at 3.
+- **v0.17** (24.10.2026): more feel — soft haptic on action (Android, not when calm), music fades ~1.5s into Bona nit, empty action button gives quiet pling+wiggle on touch, audio planner pauses in background, parent storage-full hint.
+
 
 
 - **v0.13** (24.10.2026): lullaby Variante C (flute / pad / guitar) as `assets/schlaflied-c.mp3` during "Bona nit"; iPhone silent-switch fix (playback session, wake interrupted context, slightly louder on phones).

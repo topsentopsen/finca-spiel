@@ -369,9 +369,20 @@
       t.mix = m;
       if (t.ctx && knoten.tag) {
         var j = t.ctx.currentTime;
-        knoten.tag.gain.setTargetAtTime(m.tag, j, UEBERBLENDEN);
-        knoten.abend.gain.setTargetAtTime(m.abend, j, abendSzene ? 0.8 : UEBERBLENDEN);   // Schleife macht dem Schlaflied schnell Platz
-        knoten.grillen.gain.setTargetAtTime(m.grillen * LAUT.grillen, j, UEBERBLENDEN);
+        if (abendSzene) {
+          // ab v0.17: Tag/Abend-Schleife ~1,5 s linear ausblenden; Schlaflied startet mit VORLAUF 2 s
+          knoten.tag.gain.cancelScheduledValues(j);
+          knoten.tag.gain.setValueAtTime(knoten.tag.gain.value, j);
+          knoten.tag.gain.linearRampToValueAtTime(0, j + 1.5);
+          knoten.abend.gain.cancelScheduledValues(j);
+          knoten.abend.gain.setValueAtTime(knoten.abend.gain.value, j);
+          knoten.abend.gain.linearRampToValueAtTime(0, j + 1.5);
+          knoten.grillen.gain.setTargetAtTime(m.grillen * LAUT.grillen, j, UEBERBLENDEN);
+        } else {
+          knoten.tag.gain.setTargetAtTime(m.tag, j, UEBERBLENDEN);
+          knoten.abend.gain.setTargetAtTime(m.abend, j, UEBERBLENDEN);
+          knoten.grillen.gain.setTargetAtTime(m.grillen * LAUT.grillen, j, UEBERBLENDEN);
+        }
       }
       return true;
     };
@@ -439,10 +450,23 @@
     t.pausiere = function (an) {
       if (!t.ctx) return;
       try {
-        if (an) { var p1 = t.ctx.suspend(); if (p1 && p1.catch) p1.catch(function () {}); if (stillesAudio && stillesAudio.pause) stillesAudio.pause(); }
-        else { weckeKontext(); if (stillesAudio && stillesAudio.play) { var p2 = stillesAudio.play(); if (p2 && p2.catch) p2.catch(function () {}); } }
+        if (an) {
+          // ab v0.17: Planer im Hintergrund aus (Akku), Kontext schlafen
+          if (takt) {
+            try { if (win.clearInterval) win.clearInterval(takt); } catch (e) { /* Fake-Fenster */ }
+            takt = null;
+          }
+          var p1 = t.ctx.suspend(); if (p1 && p1.catch) p1.catch(function () {});
+          if (stillesAudio && stillesAudio.pause) stillesAudio.pause();
+        } else {
+          if (t.bereit && !takt && win.setInterval) takt = win.setInterval(planer, 50);
+          weckeKontext();
+          if (stillesAudio && stillesAudio.play) { var p2 = stillesAudio.play(); if (p2 && p2.catch) p2.catch(function () {}); }
+        }
       } catch (e) { /* egal */ }
     };
+    // fuer Tests: laeuft der 50-ms-Planer gerade?
+    t.planerLaeuft = function () { return !!takt; };
     // Brunnen und Pool: nah = 0..1
     t.umgebung = function (nah) {
       umgebungZiel = Math.max(0, Math.min(1, nah)) * LAUT.umgebung;

@@ -1822,7 +1822,11 @@
     knopfFlaeche(c, Sk, '#d4f2ee', e.wahl === 'sichern');
     r(c, Sk.x + 4, Sk.y + 7, 10, 7, P.kontur); r(c, Sk.x + 5, Sk.y + 8, 8, 5, '#ffe27a'); r(c, Sk.x + 9, Sk.y + 2, 1, 7, P.kontur); r(c, Sk.x + 7, Sk.y + 6, 5, 1, P.kontur);
     text(R, 'Sichern', Sk.x + 18, Sk.y + 6, { fett: true, groesse: 5 });
-    text(R, 'Grün = Tag vor Grenze · Zahnrad 3 Sek. halten', W / 2, E.y + E.h - 8, { align: 'center', groesse: 5, farbe: '#7a5a9a' });
+    if (st.speicherHinweis) {
+      text(R, 'Speichern klappt gerade nicht (privates Fenster?)', W / 2, E.y + E.h - 8, { align: 'center', groesse: 5, farbe: '#c06080' });
+    } else {
+      text(R, 'Grün = Tag vor Grenze · Zahnrad 3 Sek. halten', W / 2, E.y + E.h - 8, { align: 'center', groesse: 5, farbe: '#7a5a9a' });
+    }
     R.letzteEltern = info;
     return info;
   }

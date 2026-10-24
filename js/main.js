@@ -3,7 +3,7 @@
   'use strict';
   var Dorf = g.Dorf = g.Dorf || {};
   var STANDARD_SEED = 20261023;
-  var VERSION = 'v0.16';
+  var VERSION = 'v0.17';
   var KOCHDAUER = 5, PORTIONEN = 3, TAFEL_MAX = 6;   // Werte fuer Pa amb oli, die anderen Gerichte stehen in gerichte.js
   var LAMPEN = 6;             // ab v0.7: Fenster plus fuenf Laternen gehen am Abend nacheinander an
   var TIPP_DAUER = 0.3;       // so lange ist der kleine Kreis nach jedem Tippen zu sehen
@@ -1069,12 +1069,19 @@
     if (/[?&]buch=(\d)/.test(such)) oeffneBuch(st, parseInt(/[?&]buch=(\d)/.exec(such)[1], 10));
     var speicherUhr = 0, ruhigZuletzt = null;
     function sichere() {
+      var ok = true;
       if (speicher && st.darfSpeichern) {
         if (st.profilGeladen && P) {
-          Dorf.Speicher.schreibe(speicher, st, P.spielstandSchluessel(st.profil));
-          if (Dorf.Sticker && st.albumAendern && !st.albumFest) { Dorf.Sticker.schreibe(speicher, st.album, P.albumSchluessel(st.profil)); st.albumAendern = false; }
+          if (Dorf.Speicher.schreibe(speicher, st, P.spielstandSchluessel(st.profil)) === false) ok = false;
+          if (Dorf.Sticker && st.albumAendern && !st.albumFest) {
+            if (Dorf.Sticker.schreibe(speicher, st.album, P.albumSchluessel(st.profil)) === false) ok = false;
+            else st.albumAendern = false;
+          }
         }
-        if (st.konto && P) { P.schreibeKonto(speicher, st.konto); st.kontoAendern = false; }
+        if (st.konto && P) {
+          if (P.schreibeKonto(speicher, st.konto) === false) ok = false;
+          else st.kontoAendern = false;
+        }
       }
       if (speicher && st.vorleseArtAendern && Dorf.Vorlesen && st.vorleseArt) { Dorf.Vorlesen.schreibeArt(speicher, st.vorleseArt); st.vorleseArtAendern = false; }
       if (speicher && P && st.ruhigAendern) { P.schreibeRuhig(speicher, st.ruhig); st.ruhigAendern = false; }
@@ -1082,6 +1089,9 @@
       // ab v0.11: Grenzen sind eine Einstellung der Eltern (gilt auch beim Ausprobieren), die Woche nur mit echtem Stand
       if (speicher && P && st.grenzenAendern) { P.schreibeGrenzen(speicher, st.grenzen); st.grenzenAendern = false; }
       if (speicher && P && st.darfSpeichern && st.konto) { st.woche = P.merkeWoche(st.woche || P.ladeWoche(speicher), st.konto, st.grenzen || {}); P.schreibeWoche(speicher, st.woche); }
+      // ab v0.17: Eltern sehen Hinweis, wenn Speichern scheitert (privat/voll)
+      if (ok === false) st.speicherHinweis = true;
+      else if (ok && st.speicherHinweis) st.speicherHinweis = false;
       speicherUhr = 0; st.speichernJetzt = false;
     }
     st.sichern = sichere;
@@ -1117,7 +1127,21 @@
     // ab v0.8: ein einziger grosser Knopf unten rechts. Sein Bild zeigt, was er gerade tut, ohne Ziel ist er weg.
     var aktionKnopf = doc.getElementById('knopf-aktion'), aktionZustand = null, aktionSchluessel = null, popWechsel = false;
     knopf(aktionKnopf, function () {
-      if (!aktionZustand) return;
+      // ab v0.17: leerer Knopf gibt leises Pling + kurzes Wackeln (Kind merkt: Knopf da, nur gerade nichts)
+      if (!aktionZustand) {
+        if (ton && !ton.stumm) ton.spiele('bloop');
+        if (aktionKnopf.classList) {
+          aktionKnopf.classList.remove('wackel');
+          void aktionKnopf.offsetWidth;
+          aktionKnopf.classList.add('wackel');
+          setTimeout(function () { try { aktionKnopf.classList.remove('wackel'); } catch (e) {} }, 180);
+        }
+        return;
+      }
+      // ab v0.17: leichte Haptik nur auf Android, nie bei „Weniger Bewegung“
+      try {
+        if (!st.ruhig && win.navigator && typeof win.navigator.vibrate === 'function') win.navigator.vibrate(8);
+      } catch (e) { /* egal */ }
       st.aktionGenutzt = (st.aktionGenutzt || 0) + 1;
       st.eingabe.tippe(st.abend ? 'weiter' : 'sprechen');
     });

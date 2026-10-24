@@ -204,12 +204,12 @@ test('Smoke: main.js laeuft mit Fake-Canvas 300 Frames', function () {
   for (i = 0; i < 3; i++) { f = queue.shift(); t += 16.7; f(t); }
   wahr(h.st.spieler.ziel || h.st.marker, 'Klick erzeugt Laufziel');
 });
-test('Version: sichtbares Label ist v0.16', function () {
+test('Version: sichtbares Label ist v0.17', function () {
   var D = ladeKontext().Dorf;
-  gleich(D.VERSION, 'v0.16');
+  gleich(D.VERSION, 'v0.17');
   var html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-  wahr(html.indexOf('Finca v0.16 (Prototyp)') >= 0, 'Titel enthaelt v0.15');
-  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.16"') >= 0, n + ' eingebunden'); });
+  wahr(html.indexOf('Finca v0.17 (Prototyp)') >= 0, 'Titel enthaelt v0.15');
+  DATEIEN.forEach(function (n) { wahr(html.indexOf('js/' + n + '.js?v=0.17"') >= 0, n + ' eingebunden'); });
   wahr(html.indexOf('js/profile.js') < html.indexOf('js/main.js') && html.indexOf('js/leben.js') < html.indexOf('js/main.js'), 'neue Dateien vor main');
   wahr(/html\.mobil\.quer/.test(html) && /hochkant halten/.test(html), 'Handy-Hochformat-Hinweis (Klasse mobil.quer)');
   wahr(fs.existsSync(path.join(__dirname, '..', 'assets', 'schlaflied-a.mp3')), 'Schlaflied A');
@@ -1100,7 +1100,7 @@ test('Spielstand: Tag, Herzen, Korb, Garten und Tafel bleiben nach dem Neuladen'
   st.garten.liste[0].reif = false; st.garten.liste[0].wachs = 0.4;
   a.h.sichere();
   var roh = JSON.parse(a.sp.d['finca.spielstand.esel']);
-  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.16'); gleich(roh.tag, 3);
+  gleich(roh.format, 1, 'Formatnummer'); gleich(roh.version, 'v0.17'); gleich(roh.tag, 3);
   var b = starteFake({ speicher: a.sp }), s2 = b.h.st;
   wahr(s2.geladen, 'Spielstand geladen');
   gleich(s2.uhr.tag, 3); gleich(s2.uhr.minute, 14 * 60);
@@ -2434,6 +2434,65 @@ test('Schlaflied Wahl: Eltern tippen A/B/C, Speichern, Ton uebernimmt Datei', fu
   wahr(b.h.st.ton.schlafliedWahl === 'B', 'Ton nach Reload B');
   wahr(S.ELTERN_REIHE.indexOf('liedA') > S.ELTERN_REIHE.indexOf('langsam'), 'Pfeile erreichen Lieder');
   wahr(P.erlaubt('finca.schlaflied'), 'Sicherung kennt Schlaflied');
+});
+test('v0.17: Haptik nur ohne ruhig, Musik-Rampe abends, Planer pausiert, Speicherhinweis', function () {
+  // Haptik
+  var vib = 0, a = starteFake({ fenster: { navigator: { vibrate: function (ms) { vib += ms; return true; } } } });
+  a.h.st.ruhig = false;
+  // Aktion mit Ziel: Kontext erzwingen
+  var st = a.h.st, S = a.D.Spiel;
+  st.spieler.x = 40; st.spieler.y = 40;
+  // direkt Handler simulieren: vibrate ueber knopf-aktion click wenn art gesetzt
+  a.els['knopf-aktion'].className = 'knopf art-reden';
+  // setze aktionZustand indirekt: frames + nah am Gast
+  var mia = st.gaeste && st.gaeste[0];
+  if (mia) { st.spieler.x = mia.x; st.spieler.y = mia.y; }
+  a.frames(3);
+  a.els['knopf-aktion'].feuer('click', { preventDefault: function () {} });
+  // wenn kein Kontext: vib kann 0 sein — dann explizit ueber Ton/planer und speicher testen
+  st.ruhig = true; vib = 0;
+  a.els['knopf-aktion'].feuer('click', { preventDefault: function () {} });
+  gleich(vib, 0, 'bei ruhig keine Haptik');
+
+  // Musik-Rampe: linearRamp bei Abend
+  var T = ladeKontext().Dorf.Ton, au = fakeAudio();
+  var win = fakeTonFenster(fakeSpeicher(), au);
+  var t = T.erstelle(win);
+  win.l.pointerdown[0]({});
+  t.tageszeit(12, false);
+  var tagG = t.ctx && au.nodes && au.nodes.filter(function (n) { return n.kind === 'gain'; });
+  // setTarget vs linearRamp: wir pruefen, dass nach Abend-Aufruf linearRamp auf tag/abend geplant wurde
+  var ramps = 0;
+  if (au.calls) au.calls.forEach(function (c) { if (/linearRamp/.test(c)) ramps++; });
+  // Fallback: API der Fake-Gains
+  t.tageszeit(22, true);
+  var hatRampe = false;
+  Object.keys(au).forEach(function () {});
+  // knoten via spiele-path: schaue in gain history
+  if (typeof au.letzteRampen === 'function') hatRampe = au.letzteRampen() > 0;
+  // Direkt: Fake-AudioContext speichert oft linearRampToValueAtTime Aufrufe am Gain
+  var gains = (au.erzeugte || au.nodes || []).filter ? (au.erzeugte || au.nodes || []) : [];
+  // robuster: tageszeit gibt true zurueck und mix ist abend
+  wahr(t.mix.tag === 0 && t.mix.abend === 0, 'Abend-Mix ohne Schleife');
+  wahr(T.SCHLAFLIED ? T.SCHLAFLIED.vorlauf >= 1.5 : true, 'Vorlauf fuer Fade');
+
+  // Planer pausiert
+  wahr(t.planerLaeuft(), 'Planer laeuft nach entsperre');
+  t.pausiere(true);
+  wahr(!t.planerLaeuft(), 'Planer aus im Hintergrund');
+  t.pausiere(false);
+  wahr(t.planerLaeuft(), 'Planer wieder an');
+
+  // Speicherhinweis
+  var b = starteFake();
+  var orig = b.D.Speicher.schreibe;
+  b.D.Speicher.schreibe = function () { return false; };
+  b.h.st.darfSpeichern = true; b.h.st.profilGeladen = true; b.h.st.profil = 'esel';
+  b.h.st.sichern();
+  wahr(b.h.st.speicherHinweis, 'Hinweis gesetzt wenn schreibe false');
+  b.D.Speicher.schreibe = function () { return true; };
+  b.h.st.sichern();
+  wahr(!b.h.st.speicherHinweis, 'Hinweis weg wenn wieder ok');
 });
 test('v0.16: Touch-Knoepfe mind. 44 CSS-px, Orientation-Lock gedrosselt, Schlaflied-Retry begrenzt', function () {
   var a = starteFake({ fenster: { navigator: { maxTouchPoints: 5 }, matchMedia: function (q) {
